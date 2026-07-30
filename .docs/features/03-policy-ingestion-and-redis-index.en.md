@@ -25,37 +25,40 @@ categories are never empty, and that rule ids are unique. `app/rules/loader.py` 
 `load_rule_catalogue(path)` and a cached `get_rule_catalogue()`; a missing or malformed catalogue
 raises `RuleCatalogueError` before the application starts serving requests.
 
-### Ingestion (`app/rag/ingest.py`)
+### Ingestion (`app/rag/`)
 
-- **`DocxToMarkdownConverter`** walks a `.docx` file's paragraphs and tables in document order
-  (`python-docx`'s `iter_inner_content`) and maps Word styles to Markdown: `Title` → document `#`
-  heading (falls back to the file stem), `Heading 1..3` → `#`/`##`/`###`, `List Bullet`/`List Number`
-  → `-`/`1.` items, tables → GitHub-style Markdown tables, everything else (images, headers/footers,
-  comments, tracked changes) dropped.
-- **`DocxMarkdownLoader`** is a LangChain `BaseLoader` yielding one `Document` per source file
-  (`doc_id` = the stable `00`–`07` filename prefix, `doc_title`, `source_path`).
-- **`MarkdownChunker`** runs `MarkdownHeaderTextSplitter` (h1–h3) then merges sections shorter than
-  200 characters into the *following* sibling (a trailing short section — no sibling to merge into —
-  keeps its own heading rather than being absorbed into an unrelated earlier section). Within each
-  (possibly merged) section, table blocks are kept atomic; only prose runs are size-guarded through
-  `RecursiveCharacterTextSplitter` (800 chars, 120 overlap).
-- **`RuleMetadataResolver`** attaches `section_id` (resolved by matching the chunk's heading text
-  against `rules.yaml`'s declared section anchors for that `doc_id`), `rule_ids` (rules whose
-  `doc_ref` points at that section), and `categories` (the whole document's category list) to every
-  chunk; it raises `IngestionError` for an unknown `doc_id` and, separately,
+Each concern is one small class in its own module:
+
+- **`docx_converter.DocxToMarkdownConverter`** walks a `.docx` file's paragraphs and tables in
+  document order (`python-docx`'s `iter_inner_content`) and maps Word styles to Markdown: `Title` →
+  document `#` heading (falls back to the file stem), `Heading 1..3` → `#`/`##`/`###`,
+  `List Bullet`/`List Number` → `-`/`1.` items, tables → GitHub-style Markdown tables, everything
+  else (images, headers/footers, comments, tracked changes) dropped.
+- **`docx_loader.DocxMarkdownLoader`** is a LangChain `BaseLoader` yielding one `Document` per
+  source file (`doc_id` = the stable `00`–`07` filename prefix, `doc_title`, `source_path`), using a
+  `DocxToMarkdownConverter` internally.
+- **`chunker.MarkdownChunker`** runs `MarkdownHeaderTextSplitter` (h1–h3) then merges sections
+  shorter than 200 characters into the *following* sibling (a trailing short section — no sibling to
+  merge into — keeps its own heading rather than being absorbed into an unrelated earlier section).
+  Within each (possibly merged) section, table blocks are kept atomic; only prose runs are
+  size-guarded through `RecursiveCharacterTextSplitter` (800 chars, 120 overlap).
+- **`rule_metadata.RuleMetadataResolver`** attaches `section_id` (resolved by matching the chunk's
+  heading text against `rules.yaml`'s declared section anchors for that `doc_id`), `rule_ids` (rules
+  whose `doc_ref` points at that section), and `categories` (the whole document's category list) to
+  every chunk; it raises `errors.IngestionError` for an unknown `doc_id` and, separately,
   `validate_anchors_resolve()` raises if a declared rules.yaml anchor's heading never actually
   appears in the ingested corpus.
-- **`CorpusManifestBuilder`** hashes every source `.docx` plus `rules.yaml` together with the
-  chunking parameters, embedding model name/revision and vector dimension.
-- **`PolicyCorpusIngestor.run()`** loads+chunks the corpus, compares the freshly computed manifest
-  against the one stored in Redis, and only embeds/upserts when they differ — reporting
+- **`manifest.CorpusManifestBuilder`** hashes every source `.docx` plus `rules.yaml` together with
+  the chunking parameters, embedding model name/revision and vector dimension.
+- **`ingest.PolicyCorpusIngestor.run()`** loads+chunks the corpus, compares the freshly computed
+  manifest against the one stored in Redis, and only embeds/upserts when they differ — reporting
   `built`/`rebuilt`/`reused`. A **rebuild** calls `vector_store.index.create(overwrite=True,
   drop=True)` (the LangChain integration's own index object) before re-upserting, not a raw
   `FT.DROPINDEX` — see the deviation note.
-- `connect_and_ingest(settings, rule_catalogue)` is the one module-level function (the FastAPI
-  lifespan's entry point): pings Redis, and if reachable builds the embeddings/vector store and runs
-  the ingestor; returns `(None, None)` if Redis is unreachable so the rest of the app can still run
-  in dummy/offline mode.
+- `ingest.connect_and_ingest(settings, rule_catalogue)` is the one module-level function in the
+  package (the FastAPI lifespan's entry point, so it can't be a method): pings Redis, and if reachable
+  builds the embeddings/vector store and runs the ingestor; returns `(None, None)` if Redis is
+  unreachable so the rest of the app can still run in dummy/offline mode.
 - `python -m app.rag.ingest` is the standalone CLI entry point.
 
 ### The vector store (`app/rag/index_schema.py`, `app/rag/store.py`)
@@ -73,10 +76,13 @@ automatically by the integration's `key_prefix`).
 
 ### Redis lifecycle (`app/integrations/redis.py`)
 
-Raw Redis access is limited to what the LangChain integration doesn't own: a plain client factory,
-`manifest:corpus` read/write (as JSON), and `get_index_stats()` (chunk count + per-category counts,
-read via `FT.INFO` + a `categories`-only `FT.SEARCH`). All chunk writes and similarity searches go
-through `RedisVectorStore`.
+**`RedisIndex`** wraps the raw Redis connection (constructed from a `redis_url`) plus everything the
+LangChain integration doesn't own: `ping()`, `manifest:corpus` read/write (as JSON), and
+`get_index_stats()` (chunk count + per-category counts, read via `FT.INFO` + a `categories`-only
+`FT.SEARCH`). It is the one object threaded through the app for anything Redis-shaped —
+`app.state.redis_client`, the `/ready` check, and `PolicyCorpusIngestor.run()`. A `.client` property
+exposes the underlying `redis.Redis` for the rare case (tests) that need raw access. All chunk writes
+and similarity searches go through `RedisVectorStore`, never through `RedisIndex`.
 
 ### API and UI
 
@@ -114,10 +120,16 @@ TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest tests/test_redis_integrati
 | `rules.yaml` | deterministic rule catalogue, hand-authored from the real corpus |
 | `app/rules/model.py` | `RuleCatalogue` typed models + cross-reference validation |
 | `app/rules/loader.py` | `load_rule_catalogue()`, cached `get_rule_catalogue()` |
-| `app/rag/ingest.py` | conversion, chunking, rule metadata, manifest, `PolicyCorpusIngestor` |
+| `app/rag/errors.py` | `IngestionError` |
+| `app/rag/docx_converter.py` | `DocxToMarkdownConverter` |
+| `app/rag/docx_loader.py` | `DocxMarkdownLoader` (LangChain `BaseLoader`) |
+| `app/rag/chunker.py` | `MarkdownChunker` |
+| `app/rag/rule_metadata.py` | `RuleMetadataResolver` |
+| `app/rag/manifest.py` | `CorpusManifestBuilder` |
+| `app/rag/ingest.py` | `PolicyCorpusIngestor`, `connect_and_ingest`, CLI entry point |
 | `app/rag/index_schema.py` | Redis index name, key prefix, vector/schema constants |
 | `app/rag/store.py` | `E5Embeddings`, `RedisVectorStore` factory |
-| `app/integrations/redis.py` | raw client, manifest read/write, index stats |
+| `app/integrations/redis.py` | `RedisIndex` — connection, manifest read/write, index stats |
 | `app/api/routes/admin.py` | `/admin/ingest`, `/admin/stats` |
 | `app/api/routes/health.py` | real Redis check in `/ready` |
 | `app/ui.py` | sidebar index stats |
@@ -137,6 +149,8 @@ TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest tests/test_redis_integrati
   example said 5), the monthly commuting cap is 40,000 HUF (design example said 60,000), and
   `benefits` is three separate rules (recreational/training/sport, each with its own annual budget
   and reimbursement ratio) rather than one combined 300,000 HUF pool.
-- **`app/rag/ingest.py` is a set of cohesive classes, not a flat module of functions** — per the
-  project's object-oriented code-architecture preference. `connect_and_ingest` is the only remaining
-  module-level function, kept because it is the FastAPI lifespan's required entry point.
+- **Ingestion is a set of cohesive classes, one per module, not a flat file of free functions** —
+  per the project's object-oriented code-architecture preference. `connect_and_ingest` is the only
+  remaining module-level function, kept because it is the FastAPI lifespan's required entry point.
+  `app/integrations/redis.py` similarly wraps the Redis connection and its lifecycle operations in
+  one `RedisIndex` class rather than a client plus free functions.

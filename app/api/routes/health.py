@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from app.api.schemas import HealthResponse, ReadinessCheck, ReadyResponse
 from app.core.config import Settings
 from app.dependencies import get_redis_client, get_settings
+from app.integrations.redis import RedisIndex
 
 router = APIRouter(tags=["health"])
 
@@ -15,13 +16,13 @@ async def health() -> HealthResponse:
     return HealthResponse()
 
 
-def _check_redis(redis_client: redis.Redis | None) -> ReadinessCheck:
-    if redis_client is None:
+def _check_redis(redis_index: RedisIndex | None) -> ReadinessCheck:
+    if redis_index is None:
         return ReadinessCheck(
             name="redis", status="unavailable", detail="Redis was unreachable at startup."
         )
     try:
-        redis_client.ping()
+        redis_index.ping()
     except redis.RedisError:
         return ReadinessCheck(name="redis", status="unavailable", detail="Redis ping failed.")
     return ReadinessCheck(name="redis", status="ok", detail="Redis is reachable.")
@@ -30,7 +31,7 @@ def _check_redis(redis_client: redis.Redis | None) -> ReadinessCheck:
 @router.get("/ready")
 async def ready(
     settings: Annotated[Settings, Depends(get_settings)],
-    redis_client: Annotated[redis.Redis | None, Depends(get_redis_client)],
+    redis_index: Annotated[RedisIndex | None, Depends(get_redis_client)],
 ) -> ReadyResponse:
     is_dummy = settings.llm_backend == "dummy"
     llm_check = ReadinessCheck(
@@ -42,5 +43,5 @@ async def ready(
             else f"Ollama backend at {settings.ollama_base_url} is not health-checked yet."
         ),
     )
-    redis_check = _check_redis(redis_client)
+    redis_check = _check_redis(redis_index)
     return ReadyResponse(ready=redis_check.status != "unavailable", checks=[llm_check, redis_check])

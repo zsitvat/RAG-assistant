@@ -8,7 +8,7 @@ from langchain_core.documents import Document
 from langchain_redis import RedisVectorStore
 
 from app.core.config import Settings, get_settings
-from app.integrations.redis import RedisIndexLifecycle
+from app.integrations.redis import RedisIndex
 from app.rag.chunker import MarkdownChunker
 from app.rag.docx_loader import CORPUS_DIR, DocxMarkdownLoader
 from app.rag.errors import IngestionError
@@ -69,7 +69,7 @@ class PolicyCorpusIngestor:
 
     def run(
         self,
-        redis_lifecycle: RedisIndexLifecycle,
+        redis_index: RedisIndex,
         vector_store: RedisVectorStore,
         rule_catalogue: RuleCatalogue | None = None,
     ) -> IngestResult:
@@ -80,7 +80,7 @@ class PolicyCorpusIngestor:
         manifest = self._manifest_builder.build(
             EMBEDDING_MODEL_NAME, EMBEDDING_MODEL_REVISION, VECTOR_DIMENSION
         )
-        existing_manifest = redis_lifecycle.read_manifest()
+        existing_manifest = redis_index.read_manifest()
 
         if existing_manifest == manifest:
             action = "reused"
@@ -93,7 +93,7 @@ class PolicyCorpusIngestor:
                 # silently write unindexed hashes.
                 vector_store.index.create(overwrite=True, drop=True)
             self._upsert_chunks(vector_store, chunks)
-            redis_lifecycle.write_manifest(manifest)
+            redis_index.write_manifest(manifest)
 
         return IngestResult(
             action=action, chunk_count=len(chunks), category_counts=self._count_categories(chunks)
@@ -122,26 +122,25 @@ class PolicyCorpusIngestor:
 
 def connect_and_ingest(
     settings: Settings, rule_catalogue: RuleCatalogue
-) -> tuple[RedisIndexLifecycle | None, RedisVectorStore | None]:
+) -> tuple[RedisIndex | None, RedisVectorStore | None]:
     """Connects to Redis and ensures the index is ready. Returns (None, None) if unreachable."""
     try:
-        redis_lifecycle = RedisIndexLifecycle.connect(settings.redis_url)
-        redis_lifecycle.ping()
+        redis_index = RedisIndex(settings.redis_url)
+        redis_index.ping()
     except redis.RedisError:
         logger.warning("Redis unavailable at startup; RAG features disabled")
         return None, None
 
     vector_store = build_vector_store(settings.redis_url, build_embeddings())
-    PolicyCorpusIngestor().run(redis_lifecycle, vector_store, rule_catalogue=rule_catalogue)
-    return redis_lifecycle, vector_store
+    PolicyCorpusIngestor().run(redis_index, vector_store, rule_catalogue=rule_catalogue)
+    return redis_index, vector_store
 
 
 if __name__ == "__main__":
     settings = get_settings()
-    redis_url = settings.redis_url
     result = PolicyCorpusIngestor().run(
-        RedisIndexLifecycle.connect(redis_url),
-        build_vector_store(redis_url, build_embeddings()),
+        RedisIndex(settings.redis_url),
+        build_vector_store(settings.redis_url, build_embeddings()),
         rule_catalogue=get_rule_catalogue(),
     )
     print(result.model_dump_json(indent=2))

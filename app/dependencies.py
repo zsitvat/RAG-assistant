@@ -1,9 +1,9 @@
-import redis
 from fastapi import Request
 from langchain_core.language_models import BaseChatModel
 from langchain_redis import RedisVectorStore
 
 from app.core.config import Settings
+from app.integrations.redis import RedisIndex
 from app.rules.model import RuleCatalogue
 
 
@@ -19,7 +19,7 @@ def get_rule_catalogue(request: Request) -> RuleCatalogue:
     return request.app.state.rule_catalogue
 
 
-def get_redis_client(request: Request) -> redis.Redis:
+def get_redis_client(request: Request) -> RedisIndex:
     return request.app.state.redis_client
 
 

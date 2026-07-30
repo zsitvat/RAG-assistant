@@ -1,4 +1,4 @@
-"""Redis connection and lifecycle operations the LangChain integration does not own."""
+"""Wraps the Redis connection and the lifecycle operations the LangChain integration doesn't own."""
 
 import redis
 from redis.commands.search.query import Query
@@ -9,15 +9,15 @@ MANIFEST_KEY = "manifest:corpus"
 CHUNK_INDEX_NAME = "idx:chunks"
 
 
-class RedisIndexLifecycle:
-    """Connection plus manifest/index-stats operations the vector-store integration doesn't own."""
+class RedisIndex:
+    """The Redis connection plus manifest/index-stats operations, kept in one place."""
 
-    def __init__(self, client: redis.Redis) -> None:
-        self._client = client
+    def __init__(self, redis_url: str) -> None:
+        self._client = redis.Redis.from_url(redis_url, decode_responses=True)
 
-    @classmethod
-    def connect(cls, redis_url: str) -> "RedisIndexLifecycle":
-        return cls(redis.Redis.from_url(redis_url, decode_responses=True))
+    @property
+    def client(self) -> redis.Redis:
+        return self._client
 
     def ping(self) -> bool:
         return self._client.ping()
