@@ -22,15 +22,15 @@ async def test_health_reports_ok(client):
     assert response.json() == {"status": "ok"}
 
 
-async def test_ready_reports_dummy_backend_ok_and_redis_not_configured(client):
+async def test_ready_reports_dummy_llm_ok_and_redis_unavailable_without_a_server(client):
     response = await client.get("/ready")
     assert response.status_code == 200
 
     body = response.json()
-    assert body["ready"] is True
+    assert body["ready"] is False
     checks = {check["name"]: check for check in body["checks"]}
     assert checks["llm"]["status"] == "ok"
-    assert checks["redis"]["status"] == "not_configured"
+    assert checks["redis"]["status"] == "unavailable"
 
 
 async def test_unknown_route_returns_fastapi_default_404(client):

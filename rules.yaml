@@ -1,0 +1,173 @@
+version: 1
+currency: HUF
+fx_rates_fixed:
+  EUR: 360
+  USD: 320
+
+documents:
+  "00":
+    categories: [general]
+    sections: {}
+  "01":
+    categories: [general, meal, equipment]
+    sections:
+      business-meal-limit:
+        headings: ["4. Business meals"]
+      equipment-approval:
+        headings: ["5. Work equipment and minor purchases"]
+      submission-deadline:
+        headings: ["7. Submission deadline and late claims"]
+  "02":
+    categories: [travel]
+    sections:
+      trip-approval-threshold:
+        headings: ["1. Definition and approval of a business trip"]
+      accommodation-limits:
+        headings: ["3. Accommodation"]
+      meal-per-diem:
+        headings: ["4. Meals and daily allowance"]
+  "03":
+    categories: [commuting]
+    sections:
+      commuting-eligibility:
+        headings: ["2. Eligibility conditions"]
+      public-transport-pass:
+        headings: ["3. Public transport passes and tickets"]
+      personal-vehicle-commuting:
+        headings: ["4. Commuting by personal vehicle"]
+      commuting-deadline:
+        headings: ["6. Claim and deadline"]
+  "04":
+    categories: [mileage]
+    sections:
+      mileage-rate:
+        headings: ["3. Mileage reimbursement"]
+  "05":
+    categories: [benefits]
+    sections:
+      benefits-eligibility:
+        headings: ["2. Eligibility"]
+      annual-allowances:
+        headings: ["3. Annual benefit allowances"]
+      recreational-claim:
+        headings: ["5. Claiming the recreational benefit"]
+  "06":
+    categories: [general]
+    sections:
+      approval-matrix:
+        headings: ["3. Approval matrix"]
+      lost-document:
+        headings: ["4. Lost or incomplete supporting document"]
+  "07":
+    categories: [general]
+    sections: {}
+
+submission:
+  deadline_days: 30
+  approval_tiers:
+    - max_huf: 50000
+      approver: line_manager
+    - max_huf: 150000
+      approver: department_head
+    - max_huf: null
+      approver: finance_director
+
+categories:
+  general:
+    rules: []
+    required_documents: [invoice]
+
+  meal:
+    rules:
+      - id: R-MEAL-01
+        doc_ref: "01#business-meal-limit"
+        limit_per_person_huf: 15000
+      - id: R-MEAL-02
+        doc_ref: "01#business-meal-limit"
+        excluded_items: [alcohol, tobacco, tips]
+    required_documents: [invoice, business_purpose_note, participant_list]
+
+  equipment:
+    rules:
+      - id: R-EQUIP-01
+        doc_ref: "01#equipment-approval"
+        approval_tiers:
+          - max_huf: 50000
+            approver: line_manager
+          - max_huf: 150000
+            approver: department_head
+          - max_huf: null
+            approver: finance_director
+    required_documents: [invoice, managerial_approval]
+
+  travel:
+    rules:
+      - id: R-TRAVEL-01
+        doc_ref: "02#trip-approval-threshold"
+        department_head_approval_above_huf: 150000
+      - id: R-TRAVEL-02
+        doc_ref: "02#accommodation-limits"
+        accommodation_limit_huf_per_night:
+          domestic: 45000
+          international: 55000
+      - id: R-TRAVEL-03
+        doc_ref: "02#meal-per-diem"
+        meal_per_diem_huf:
+          domestic: 18000
+          international: 30000
+        breakfast_reduction_huf:
+          domestic: 3000
+          international: 5000
+    required_documents: [travel_request, ticket_or_booking_confirmation, hotel_invoice]
+
+  commuting:
+    rules:
+      - id: R-COMM-01
+        doc_ref: "03#personal-vehicle-commuting"
+        min_one_way_km: 10
+      - id: R-COMM-02
+        doc_ref: "03#personal-vehicle-commuting"
+        rate_huf_per_km: 30
+        monthly_cap_huf: 40000
+      - id: R-COMM-03
+        doc_ref: "03#public-transport-pass"
+        pass_reimbursement_ratio: 0.8
+        monthly_cap_huf: 30000
+      - id: R-COMM-04
+        doc_ref: "03#public-transport-pass"
+        ticket_reimbursement_ratio: 0.8
+        daily_cap_huf: 3000
+    required_documents: [route_declaration, monthly_attendance_summary]
+
+  mileage:
+    rules:
+      - id: R-MILE-01
+        doc_ref: "04#mileage-rate"
+        rate_huf_per_km: 45
+    required_documents: [trip_log]
+
+  benefits:
+    rules:
+      - id: R-BEN-01
+        doc_ref: "05#annual-allowances"
+        benefit_type: recreational
+        annual_budget_huf: 120000
+        reimbursement_ratio: 1.0
+        approval_above_huf: 60000
+        eligible_after_months: 6
+        carry_over: false
+      - id: R-BEN-02
+        doc_ref: "05#annual-allowances"
+        benefit_type: training
+        annual_budget_huf: 200000
+        reimbursement_ratio: 0.8
+        eligible_after_months: 6
+        carry_over: false
+      - id: R-BEN-03
+        doc_ref: "05#annual-allowances"
+        benefit_type: sport
+        annual_budget_huf: 60000
+        reimbursement_ratio: 0.7
+        eligible_after_months: 6
+        carry_over: false
+    required_documents: [invoice_or_booking_document]
