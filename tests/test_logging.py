@@ -40,3 +40,10 @@ def test_configure_logging_rejects_path_that_is_not_a_directory(tmp_path):
 
     with pytest.raises(RuntimeError, match="not writable"):
         configure_logging(service="test-service", log_level="INFO", log_dir=log_dir)
+
+
+def test_configure_logging_quiets_noisy_third_party_loggers(tmp_path):
+    configure_logging(service="test-service", log_level="DEBUG", log_dir=tmp_path)
+
+    assert logging.getLogger("httpcore").getEffectiveLevel() == logging.WARNING
+    assert logging.getLogger("sentence_transformers").getEffectiveLevel() == logging.WARNING

@@ -2,17 +2,12 @@ import docx
 import pytest
 from langchain_core.documents import Document
 
-from app.rag.ingest import (
-    CHUNK_SIZE,
-    IngestionError,
-    attach_rule_metadata,
-    build_manifest,
-    chunk_markdown_document,
-    compute_corpus_hash,
-    convert_docx_to_markdown,
-    load_and_chunk_corpus,
-    validate_section_anchors_resolve,
-)
+from app.rag.chunker import CHUNK_SIZE, MarkdownChunker
+from app.rag.docx_converter import DocxToMarkdownConverter
+from app.rag.errors import IngestionError
+from app.rag.ingest import PolicyCorpusIngestor
+from app.rag.manifest import CorpusManifestBuilder
+from app.rag.rule_metadata import RuleMetadataResolver
 from app.rules.model import RuleCatalogue
 
 RULES_FIXTURE = {
@@ -57,7 +52,7 @@ def _build_docx(path, add_title=True):
 def test_convert_docx_to_markdown_maps_headings_lists_tables_and_title(tmp_path):
     path = _build_docx(tmp_path / "01_sample.docx")
 
-    title, markdown = convert_docx_to_markdown(path)
+    title, markdown = DocxToMarkdownConverter().convert(path)
 
     assert title == "Sample Policy"
     assert "# Sample Policy" in markdown
@@ -72,7 +67,7 @@ def test_convert_docx_to_markdown_maps_headings_lists_tables_and_title(tmp_path)
 def test_convert_docx_to_markdown_falls_back_to_filename_without_title_style(tmp_path):
     path = _build_docx(tmp_path / "01_sample.docx", add_title=False)
 
-    title, _ = convert_docx_to_markdown(path)
+    title, _ = DocxToMarkdownConverter().convert(path)
 
     assert title == "01_sample"
 
@@ -81,7 +76,7 @@ def test_table_is_kept_whole_even_when_it_exceeds_chunk_size():
     long_row = " | ".join(f"cell{i}" * 60 for i in range(4))
     markdown = f"# 1. Big table\n\n| a | b | c | d |\n| --- | --- | --- | --- |\n| {long_row} |"
 
-    chunks = chunk_markdown_document("01", "Doc", "source.docx", markdown)
+    chunks = MarkdownChunker().chunk("01", "Doc", "source.docx", markdown)
 
     table_chunks = [c for c in chunks if c.page_content.startswith("| a |")]
     assert len(table_chunks) == 1
@@ -93,7 +88,7 @@ def test_short_section_is_merged_into_the_following_sibling():
         "This is a normal-length paragraph about the real policy. " * 6
     )
 
-    chunks = chunk_markdown_document("01", "Doc", "source.docx", markdown)
+    chunks = MarkdownChunker().chunk("01", "Doc", "source.docx", markdown)
 
     assert all(c.metadata["section"] != "1. Tiny" for c in chunks)
     assert any("OK." in c.page_content for c in chunks)
@@ -104,7 +99,7 @@ def test_long_prose_section_is_split_into_multiple_overlapping_chunks():
     paragraph = "This sentence repeats to build a long section of prose text. "
     markdown = "# 1. Long section\n\n" + paragraph * 30
 
-    chunks = chunk_markdown_document("01", "Doc", "source.docx", markdown)
+    chunks = MarkdownChunker().chunk("01", "Doc", "source.docx", markdown)
 
     assert len(chunks) > 1
     assert all(c.metadata["section"] == "1. Long section" for c in chunks)
@@ -114,43 +109,45 @@ def test_long_prose_section_is_split_into_multiple_overlapping_chunks():
 def test_chunk_index_is_sequential_per_document():
     markdown = "# 1. A\n\nFirst.\n\n# 2. B\n\nSecond."
 
-    chunks = chunk_markdown_document("01", "Doc", "source.docx", markdown)
+    chunks = MarkdownChunker().chunk("01", "Doc", "source.docx", markdown)
 
     assert [c.metadata["chunk_index"] for c in chunks] == list(range(len(chunks)))
 
 
-def test_attach_rule_metadata_rejects_unknown_document_id():
+def test_rule_metadata_resolver_rejects_unknown_document_id():
     catalogue = RuleCatalogue.model_validate(RULES_FIXTURE)
     chunk = Document(page_content="x", metadata={"doc_id": "99", "section": None})
+    resolver = RuleMetadataResolver(catalogue)
 
     with pytest.raises(IngestionError, match="Unknown document identifier"):
-        attach_rule_metadata([chunk], catalogue)
+        resolver.attach([chunk])
 
 
-def test_attach_rule_metadata_assigns_categories_and_rule_ids():
+def test_rule_metadata_resolver_assigns_categories_and_rule_ids():
     catalogue = RuleCatalogue.model_validate(RULES_FIXTURE)
     chunk = Document(page_content="x", metadata={"doc_id": "01", "section": "4. Business meals"})
 
-    attach_rule_metadata([chunk], catalogue)
+    RuleMetadataResolver(catalogue).attach([chunk])
 
     assert chunk.metadata["categories"] == ["meal"]
     assert chunk.metadata["section_id"] == "limit"
     assert chunk.metadata["rule_ids"] == ["R-MEAL-01"]
 
 
-def test_validate_section_anchors_resolve_rejects_missing_heading():
+def test_validate_anchors_resolve_rejects_missing_heading():
     catalogue = RuleCatalogue.model_validate(RULES_FIXTURE)
     chunk = Document(page_content="x", metadata={"doc_id": "01", "section": "Unrelated heading"})
+    resolver = RuleMetadataResolver(catalogue)
 
     with pytest.raises(IngestionError, match="not in the corpus"):
-        validate_section_anchors_resolve([chunk], catalogue)
+        resolver.validate_anchors_resolve([chunk])
 
 
-def test_validate_section_anchors_resolve_passes_when_heading_present():
+def test_validate_anchors_resolve_passes_when_heading_present():
     catalogue = RuleCatalogue.model_validate(RULES_FIXTURE)
     chunk = Document(page_content="x", metadata={"doc_id": "01", "section": "4. Business meals"})
 
-    validate_section_anchors_resolve([chunk], catalogue)
+    RuleMetadataResolver(catalogue).validate_anchors_resolve([chunk])
 
 
 def test_compute_corpus_hash_changes_when_a_document_changes(tmp_path):
@@ -159,13 +156,14 @@ def test_compute_corpus_hash_changes_when_a_document_changes(tmp_path):
     rules_path = tmp_path / "rules.yaml"
     rules_path.write_text("version: 1\n")
     _build_docx(corpus_dir / "01_sample.docx")
+    builder = CorpusManifestBuilder(corpus_dir, rules_path)
 
-    first_hash = compute_corpus_hash(corpus_dir, rules_path)
-    second_hash = compute_corpus_hash(corpus_dir, rules_path)
+    first_hash = builder.compute_hash()
+    second_hash = builder.compute_hash()
     assert first_hash == second_hash
 
     _build_docx(corpus_dir / "02_other.docx")
-    third_hash = compute_corpus_hash(corpus_dir, rules_path)
+    third_hash = builder.compute_hash()
     assert third_hash != first_hash
 
 
@@ -174,37 +172,38 @@ def test_compute_corpus_hash_changes_when_rules_change(tmp_path):
     corpus_dir.mkdir()
     _build_docx(corpus_dir / "01_sample.docx")
     rules_path = tmp_path / "rules.yaml"
+    builder = CorpusManifestBuilder(corpus_dir, rules_path)
 
     rules_path.write_text("version: 1\n")
-    first_hash = compute_corpus_hash(corpus_dir, rules_path)
+    first_hash = builder.compute_hash()
 
     rules_path.write_text("version: 2\n")
-    second_hash = compute_corpus_hash(corpus_dir, rules_path)
+    second_hash = builder.compute_hash()
 
     assert first_hash != second_hash
 
 
-def test_load_and_chunk_corpus_end_to_end(tmp_path):
+def test_load_and_chunk_end_to_end(tmp_path):
     corpus_dir = tmp_path / "corpus"
     corpus_dir.mkdir()
     _build_docx(corpus_dir / "01_sample.docx")
     catalogue = RuleCatalogue.model_validate(RULES_FIXTURE)
 
-    sources, chunks = load_and_chunk_corpus(corpus_dir, catalogue)
+    sources, chunks = PolicyCorpusIngestor(corpus_dir).load_and_chunk(catalogue)
 
     assert len(sources) == 1
     assert sources[0].metadata["doc_id"] == "01"
     assert any(c.metadata["rule_ids"] == ["R-MEAL-01"] for c in chunks)
 
 
-def test_build_manifest_reflects_chunking_and_embedding_settings(tmp_path):
+def test_manifest_builder_reflects_chunking_and_embedding_settings(tmp_path):
     corpus_dir = tmp_path / "corpus"
     corpus_dir.mkdir()
     _build_docx(corpus_dir / "01_sample.docx")
     rules_path = tmp_path / "rules.yaml"
     rules_path.write_text("version: 1\n")
 
-    manifest = build_manifest(corpus_dir, rules_path, "model-x", "rev-1", 384)
+    manifest = CorpusManifestBuilder(corpus_dir, rules_path).build("model-x", "rev-1", 384)
 
     assert manifest.chunk_size == CHUNK_SIZE
     assert manifest.embedding_model == "model-x"

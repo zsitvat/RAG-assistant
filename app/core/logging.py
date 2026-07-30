@@ -9,6 +9,18 @@ from pathlib import Path
 LOG_RETENTION_DAYS = 7
 DEFAULT_LOG_DIR = Path("logs")
 _CAPTURED_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi", "streamlit")
+_NOISY_THIRD_PARTY_LOGGERS = (
+    "httpcore",
+    "httpx",
+    "httpx2",
+    "urllib3",
+    "asyncio",
+    "sentence_transformers",
+    "transformers",
+    "redisvl",
+    "huggingface_hub",
+    "filelock",
+)
 
 request_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "request_id", default=None
@@ -74,3 +86,6 @@ def configure_logging(service: str, log_level: str, log_dir: Path = DEFAULT_LOG_
         captured_logger = logging.getLogger(logger_name)
         captured_logger.handlers.clear()
         captured_logger.propagate = True
+
+    for logger_name in _NOISY_THIRD_PARTY_LOGGERS:
+        logging.getLogger(logger_name).setLevel(logging.WARNING)

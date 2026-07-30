@@ -8,6 +8,7 @@ from app.main import app
 @pytest.fixture
 async def client(monkeypatch):
     monkeypatch.setenv("LLM_BACKEND", "dummy")
+    monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:1/0")
     get_settings.cache_clear()
     async with app.router.lifespan_context(app):
         transport = ASGITransport(app=app)
