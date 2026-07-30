@@ -28,21 +28,28 @@ uv run bandit -c pyproject.toml -r app
 uv run pytest --cov=app --cov-report=term-missing
 ```
 
-Run the SonarQube Cloud analysis after creating a user token for the project:
+The same checks run in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for pull requests and
+pushes to `main`. Before the first internal CI run, configure the `SONAR_TOKEN` repository secret
+and the `SONAR_ORGANIZATION`/`SONAR_PROJECT_KEY` repository variables. Fork pull requests run lint,
+formatting, security and tests without receiving the secret.
+
+Run the SonarQube Cloud analysis locally:
 
 ```bash
+cp sonar-project.properties.example sonar-project.properties
+# Fill in your own organization/project key in sonar-project.properties (gitignored).
 export SONAR_TOKEN="<your-token>"
 make sonar
 ```
 
-The token is read only from the environment and must not be committed. The command generates
-`coverage.xml`, uploads the analysis for project `zsitvat_RAG-assistant`, and waits for the configured
-quality gate.
+The token is read only from the environment and must not be committed; neither is
+`sonar-project.properties` (see `sonar-project.properties.example`). The command generates
+`coverage.xml`, uploads the analysis, and waits for the configured quality gate.
 
 The optional SonarQube management CLI uses a separate, interactive browser login:
 
 ```bash
-sonar auth login -o zsitvat
+sonar auth login -o <your-sonarcloud-organization-key>
 sonar auth status
 ```
 

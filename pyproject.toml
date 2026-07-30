@@ -5,7 +5,7 @@ description = "Agentic RAG prototype: corporate expense reimbursement and employ
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.141.1",
-    "httpx>=0.28.1",
+    "httpx2>=2.9.1",
     "langchain-core>=1.0",
     "langchain-ollama>=1.1.0",
     "pydantic>=2.13.4",
@@ -34,7 +34,6 @@ extend-exclude = [".docs"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
-ignore = ["B008"]
 
 [tool.bandit]
 exclude_dirs = ["tests", ".venv"]

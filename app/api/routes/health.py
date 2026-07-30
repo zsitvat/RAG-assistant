@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
 
 from app.api.schemas import HealthResponse, ReadinessCheck, ReadyResponse
@@ -7,13 +9,13 @@ from app.dependencies import get_settings
 router = APIRouter(tags=["health"])
 
 
-@router.get("/health", response_model=HealthResponse)
+@router.get("/health")
 async def health() -> HealthResponse:
     return HealthResponse()
 
 
-@router.get("/ready", response_model=ReadyResponse)
-async def ready(settings: Settings = Depends(get_settings)) -> ReadyResponse:
+@router.get("/ready")
+async def ready(settings: Annotated[Settings, Depends(get_settings)]) -> ReadyResponse:
     is_dummy = settings.llm_backend == "dummy"
     llm_check = ReadinessCheck(
         name="llm",

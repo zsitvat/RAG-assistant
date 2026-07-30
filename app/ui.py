@@ -1,4 +1,4 @@
-import httpx
+import httpx2
 import streamlit as st
 
 from app.core.config import get_settings
@@ -11,14 +11,14 @@ settings = get_settings()
 
 
 def _fetch_readiness(base_url: str) -> dict:
-    response = httpx.get(f"{base_url}/ready", timeout=5.0)
+    response = httpx2.get(f"{base_url}/ready", timeout=5.0)
     response.raise_for_status()
     return response.json()
 
 
 try:
     readiness = _fetch_readiness(settings.api_base_url)
-except httpx.HTTPError as exc:
+except httpx2.HTTPError as exc:
     st.error(f"Could not reach the API at {settings.api_base_url}: {exc}")
 else:
     if readiness["ready"]:
