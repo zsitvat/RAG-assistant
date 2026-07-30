@@ -118,57 +118,79 @@ see §4.5 for why, and for what a non-PoC version would do instead (derive it fr
 
 ## 3. Repository layout
 
+The implemented repository after the runnable-shell slice is:
+
 ```
+.env.example                 # committed application-setting template; .env is local and ignored
+Makefile                     # install, quality, Sonar and local run commands
 app/
   main.py                     # FastAPI app assembly and lifespan
-  dependencies.py             # providers for AgentService and shared runtime resources
+  dependencies.py             # central FastAPI dependency providers
   api/
     router.py                 # combines the route modules
-    schemas.py                # public, evaluation and load-test HTTP contracts
+    schemas.py                # current health/readiness HTTP contracts
     routes/
-      chat.py                 # chat, streaming and thread reset endpoints
       health.py               # liveness and readiness endpoints
-      admin.py                # evaluation, load-test, ingest and index-stat endpoints
+  core/
+    config.py                 # deployment-dependent settings
+    logging.py                # stdout and rotating-file application logging
+    observability.py          # X-Request-ID middleware and logging context
+  integrations/
+    llm.py                    # ChatOllama/FakeListChatModel factory
+  ui.py                       # readiness-only Streamlit HTTP client
+tests/
+  test_api.py
+  test_llm.py
+  test_logging.py
+pyproject.toml                # project metadata, dependencies, Ruff/Bandit/pytest/coverage configuration
+uv.lock                       # pinned, reproducible dependency lock file (committed)
+sonar-project.properties      # Sonar source, test and coverage paths
+README.md
+```
+
+Later slices add the following target modules without changing the shell boundaries above:
+
+```
+app/
+  api/routes/
+    chat.py                   # chat, streaming and thread reset endpoints
+    admin.py                  # evaluation, load-test, ingest and index-stat endpoints
   agent/
     service.py                # invoke, stream and reset use cases exposed to the API
     graph.py                  # 8 nodes, routing and graph construction
     nodes.py                  # node implementations, including classify_intent
-    state.py                  # AgentState and domain models
-    calculator.py             # deep deterministic reimbursement-calculation module
-    tools.py                  # LangChain tool adapters, registry and rule-checking logic
+    model.py                  # AgentState and Pydantic domain contracts
+    calculator.py             # deterministic reimbursement-calculation module
+    tools.py                  # LangChain tool adapters, registry and rule checks
     prompts.py                # prompt names, embedded PoC fallbacks and resolver
-  core/
-    config.py                 # deployment-dependent settings
-    logging.py                # stdout and rotating-file application logging
-    observability.py          # correlation fields and Langfuse tracing setup
   evaluation/
     load.py                   # endpoint-triggered Langfuse dataset load experiment
   integrations/
-    llm.py                    # LangChain ChatOllama/test-model factory
-    redis.py                  # LangChain Redis vector-store config + LangGraph checkpointer
+    redis.py                  # LangChain Redis vector store + LangGraph checkpointer
   rag/
     graph.py                  # LangGraph retrieve -> context subgraph
     ingest.py                 # LangChain Document loading, splitting and ingest CLI
     store.py                  # LangChain RedisVectorStore/retriever factory
-  ui.py                       # Streamlit chat and HTTP client
+    model.py                  # retrieval and ingestion Pydantic contracts
 eval/
   dataset.json                # 20 functional test cases; source of truth
   run_eval.py                 # sync dataset + run Langfuse experiment + local reports
-tests/
-  test_graph.py  test_rag.py  test_tools.py  test_api.py
 rules.yaml                    # small language-independent deterministic rule catalogue
-.docs/                        # plan, source corpus and generated evaluation reports
-pyproject.toml                # Ruff, Bandit and pytest configuration
-sonar-project.properties      # Sonar source, test and coverage paths
 Dockerfile
 docker-compose.yml
 entrypoint.sh
-requirements.in              # direct runtime dependencies
-requirements.txt             # pinned runtime lock file
-requirements-dev.in          # direct test and quality-tool dependencies
-requirements-dev.txt         # pinned development lock file
-README.md
 ```
+
+Dependency management uses `uv` directly: runtime dependencies live in `[project.dependencies]` and
+development/quality-tool dependencies in `[dependency-groups.dev]`, both inside `pyproject.toml`;
+`uv.lock` is the single pinned, reproducible lock file. This replaces the originally planned
+`requirements.in`/`requirements.txt` (+ `-dev`) pip-tools pattern — `uv` already owns compilation and
+locking, so a second pinning mechanism would be redundant. `uv sync --dev` reproduces the exact
+environment from a clean clone.
+
+Application settings are documented in `.env.example` and loaded from the ignored `.env` by
+`pydantic-settings`. The committed template contains no credentials. The local development file may
+select `LLM_BACKEND=dummy`, loopback URLs and disabled Langfuse without changing source code.
 
 All endpoint functions live under `app/api/routes/`. `app/api/router.py` only combines their
 `APIRouter` instances, and `app/main.py` only assembles the FastAPI application and owns its
@@ -176,6 +198,13 @@ lifespan. `app/dependencies.py` exposes the application-level dependency provide
 routes, including access to the lifespan-created `AgentService`, Redis connection and active
 configuration. It performs no resource creation at import time. This keeps transport code out of
 both the application entry point and the agent workflow.
+
+New application behaviour is organised around small, cohesive classes. Ad hoc module-level helper
+functions and boilerplate getters/setters are avoided; framework-required entry points are the
+exception. Dependency-injection providers and runtime wiring remain centralised in
+`app/dependencies.py`. Each future domain module keeps its Pydantic contracts in that module's
+`model.py`; the shell's existing `app/api/schemas.py` remains the current transport-contract file
+until the API module is expanded. Source files do not use file-level or module-level docstrings.
 
 ---
 
@@ -918,7 +947,9 @@ values.
 ### 10.1 HTTP API
 
 FastAPI owns the agent. `app/main.py` creates the application, registers `app/api/router.py` and
-defines the `lifespan` that opens the Redis connection pool, verifies
+defines an `@asynccontextmanager` lifespan annotated as `AsyncGenerator[None, None]`. In the current
+runnable shell it loads `.env`-backed settings, configures JSON logging and creates the selected
+LangChain chat model once on `app.state`. Later slices extend the same lifespan so it opens the Redis connection pool, verifies
 `idx:chunks` against `manifest:corpus`, warms the embedding model,
 builds the RAG subgraph and then compiles the main graph once — so the first user request is not the
 one paying for all of it. The HTTP
@@ -984,9 +1015,11 @@ an allow-listed presentation mapping, not node output or model reasoning; tool a
 intermediate state and chain-of-thought are never sent to the UI.
 
 Cross-cutting: a `X-Request-ID` (generated if absent) is attached to every Langfuse span and log line;
-errors return RFC-7807-style `{type, title, detail, request_id}` bodies via one exception handler, so
-the UI never has to parse a stack trace; CORS is open to the UI origin only. `/docs` (OpenAPI) is the
-free by-product that makes the agent explorable without the UI.
+error responses use FastAPI's own default shapes and status codes, and unhandled exceptions are
+logged by Uvicorn's default error logging rather than a custom exception handler — with
+`debug=False` (FastAPI's default), no handler in the chain ever exposes a stack trace to the client.
+CORS is open to the UI origin only. `/docs` (OpenAPI) is the free by-product that makes the agent
+explorable without the UI.
 
 ### 10.2 Streamlit UI
 
@@ -1043,21 +1076,22 @@ Python logging hierarchy once at process startup with two handlers receiving the
 record:
 
 - a `StreamHandler(sys.stdout)` for `docker compose logs` and container-platform collection;
-- a UTC-midnight `TimedRotatingFileHandler` writing a service-specific file under `./logs`.
-  `LOG_RETENTION_DAYS = 7` is a code constant; a small retention helper removes archives whose UTC
-  date is outside the seven-calendar-day window at process startup and after every rollover.
+- a UTC-midnight `TimedRotatingFileHandler` writing a service-specific file under `./logs`, with
+  `backupCount=LOG_RETENTION_DAYS` (7): the handler keeps the seven most recent daily archives and
+  deletes older ones itself on rollover. This is a deliberate simplification over a hand-written,
+  age-based retention helper — the stdlib's own count-based retention already gives ~7 days for a
+  service that rotates daily, without extra code to maintain.
 
 Every record includes UTC timestamp, level, service, logger, event, `request_id` and, when available,
-`thread_id`, duration and exception metadata. The request middleware binds correlation fields with
+`thread_id` and exception metadata. The request middleware binds correlation fields with
 `contextvars`, and the logging configuration also captures Uvicorn/FastAPI and Streamlit loggers so
 framework errors follow the same format. Prompts, answers, retrieved chunk text, tool artifacts and
 credentials are never logged; those payloads would turn an operational log into an ungoverned copy
 of conversation data. One Uvicorn worker and separate `api.jsonl` / `ui.jsonl` files avoid concurrent
 rotation of the same file.
 
-The seven-day policy applies to the application-owned files and is age-based, not a count of backup
-files. A stopped service may leave old files on disk, but they are removed before it begins serving
-again. Stdout is a delivery stream rather than the retention store; Compose uses Docker's
+The seven-day policy applies to the application-owned files, kept by rotation count rather than a
+separate age-based sweep. Stdout is a delivery stream rather than the retention store; Compose uses Docker's
 size-capped `local` logging driver to prevent unbounded container logs, while the file handler
 provides the defined time-based retention. The shared
 `./logs:/app/logs` bind mount keeps rotated files available across container recreation and makes
@@ -1168,13 +1202,15 @@ Quality checks run locally and in CI; they are not application services and add 
 | Ruff format | `ruff format --check .` | formatting drift |
 | Bandit | `bandit -c pyproject.toml -r app` | common Python security issues in application code |
 | Tests + coverage | `pytest --cov=app --cov-report=term-missing --cov-report=xml` | behaviour and `coverage.xml` for Sonar |
-| Sonar | `sonar-scanner` | maintainability, duplication, bugs, vulnerabilities and coverage quality gate |
+| Sonar | `make sonar` (`uv run pysonar`) | maintainability, duplication, bugs, vulnerabilities and coverage quality gate |
 
 `pyproject.toml` targets Python 3.12 and holds the small Ruff, Bandit and pytest configuration.
 `sonar-project.properties` sets `app` as source, `tests` as tests, reads `coverage.xml`, and excludes
-the fictional DOCX corpus, generated eval reports and local logs from analysis. CI runs Ruff,
-Bandit and pytest first, then submits the result to Sonar and fails when the configured quality gate
-fails.
+`app/ui.py` from coverage. Limiting `sonar.sources` to `app` and `sonar.tests` to `tests` keeps the
+fictional corpus, generated reports and local logs outside analysis without additional exclusion
+patterns. The locked `pysonar` package supplies the Python scanner without a separately managed
+system Java installation. `make sonar` first requires `SONAR_TOKEN`, regenerates `coverage.xml`,
+submits the result and waits for the configured quality gate.
 
 The Sonar service is **SonarCloud** — the free tier, external to the application runtime and to the
 Compose stack. It was chosen over a self-hosted SonarQube container for the same reason as Langfuse
@@ -1274,8 +1310,8 @@ allows node-level evaluation) — useful because intent errors cascade.
   document, plus an SSE test asserting deduplicated `step`/`source` events, answer-only token
   streaming and a final `result` containing the same accumulated steps and sources.
 - **Logging**: both handlers receive the same correlation fields, sensitive payload fields are
-  excluded, UTC-midnight rollover produces one dated file, and the startup/rollover retention
-  helper removes archives outside the seven-calendar-day window.
+  excluded, and UTC-midnight rollover produces one dated file with `backupCount=7` retiring the
+  oldest archive.
 - **Prompt resolution**: every prompt name has a valid embedded version; Langfuse resolution uses
   the `production` label; missing or unavailable remote prompts fall back to the embedded template;
   both variants accept the same variables.

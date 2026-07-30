@@ -167,7 +167,7 @@ Run the repository-defined checks over the complete implementation:
 | Ruff formatting | `ruff format --check .` | no formatting drift |
 | Bandit | `bandit -c pyproject.toml -r app` | no unaccepted security findings |
 | Tests and coverage | `pytest --cov=app --cov-report=term-missing --cov-report=xml` | all tests pass and coverage is reported |
-| Sonar | `sonar-scanner` | configured quality gate passes |
+| Sonar | `make sonar` (`uv run pysonar`) | configured quality gate passes |
 
 Also build the containers and exercise the clean-clone startup path. Tool findings must be fixed or
 documented with a concrete reason; disabling a rule only to make the gate green is not resolution.

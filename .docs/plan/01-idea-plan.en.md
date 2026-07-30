@@ -1,6 +1,5 @@
 # Idea Plan – Agentic RAG Assistant (high level)
 
-English version of [01-idea-plan.hu.md](01-idea-plan.hu.md).
 Development process: [00-development-flow.en.md](00-development-flow.en.md).
 
 ## 1. The chosen topic

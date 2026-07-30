@@ -1,6 +1,9 @@
 # Workspace
 
 .docs/*.pdf
+.claude/settings.local.json
+.claude/settings.json
+./CLAUDE.md
 
 
 # Byte-compiled / optimized / DLL files
@@ -151,6 +154,9 @@ activemq-data/
 
 # SageMath parsed files
 *.sage.py
+
+# Application logs (bind-mounted at runtime, not part of the repository)
+/logs/
 
 # Environments
 .env
