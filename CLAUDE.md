@@ -1,7 +1,7 @@
 # RAG-assistant
 
 Agentic RAG prototype: corporate expense reimbursement and employee benefits assistant
-(LangGraph + local LLM + Streamlit). Assignment brief: `.docs/RAG- Feladatkiírás- Medior (1).pdf`.
+(LangGraph + local LLM + Streamlit).
 
 ## Documentation language
 
@@ -20,5 +20,6 @@ company. Never present them as a real company's policy or as tax or legal advice
 
 ## Key documents
 
+- `.docs/plan/00-development-flow.en.md` — planning, implementation and review workflow
 - `.docs/plan/01-idea-plan.en.md` — problem, topic justification, scope
 - `.docs/plan/02-technical-design.en.md` — implementation reference

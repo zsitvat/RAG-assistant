@@ -1,6 +1,7 @@
 # Idea Plan – Agentic RAG Assistant (high level)
 
 English version of [01-idea-plan.hu.md](01-idea-plan.hu.md).
+Development process: [00-development-flow.en.md](00-development-flow.en.md).
 
 ## 1. The chosen topic
 
@@ -73,15 +74,21 @@ missing data.
   module; the complexity of the project lives in the agentic workflow and the tools, not in the retriever.
 - **Tools (deterministic Python, not the LLM):** expense and reimbursement calculator, rule
   checker and deadline calculator.
-- **Data source:** fictional company policies as `.docx` documents under
-  `.docs/sources/<lang>/`, converted to Markdown at ingest so the heading structure survives; reviewed by
-  hand for internal consistency, small in volume – the emphasis is on quality processing. The structured
-  rule catalogue (`rules.yaml`) is hand-authored for the prototype; a production version would extract it
-  from the documents themselves.
-- **Language:** an English and a Hungarian knowledge base, one Redis index each, and a config setting
-  (`ACTIVE_LANG`) decides which one the assistant uses. Both indices are built with the same
-  multilingual embedding model, since Hungarian has no strong language-specific retrieval embedder and a
-  shared model keeps the two languages' eval numbers comparable.
+- **Data source:** fictional company policies as `.docx` documents under `.docs/sources/en/`,
+  converted to Markdown at ingest so the heading structure survives; reviewed by hand for internal
+  consistency, small in volume – the emphasis is on quality processing. A Hungarian mirror corpus
+  exists under `.docs/sources/hu/` but is not ingested in this PoC (see the Language note below). The
+  structured rule catalogue (`rules.yaml`) is hand-authored for the prototype; a production version
+  would extract it from the documents themselves.
+- **Language:** English only for this PoC — a single knowledge base, a single Redis index, no
+  language-switch config. A bilingual (English + Hungarian) knowledge base with a per-language index
+  and an `ACTIVE_LANG` switch was part of the original design, but was cut deliberately: it would have
+  doubled the data layer, the eval datasets and the consistency tests without strengthening any of the
+  agentic behaviour the assignment grades. It remains a documented future direction (see technical
+  design §18 PoC boundaries) rather than being built now. The embedding model stays multilingual
+  (`intfloat/multilingual-e5-small`, §4.3) even though only English is served — swapping to an
+  English-only embedder would touch more of the design than the language cut already requires, for a
+  retrieval-quality difference that is unlikely to be measurable on a corpus this small.
 - **Storage:** Redis (Redis Stack) as the single datastore – vector indices for the policy chunks
   and LangGraph conversation checkpoints.
 - **Model:** locally runnable open-source LLM (no paid API); dummy LLM fallback if needed.

@@ -1,0 +1,36 @@
+# 10 — Langfuse observability, prompt resolution, and operational logging
+
+**What to build:** Developers can inspect each agent turn, graph node, tool choice, retrieval, and model generation in Langfuse while operators receive bounded, privacy-conscious application logs. Prompt versions are remotely manageable without making Langfuse availability a requirement for normal chat.
+
+**Blocked by:** 04 — First policy-question agent journey.
+
+**Status:** ready-for-agent
+
+**Design references:** Technical design §9 prompt operations, §11 observability/configuration, §13 score integration, and Langfuse/logging failures in §15.
+
+**Technical notes:**
+
+- Attach the Langfuse callback at graph invocation so nested LangChain runnables, retrievers, tools, and model calls inherit one trace hierarchy without trace calls inside graph nodes.
+- Resolve prompts through one prompt module that returns validated LangChain `ChatPromptTemplate` objects from either a production-labelled remote version or an embedded fallback.
+- Use request-scoped context variables for correlation metadata shared by application, Uvicorn, and Streamlit logs.
+- Separate diagnostic payloads from operational logs: Langfuse may hold explicitly configured trace content, while application-owned JSON logs contain metadata only.
+- Make retention age-based and UTC-calendar-aware, testing startup cleanup and rollover cleanup independently.
+- Use Langfuse Cloud as an external dependency for official evaluation/load runs; do not add a self-hosted observability container to the constrained local runtime.
+
+- [ ] One Langfuse trace represents each turn and carries request, thread/session, intent, category, decision, degradation, and model metadata.
+- [ ] Graph nodes, tool executions, retriever activity, and LLM generations appear as linked observations with useful durations and error status.
+- [ ] Generation observations record model, prompt identity/version, token usage, and latency so performance bottlenecks can be attributed to individual calls.
+- [ ] Prompt name, resolved version, and prompt source are linked to each generation without copying observability data into graph state.
+- [ ] Every prompt has a valid embedded development fallback represented as a LangChain chat prompt.
+- [ ] When enabled, prompt resolution requests the production-labelled Langfuse version and falls back on missing, invalid, or unavailable remote content.
+- [ ] Remote and embedded prompts are validated for the same required variables, structured-output expectations, policy-number guardrail, and citation markers.
+- [ ] Disabling Langfuse leaves normal chat operational and uses embedded prompts without repeated network attempts.
+- [ ] Official functional and load runs refuse to claim complete observability when Langfuse tracing is disabled.
+- [ ] Structured application logs include UTC time, level, service, event, request identifier, and relevant duration/exception metadata through context propagation.
+- [ ] Prompts, answers, retrieved text, tool artifacts, credentials, and sensitive claim fields never enter application-owned logs.
+- [ ] Logs are written to stdout and separate service files, rotate at UTC midnight, and remove archives outside the seven-calendar-day retention window at startup and rollover.
+- [ ] A stopped service may leave expired archives, but startup cleanup removes them before new requests are served.
+- [ ] API and UI never rotate the same file, and Uvicorn/FastAPI/Streamlit framework records receive the same structured correlation fields.
+- [ ] Container stdout uses bounded delivery settings so disabling file rotation cannot create unbounded local logs.
+- [ ] Tests with mocked Langfuse and controlled time verify tracing metadata, fallback behaviour, prompt validation, correlation fields, rollover, retention, and payload exclusion.
+- [ ] Langfuse prompt failure emits one warning event without logging prompt text, then uses the validated embedded version.

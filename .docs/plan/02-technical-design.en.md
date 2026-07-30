@@ -1,6 +1,7 @@
 # Technical Design – Agentic RAG Expense & Benefits Assistant
 
 Detailed technical plan for the idea described in [01-idea-plan.en.md](01-idea-plan.en.md).
+Development process: [00-development-flow.en.md](00-development-flow.en.md).
 This document defines what gets built, how the pieces fit together, and what each component's
 contract is. It is the implementation reference.
 
@@ -11,13 +12,14 @@ contract is. It is the implementation reference.
 | Assignment requirement | Where it is satisfied |
 | --- | --- |
 | Real problem + justification | [01-idea-plan.en.md](01-idea-plan.en.md), README §1 |
+| LangChain/LangGraph implementation | §4–§9 – LangChain documents, splitters, embeddings, Redis retriever, chat model and tools inside compiled LangGraph workflows |
 | LangGraph agentic workflow, ≥5 nodes | §6 – focused main graph with 8 nodes |
 | Autonomous decision making (conditional routing) | §6.3 – ReAct tool-calling loop: the LLM picks the tools and their arguments; §6.4 – `route_after_agent` |
 | Decomposition into subtasks | §6 – separate classification, extraction, request checking, tool execution and response generation |
 | State management for intermediate results | §5 – `AgentState`, checkpointed per thread |
-| ≥2 tools, at least one non-retrieval | §7 – calculator, rule checker, deadline checker |
+| ≥2 tools, at least one non-retrieval | §7 – calculator, rule checker (deadline evaluation delegated internally, not a separate model-visible tool) |
 | Dedicated modular RAG subgraph (not counted in the node budget) | §8 – compiled `rag_graph` (similarity search + category tag filter), invoked by the `search_policies` tool |
-| Free-form text data source, quality over quantity | §4 – fictional `.docx` policy corpus (EN + HU) under `.docs/sources/`, header-aware chunking, per-language Redis vector index |
+| Free-form text data source, quality over quantity | §4 – fictional `.docx` policy corpus (English) under `.docs/sources/en/`, header-aware chunking, single Redis vector index |
 | No paid API, local open-source LLM + trade-off notes | §9 – Ollama + Qwen2.5-7B-Instruct, dummy LLM fallback |
 | Streamlit UI showing the main steps and RAG result | §10.2 – streamed, expandable source and step summary; §11 – detailed diagnostics in Langfuse |
 | Containerised, Dockerfile mandatory, compose preferred | §12 – root `Dockerfile` + compose with `api`, `ui`, `ollama`, `redis` |
@@ -34,6 +36,13 @@ separate intent classification and extraction, deterministic clarification routi
 tool loop, modular RAG and grounded response generation. Technical work that does not strengthen one
 of those behaviours stays out of the graph.
 
+**Framework boundary:** the implementation is LangChain/LangGraph end to end. LangChain owns
+documents, splitters, embeddings, vector-store retrieval, prompts, chat-model calls, structured
+output, messages and tools; LangGraph owns state, conditional execution, tool dispatch, checkpointing
+and streaming. Custom code is limited to domain models, policy calculations, validation, formatting
+and thin framework adapters where the source format requires one. It must not introduce a second
+workflow engine, retriever abstraction, tool protocol, model client or conversation-memory layer.
+
 ## 1.2 Hard constraint: it has to run on one developer machine
 
 The single most shaping constraint of this design is not a requirement in the brief, it is the hardware:
@@ -44,11 +53,11 @@ below are downstream of that, and they are only defensible with it in mind:
 | Choice | Because of the constraint |
 | --- | --- |
 | 7B model at Q4 (§9) | ~5 GB resident; a 14B or 70B would not fit next to everything else, and CPU generation would leave the demo unusable |
-| 384-dim small multilingual embedder (§4.3) | ~470 MB and a fast CPU forward pass, so query embedding never competes with the LLM for the machine |
-| Corpus of 8 short documents per language (§4.1) | a few hundred chunks, which is also why a dense-only, filter-first retrieval path is enough |
+| 384-dim small multilingual embedder (§4.3) | ~470 MB and a fast CPU forward pass, while retaining cross-lingual retrieval for Hungarian questions over the English knowledge base |
+| Corpus of 8 short English documents (§4.1) | a few hundred chunks, which is also why a dense-only, filter-first retrieval path is enough |
 | Redis Stack as the only datastore (§4.3) | one service instead of three, and an in-memory index this size costs megabytes |
 | One `uvicorn` worker, load test at concurrency 2–4 (§14) | Ollama serialises generation on one machine; higher concurrency measures queueing, not capacity |
-| `DummyLLM` backend (§9) | the graph, the API and the tests must be runnable — and CI-able — without the model loaded at all |
+| LangChain-compatible `DummyLLM` backend (§9) | the graph, the API and the tests must be runnable — and CI-able — without the model loaded at all |
 | Simple RAG, no reranker (§8) | a cross-encoder pass would cost more CPU than it can earn back on this corpus |
 
 Stated plainly because it changes how the numbers in §14 should be read: the bottleneck analysis describes a
@@ -89,16 +98,17 @@ flowchart TB
 
 **The agent runs in a FastAPI service; Streamlit is only a client.** The UI imports no graph code —
 it talks HTTP. That keeps the agent independently callable (curl, the eval harness, another
-front-end), makes the load test a real HTTP scenario instead of an in-process loop, and matches the
-brief's preference for a multi-component compose setup.
+front-end), exposes a simple endpoint for triggering the Langfuse dataset load experiment, and
+matches the brief's preference for a multi-component compose setup.
 
 Two-layer knowledge design, and the single most important design decision in the project:
 
 - **Prose policies** (`.docs/sources/<lang>/*.docx`) are the RAG corpus – they answer "what does the rule
   say", and provide citations.
 - **Machine-readable rule catalogue** (`rules.yaml`) drives the deterministic tools –
-  limits, rates, thresholds, deadlines. The LLM never invents a number; it selects a rule id and
-  the tool computes.
+  limits, rates, thresholds, deadlines. The LLM never invents or copies a policy number into a tool
+  call; the deterministic implementation selects the applicable rule from the validated claim and
+  catalogue, then computes.
 
 Both describe the same fictional policy set and are kept in sync by a consistency test (§13.4), so a
 citation always backs the number that was calculated. **In this PoC `rules.yaml` is hand-authored** —
@@ -114,37 +124,36 @@ app/
   dependencies.py             # providers for AgentService and shared runtime resources
   api/
     router.py                 # combines the route modules
-    schemas.py                # public and evaluation HTTP contracts
+    schemas.py                # public, evaluation and load-test HTTP contracts
     routes/
       chat.py                 # chat, streaming and thread reset endpoints
       health.py               # liveness and readiness endpoints
-      admin.py                # evaluation, ingest and index-stat endpoints
+      admin.py                # evaluation, load-test, ingest and index-stat endpoints
   agent/
     service.py                # invoke, stream and reset use cases exposed to the API
     graph.py                  # 8 nodes, routing and graph construction
     nodes.py                  # node implementations, including classify_intent
     state.py                  # AgentState and domain models
-    tools.py                  # typed tool registry and deterministic implementations
+    calculator.py             # deep deterministic reimbursement-calculation module
+    tools.py                  # LangChain tool adapters, registry and rule-checking logic
     prompts.py                # prompt names, embedded PoC fallbacks and resolver
   core/
     config.py                 # deployment-dependent settings
     logging.py                # stdout and rotating-file application logging
     observability.py          # correlation fields and Langfuse tracing setup
+  evaluation/
+    load.py                   # endpoint-triggered Langfuse dataset load experiment
   integrations/
-    llm.py                    # provider adapter and structured-output calls
-    redis.py                  # shared Redis connection and LangGraph checkpointer
+    llm.py                    # LangChain ChatOllama/test-model factory
+    redis.py                  # LangChain Redis vector-store config + LangGraph checkpointer
   rag/
-    graph.py                  # dedicated embed -> search -> context subgraph
-    ingest.py                 # DOCX loading, chunking and ingest CLI
-    store.py                  # Redis vector index operations
+    graph.py                  # LangGraph retrieve -> context subgraph
+    ingest.py                 # LangChain Document loading, splitting and ingest CLI
+    store.py                  # LangChain RedisVectorStore/retriever factory
   ui.py                       # Streamlit chat and HTTP client
 eval/
-  dataset.en.json             # 20 functional test cases per language; source of truth
-  dataset.hu.json
-  load_queries.en.json        # version-controlled query bank for the load scenario
-  load_queries.hu.json
+  dataset.json                # 20 functional test cases; source of truth
   run_eval.py                 # sync dataset + run Langfuse experiment + local reports
-  load_test.py                # 50-200 traced queries over HTTP + local reports
 tests/
   test_graph.py  test_rag.py  test_tools.py  test_api.py
 rules.yaml                    # small language-independent deterministic rule catalogue
@@ -177,30 +186,12 @@ both the application entry point and the agent workflow.
 The policy documents describe a fictional company, are used only for this prototype, and have no
 legal or tax validity. The source-pack README files and the UI disclaimer make that boundary clear.
 
-**Two parallel corpora, two indices, one active at a time.** The knowledge base exists in English
-(`.docs/sources/en/`) and Hungarian (`.docs/sources/hu/`); ingest builds a **separate Redis index per language**
-(`idx:chunks:en`, `idx:chunks:hu`), and `ACTIVE_LANG` in the config decides which one the assistant
-queries. Switching language is an env-var change plus a restart — no re-ingest, because both indices
-are already built and stored.
+**One corpus, one index.** The knowledge base is the English policy corpus under
+`.docs/sources/en/`; ingest builds a single Redis index (`idx:chunks`) from it. The corpus language
+does not constrain the chat model to English: multilingual model and embedding capabilities allow
+Hungarian questions to be handled on a best-effort basis against the same English source material.
 
-Why separate indices rather than one index with a `lang` filter: each language can then have its own
-embedding model and therefore its own vector dimension (§4.3), the manifests and rebuilds are
-independent, and a query can never accidentally mix languages in one context block. The cost is one
-extra `FT.CREATE` and roughly double the index memory — irrelevant at this corpus size.
-
-Translating everything to English and keeping a single corpus would have been simpler. It was rejected on
-realism grounds: **real internal company documents are not English-only.** A Hungarian company's expense
-policy is written in Hungarian, often with English terms mixed in, and its employees ask in Hungarian — so an
-English-only prototype would solve an easier retrieval problem than the real one. Carrying both corpora keeps
-the design honest about that, and makes the language question a measurement (§13.2) instead of an assumption.
-
-The two corpora are **mirrors, not independent documents**: same `doc_id`s, categories and rule ids,
-with translated prose. `rules.yaml`, the rule ids and all enum values stay
-English and language-independent, so the deterministic tools never see a translated value regardless of
-`ACTIVE_LANG`. A test asserts the mirror property (§13.4) — a document that exists in only one language
-is a bug, not a feature.
-
-The existing source pack contains eight **`.docx`** files per language:
+The source pack contains eight **`.docx`** files:
 
 | File | Content |
 | --- | --- |
@@ -213,11 +204,10 @@ The existing source pack contains eight **`.docx`** files per language:
 | `06_Receipt_and_Approval_Requirements.docx` | receipts, approvals and submission requirements |
 | `07_FAQ_and_Example_Cases.docx` | short questions and worked examples |
 
-The Hungarian files under `.docs/sources/hu/` use translated names with the same `00`–`07` prefixes.
-That prefix is the stable language-independent `doc_id`.
+The `00`–`07` prefix is the stable `doc_id`.
 
-The source folders remain unchanged. Small language-independent retrieval metadata lives beside the
-deterministic rules in root `rules.yaml`, keyed by `doc_id`:
+The source folder remains unchanged. Small retrieval metadata lives beside the deterministic rules in
+root `rules.yaml`, keyed by `doc_id`:
 
 ```yaml
 documents:
@@ -225,16 +215,14 @@ documents:
     categories: [general, meal, equipment]
     sections:
       business-meal-limit:
-        headings:
-          en: ["4. Business meals"]
-          hu: ["4. Üzleti étkezés"]
+        headings: ["4. Business meals"]
 ```
 
-The section key is a stable, language-independent anchor used by `doc_ref`
-(`01#business-meal-limit`). During normalisation, the language-specific heading path resolves to
-that anchor; ingest then attaches the ids of rules whose `doc_ref` points to it. Ingest fails on an
-unknown document prefix, empty category list, unresolved heading path or rule reference. This avoids
-deriving stable ids from translated heading text.
+The section key is a stable anchor used by `doc_ref` (`01#business-meal-limit`). During
+normalisation, the heading path resolves to that anchor; ingest then attaches the ids of rules whose
+`doc_ref` points to it. Ingest fails on an unknown document prefix, empty category list, unresolved
+heading path or rule reference. This avoids deriving stable ids from heading text that might be
+edited later.
 
 ### 4.2 Loading and chunking
 
@@ -245,7 +233,11 @@ paragraphs — after that a `MarkdownHeaderTextSplitter` has nothing to split on
 fixed-size chunks, which destroys the "one chunk = one rule section" property the citations and the
 `rule_ids` metadata depend on.
 
-So `app/rag/ingest.py` converts explicitly with `python-docx`:
+So `app/rag/ingest.py` uses a small `python-docx` normaliser behind LangChain's `BaseLoader`
+interface.
+It emits LangChain `Document` objects whose `page_content` is Markdown and whose `metadata` contains
+the source identity. This adapter exists only because the generic Word loaders discard the heading
+information required by this corpus; all subsequent document processing uses LangChain:
 
 | Word element | Markdown output |
 | --- | --- |
@@ -262,9 +254,9 @@ tables, which contain policy limits and examples used by the tools.
 
 Then the split, on Markdown, whatever the source format was:
 
-- `MarkdownHeaderTextSplitter` on `#`/`##`/`###`, so a chunk boundary is a rule boundary and the
+- LangChain `MarkdownHeaderTextSplitter` on `#`/`##`/`###`, so a chunk boundary is a rule boundary and the
   heading path becomes the `section` metadata.
-- `RecursiveCharacterTextSplitter` (`chunk_size=800`, `chunk_overlap=120` characters) as a size guard
+- LangChain `RecursiveCharacterTextSplitter` (`chunk_size=800`, `chunk_overlap=120` characters) as a size guard
   for over-long sections only.
 - **Tables are never split**: a table block is kept whole even if it exceeds `chunk_size`; half a rate
   table is worse than a long chunk.
@@ -288,13 +280,12 @@ Chunk metadata (also the citation payload):
   "rule_ids": ["R-COMM-02"],
   "categories": ["commuting"],
   "chunk_index": 7,
-  "source_path": ".docs/sources/en/03_Commuting_Support_Policy.docx",
-  "lang": "en"
+  "source_path": ".docs/sources/en/03_Commuting_Support_Policy.docx"
 }
 ```
 
-`lang` is derived from the folder name, the title from the document, and `categories`, the stable
-section anchor and `rule_ids` from the validated `rules.yaml` mapping above.
+The title is derived from the document, and `categories`, the stable section anchor and `rule_ids`
+come from the validated `rules.yaml` mapping above.
 
 **Category tag filtering is the retrieval-precision mechanism of this design** (see §8). The active
 category and `general` are a Redis TAG pre-filter inside the KNN query:
@@ -309,35 +300,34 @@ least one indexed chunk.
 
 ### 4.3 Indexing
 
-- Embeddings: **one multilingual model serves both indices** —
-  `intfloat/multilingual-e5-small` (384 dims, ~470 MB, 100+ languages including Hungarian; `query:` /
-  `passage:` prefixes handled in `store.py`). The model id and revision are pinned constants — see
-  below for why multilingual is the right default here.
+- Embeddings: LangChain `HuggingFaceEmbeddings` from `langchain-huggingface`, configured with
+  `intfloat/multilingual-e5-small` (384 dims, ~470 MB, 100+ languages; `query:` / `passage:`
+  prefixes configured once in the embedding factory). The model id and revision are pinned
+  constants. Its multilingual capability supports cross-lingual Hungarian queries over the English
+  corpus (see below).
 - Store: **Redis Stack** (`redis/redis-stack-server`), the single datastore of the project — the vector
-  index and LangGraph checkpoints live in it, addressed by key namespace. Accessed via
-  `redis-py` (`redis.asyncio`) through one connection pool in `app/integrations/redis.py`.
-- Retrieval is dense-only: RediSearch KNN with a tag pre-filter. No lexical/BM25 index and no
+  index and LangGraph checkpoints live in it, addressed by key namespace. Redis was chosen not only
+  for its vector-search capability, but also because it is a mature, proven general-purpose database
+  for application state. Documents are written and queried through LangChain's Redis vector-store
+  integration; conversation state uses LangGraph's `RedisSaver`. Application code does not issue raw
+  RediSearch commands or implement its own vector store. The integrations may share an underlying
+  Redis connection pool where their supported constructors allow it.
+- Retrieval is dense-only: the LangChain Redis vector store performs KNN with a metadata tag
+  pre-filter. No lexical/BM25 index and no
   fusion — on a corpus of this size and with a category filter already narrowing the candidate set,
   a second index would add moving parts without a measurable precision gain. `text` and `rule_ids`
-  are indexed as TEXT/TAG fields anyway, so an exact-term lookup (e.g. "which section is R-MEAL-01")
-  is available as a plain RediSearch query without building a parallel retrieval path.
+  remain indexed as TEXT/TAG metadata, but the application exposes no second, raw-Redis retrieval
+  path.
 
-#### Why a multilingual embedding model
+#### Why use a multilingual embedding model for an English knowledge base
 
-- **Both languages in one vector space.** The same model embeds both corpora, so a chunk means the same
-  thing on the `en` and the `hu` side. That is what makes the per-language eval numbers (§13.2) comparable:
-  a hit-rate difference is attributable to the corpus and the questions, not to two different embedders.
-- **Trained for exactly this asymmetry.** The e5 family is retrieval-trained with a `query:` / `passage:`
-  distinction — a short question against a long policy section — rather than for sentence similarity. It is
-  the shape of every request this system makes.
-- **Code-switching is normal in this domain.** Hungarian corporate prose is full of English terms
-  (*home office*, *per diem*, *cafeteria*, *business review*), and questions mix them freely. A multilingual
-  model handles a mixed sentence natively; a monolingual one treats half of it as noise.
-- **Small enough to be invisible in the latency budget.** 384 dimensions, ~470 MB: one download baked into
-  the image, one warm-up in the API lifespan, one dimension to reason about, and a query embedding that
-  costs a fraction of a single LLM call (§14). The RAM that matters goes to the 7B model.
-- **Language becomes a data property, not a code property.** Adding a third corpus means a folder and an
-  ingest run — no second model, no second dimension, no branching in `store.py`.
+`intfloat/multilingual-e5-small` was selected because it combines retrieval-oriented
+(`query:`/`passage:`) training, low CPU and memory cost, and useful cross-lingual retrieval. The
+indexed policies remain English, but a user may formulate a question in Hungarian and still retrieve
+the relevant English passages. This is best-effort capability rather than a separately localised and
+evaluated Hungarian knowledge base. At 384 dimensions and ~470 MB, the model is small enough to be
+effectively invisible next to the local LLM: one image-baked download, one lifespan warm-up and a
+query embedding costing a fraction of a generation call.
 
 If retrieval hit rate disappoints at M7, the upgrade path is a bigger multilingual model rather than a
 different architecture:
@@ -349,18 +339,18 @@ different architecture:
 | `Qwen3-Embedding-0.6B` | 1024 (Matryoshka-truncatable) | ~1.2 GB (fp16) | best multilingual quality of the three; instruction-aware queries, and the dimension can be truncated to 512/256 to keep the index small. Costs ~5× the forward pass of e5-small on CPU and competes with the LLM for RAM — worth it if the eval shows retrieval, not generation, is the weak link |
 | `BAAI/bge-m3` | 1024 | ~2.2 GB | strong multilingual retrieval, but the heaviest option and no advantage this corpus can show |
 
-Switching requires changing the pinned model constant and re-ingesting: each index stores its model,
-revision and `DIM` in `manifest:corpus:{lang}`, so a changed model rebuilds that index instead of
-silently mixing vector generations.
+Switching requires changing the pinned model constant and re-ingesting: the index stores its model,
+revision and `DIM` in `manifest:corpus`, so a changed model rebuilds it instead of silently mixing
+vector generations.
 
-Index and keys — one index per language, each scoped to its own key prefix:
+Index and keys:
 
 ```
-key:    chunk:{lang}:{doc_id}:{chunk_index}    # HASH
+key:    chunk:{doc_id}:{chunk_index}    # HASH
 fields: text, embedding (FLOAT32 blob), doc_id, doc_title, section,
-        section_id, categories (tag, "|"-separated), rule_ids (tag), chunk_index, source_path, lang
+        section_id, categories (tag, "|"-separated), rule_ids (tag), chunk_index, source_path
 
-FT.CREATE idx:chunks:en ON HASH PREFIX 1 chunk:en: SCHEMA
+FT.CREATE idx:chunks ON HASH PREFIX 1 chunk: SCHEMA
   text        TEXT
   doc_id      TAG
   section_id  TAG
@@ -368,29 +358,20 @@ FT.CREATE idx:chunks:en ON HASH PREFIX 1 chunk:en: SCHEMA
   rule_ids    TAG SEPARATOR "|"
   section     TEXT NOSTEM
   embedding   VECTOR HNSW 6 TYPE FLOAT32 DIM <dim of EMBEDDING_MODEL> DISTANCE_METRIC COSINE
-
-FT.CREATE idx:chunks:hu ON HASH PREFIX 1 chunk:hu: SCHEMA   # identical schema and DIM
 ```
-
-Because the index is language-scoped, the KNN query needs no `lang` filter — `store.py` resolves
-`idx:chunks:{ACTIVE_LANG}` and everything downstream is language-agnostic. The `lang` field stays on
-the hash for provenance and debugging.
 
 | Key namespace | Purpose | TTL |
 | --- | --- | --- |
-| `chunk:{lang}:*` + `idx:chunks:{lang}` | corpus chunks and the vector index, per language | none |
-| `manifest:corpus:{lang}` | per-language hash of corpus + chunking params + embedding model | none |
+| `chunk:*` + `idx:chunks` | corpus chunks and the vector index | none |
+| `manifest:corpus` | hash of corpus + chunking params + embedding model | none |
 | `checkpoint:*` | LangGraph conversation state (§5) | 24 h |
 
-- Ingest (`python -m app.rag.ingest [--lang en]`) reads `en/` and `hu/` under `.docs/sources/`
-  and builds each language independently: convert → chunk → embed → upsert in a pipeline
-  (batch 128). Idempotent per language: `manifest:corpus:{lang}` holds the hash of that corpus + chunking
-  params + embedding model; on mismatch it drops only that index (`FT.DROPINDEX idx:chunks:{lang} DD`)
-  and rebuilds it. The app never embeds the corpus at request time.
-- `DIM` is derived from that language's embedding model at ingest time and stored in its manifest, so
-  switching models cannot leave a dimension-mismatched index behind.
-- A language may be missing (nothing ingested yet) without breaking the other; the API's `/ready`
-  fails only if `ACTIVE_LANG`'s index is absent or dimension-mismatched.
+- Ingest (`python -m app.rag.ingest`) reads `.docs/sources/en/` and builds the index: convert →
+  chunk → embed → upsert in a pipeline (batch 128). Idempotent: `manifest:corpus` holds the hash of
+  the corpus + chunking params + embedding model; on mismatch it drops the index
+  (`FT.DROPINDEX idx:chunks DD`) and rebuilds it. The app never embeds the corpus at request time.
+- `DIM` is derived from the embedding model at ingest time and stored in the manifest, so switching
+  models cannot leave a dimension-mismatched index behind.
 - Durability: AOF (`appendonly yes`) on a named volume. Losing Redis costs the index (rebuildable in
   one ingest run, ~seconds for this corpus) and open conversations — acceptable for a prototype, and
   the app rebuilds on boot.
@@ -443,8 +424,9 @@ categories:
         eligible_after_months: 6
 ```
 
-`app/agent/tools.py` loads it once, validates it with pydantic, and exposes typed accessors
-(`rules.meal.limit_per_person`). A missing or malformed rule raises at startup, not mid-request.
+The FastAPI lifespan loads it once into a pydantic `RuleCatalogue` and passes that dependency to the
+calculator and rule-checker modules through `app/dependencies.py`. Typed accessors expose values such
+as `rules.meal.limit_per_person`. A missing or malformed rule raises at startup, not mid-request.
 
 ### 4.5 `rules.yaml` is hand-authored — and would not be in a real system
 
@@ -454,11 +436,14 @@ the one place where the prototype is better prepared than a real system would be
 Why: with the numbers fixed, a wrong calculation has one possible cause — the tool. If the limits came from an
 LLM extraction step, the eval's calculation metric could not tell bad extraction from a bad tool.
 
-What a non-PoC version would do instead: **extract the catalogue from the documents.** An offline LLM pass
-per section proposes rules into the same pydantic schema, each with the `doc_ref` it came from. A rule is only
-accepted if its number appears verbatim in the cited section — the consistency test of §13.4 used as a gate —
-and the resulting diff is reviewed by a human before the catalogue is versioned. At runtime nothing changes:
-the tools still read a validated catalogue, never raw LLM output.
+What a non-PoC version would do instead: **generate the catalogue from uploaded policy documents.**
+Unlike the deliberately structured source pack used by this PoC, real uploaded documents would likely have
+inconsistent headings, layouts and file formats, so the production ingestion pipeline would first detect and
+normalise their structure. An offline LLM pass over the resulting sections proposes rules into the same
+pydantic schema, each with the `doc_ref` it came from. A rule is only accepted if its number appears verbatim
+in the cited section — the consistency test of §13.4 used as a gate — and the resulting diff is reviewed by a
+human before the catalogue is versioned. At runtime nothing changes: the tools still read a validated
+catalogue, never raw LLM output.
 
 It is out of scope here because an extraction pipeline plus a review workflow is a project of its own, and
 none of it improves the agentic behaviour this assignment is graded on.
@@ -474,7 +459,7 @@ nodes to disagree about the same fact.
 
 ```python
 class AgentState(TypedDict, total=False):
-    messages: Annotated[list[AnyMessage], add_messages]   # question, tool calls, ToolMessages, answers
+    messages: Annotated[list[BaseMessage], add_messages]  # LangChain messages: question, tool calls, results, answers
     intent: Intent                                        # set once per turn, gates node 3
     category: Category | None                             # current classifier output
     claim: ExpenseClaim                                   # current or clarification-pending claim
@@ -545,6 +530,10 @@ Streamlit workers share one conversation store.
 
 ## 6. Main graph
 
+The workflow is built with LangGraph `StateGraph`, compiled with the LangGraph checkpointer and
+invoked/streamed through the compiled graph API. Nodes exchange LangChain message objects; there is
+no parallel home-grown workflow runner, message schema or conversation-memory implementation.
+
 ### 6.1 Nodes
 
 | # | Node | LLM | Responsibility | Writes |
@@ -554,7 +543,7 @@ Streamlit workers share one conversation store.
 | 3 | `check_request` | no | route unsupported and incomplete requests; otherwise enter the agent loop | – |
 | 4 | `ask_clarification` | no | render a deterministic focused question for the top missing slot | `messages`, `decision=needs_info` |
 | 5 | `agent_step` | yes (tool calling) | **the autonomous decision**: select a tool and its arguments or stop | `messages` (AI message with tool calls) |
-| 6 | `execute_tools` | no | execute the selected registered tool; `search_policies` invokes the RAG subgraph | `messages` (`ToolMessage` with typed artifact) |
+| 6 | `execute_tools` | no | LangGraph `ToolNode` executes the selected LangChain tool; `search_policies` invokes the RAG subgraph | `messages` (`ToolMessage` with typed artifact) |
 | 7 | `generate_response` | yes | derive the typed decision from tool artifacts, then generate the grounded employee-facing answer | `decision`, `messages` |
 | 8 | `out_of_scope` | no | canned refusal + scope explanation | `messages`, `decision=out_of_scope` |
 
@@ -562,7 +551,8 @@ Eight nodes satisfy the required five without treating input trimming, observabi
 serialization as graph work. The RAG subgraph remains separate and is not counted. The Langfuse
 callback observes every node without adding diagnostics to state.
 
-`execute_tools` is one generic tool node: it dispatches the tool selected by `agent_step`, appends a
+`execute_tools` is a LangGraph `ToolNode`, configured with the registered LangChain tools and the
+project's validation/error handler. It dispatches the tool selected by `agent_step`, appends a
 `ToolMessage` and hands control back to node 5. Each `ToolMessage` carries a compact summary as its `content` (what the model reads)
 and the typed pydantic result as its `artifact` (what the eval reads) — structured data without a
 second copy in state, and without parsing prose. See §5.
@@ -586,7 +576,8 @@ canonical demo of "does not guess" behaviour.
 
 ### 6.3 Tool selection is the agent's decision (node 5)
 
-There is no static intent→tool table. `agent_step` is an LLM node with **bound tools** and it decides,
+There is no static intent→tool table. `agent_step` calls a LangChain chat model with tools attached
+through `bind_tools()` and it decides,
 each iteration, whether to call a tool and which one — a ReAct loop rather than a pre-computed plan:
 
 ```
@@ -595,23 +586,23 @@ agent_step  ──tool call──▶  execute_tools  ──ToolMessage──▶ 
      └────────────────── up to MAX_AGENT_STEPS (4) ───────────┘
 ```
 
-The three tools it may call, as the LLM sees them (schemas in `app/agent/tools.py`, descriptions are part
+The three LangChain tools it may call, as the LLM sees them (schemas in `app/agent/tools.py`, descriptions are part
 of the contract because they are what the model actually reasons over):
 
 | Tool | Arguments the agent chooses | Description given to the model |
 | --- | --- | --- |
 | `search_policies` | `query`, optional `category` | "Search the company policy documents. Use it whenever an answer depends on company policy. Pass the expense category when known." |
-| `calculate` | the `CalcInput` fields (§7.1) | "Compute reimbursable amounts. Never do arithmetic yourself — call this. Requires the limits from the policy, so search first if you do not have them." |
+| `calculate` | none — the validated `ExpenseClaim` is read from graph state through the injected `ToolRuntime` (§7.1) | "Compute the reimbursable amount for the current claim. Never do arithmetic yourself. Search the policies first so the final answer has supporting evidence." |
 | `check_rules` | the claim fields + retrieved `rule_ids` | "Check eligibility, caps, approval thresholds, receipt requirements and the submission deadline against the rule catalogue." |
 
 Two consequences worth naming, because they are the point of the change:
 
 - **Category is the only retrieval filter.** The agent may pass it explicitly; otherwise the tool
   uses the category produced by `classify_intent`. General documents are always included (§8).
-- **The tool order is emergent.** The model typically searches, then calculates, then checks rules,
-  because the tool descriptions say the calculator needs policy limits — but a deadline question can go
-  straight to `check_rules`, and a follow-up in the same thread can skip the search when the context is
-  already in the transcript.
+- **The tool order is emergent.** The model typically searches, then calculates, then checks rules:
+  retrieval supplies the evidence and citations, while calculation reads authoritative values from
+  the validated catalogue. A deadline question can go straight to `check_rules`, and a follow-up in
+  the same thread can skip the search when the relevant evidence is already in the transcript.
 
 Guardrails, all deterministic and outside the LLM:
 
@@ -620,7 +611,7 @@ Guardrails, all deterministic and outside the LLM:
 | Step budget | tool-calling AI messages ≥ `MAX_AGENT_STEPS` (4) → the loop exits to `generate_response` with whatever it has, and the answer states when evidence is incomplete |
 | Invalid arguments | pydantic validation error is returned to the agent as the `ToolMessage`, so it can correct itself; the same tool may fail this way at most twice, then it is disabled for the turn |
 | Repeated identical call | same tool with the same arguments → reuse the matching `ToolMessage` artifact in `current_turn_messages()` and record a warning, instead of executing it again |
-| `calculate` without policy limits | the tool emits a `warning` in `CalculationResult.warnings`, which `generate_response` must surface |
+| `calculate` with an incomplete claim | normally prevented by `check_request`; the calculator still validates its category-specific requirements and returns a typed tool error rather than guessing |
 | `unsupported` intent | never reaches the loop — node 3 routes it to `out_of_scope` |
 
 The expected tool sequences (`["search_policies","calculate","check_rules"]` for an expense check,
@@ -675,56 +666,94 @@ nobody added to it falls through to the agent, which is then back to prompt-only
 
 ## 7. Tools
 
-All tools are plain, dependency-free Python functions with pydantic I/O, registered in
-`app/agent/tools.py`, unit-tested in isolation, and callable by the eval harness without an LLM.
-They never call the LLM and never read the network.
+Every agent-facing tool is a LangChain `StructuredTool` (declared with `@tool` where convenient) with
+a pydantic argument schema, a precise description and `response_format="content_and_artifact"`.
+Values already established by earlier graph nodes are read through LangChain's injected
+`ToolRuntime`, which is hidden from the tool schema shown to the model and avoids a second
+extraction-by-tool-call.
+LangGraph's `ToolNode` is the only runtime dispatcher. The arithmetic and rule-checking implementations
+under those wrappers remain dependency-free Python functions, unit-tested directly and callable by the
+eval harness without an LLM. They never call the LLM and never read the network; only the
+`search_policies` tool delegates to the compiled LangGraph RAG subgraph.
 
 ### 7.1 `reimbursement_calculator`
 
-```python
-class CalcInput(BaseModel):
-    category: Category
-    expense_type: Literal["accommodation","taxi","parking","other_travel"] | None = None
-    amount_huf: int | None = None
-    currency: str = "HUF"
-    original_amount: float | None = None
-    headcount: int | None = None
-    non_reimbursable_amount: int = 0
-    distance_km: float | None = None
-    distance_is_one_way: bool | None = None
-    commute_days_per_month: int | None = None
-    transport_mode: Literal["own_car","ev","public_pass","taxi"] | None = None
-    pass_price_huf: int | None = None
-    annual_budget_used_huf: int = 0
-    rule_ids: list[str] = []
+The calculator is deliberately a deep module: its external interface accepts the already validated
+`ExpenseClaim`, while category dispatch, required-field validation, rule selection, currency
+conversion and formulas remain inside the implementation. There is no second `CalcInput` containing
+every category's mostly optional fields.
 
+```python
 class CalculationResult(BaseModel):
-    eligible_amount_huf: int
-    cap_huf: int | None
-    excess_huf: int
-    per_person_huf: int | None
-    breakdown: list[BreakdownLine]     # label, formula string, amount
+    reimbursable_amount_huf: int
+    applied_policy_cap_huf: int | None
+    amount_over_policy_cap_huf: int
+    applied_per_person_limit_huf: int | None
+    calculation_breakdown: list[BreakdownLine]  # label, formula string, amount
     applied_rule_ids: list[str]
     warnings: list[str]
+
+class ReimbursementCalculator:
+    def __init__(self, rules: RuleCatalogue): ...
+    def calculate(self, claim: ExpenseClaim) -> CalculationResult: ...
 ```
+
+`RuleCatalogue` is loaded and validated once at startup and passed to the module; the module does not
+read files or global configuration during a calculation. Its internal category-specific functions
+(`_calculate_meal`, `_calculate_mileage`, `_calculate_commuting`, …) are implementation details, not
+additional interfaces the graph or model must understand.
+
+The LangChain adapter exposes an argument-free tool to the model. `ToolRuntime` is injected by
+`ToolNode` and hidden from the generated tool schema, so the emitted tool call is simply
+`calculate({})`:
+
+```python
+def build_calculate_tool(calculator: ReimbursementCalculator):
+    @tool(response_format="content_and_artifact")
+    def calculate(
+        runtime: ToolRuntime,
+    ) -> tuple[str, CalculationResult]:
+        claim = ExpenseClaim.model_validate(runtime.state["claim"])
+        result = calculator.calculate(claim)
+        return result.compact_summary(), result
+
+    return calculate
+```
+
+`check_request` normally guarantees that the fields required for the classified category are
+present. The calculator repeats the category-specific validation at its own interface so direct
+callers and tests get the same safety property; a missing or inconsistent value raises a typed
+`CalculationInputError`, which `ToolNode` returns as an error `ToolMessage`. It never substitutes a
+guess. Applicable rules are selected deterministically from `claim.category` / `claim.expense_type`;
+the resulting ids are reported in `applied_rule_ids`.
+
+The result names describe policy meaning rather than implementation shorthand:
+
+- `reimbursable_amount_huf` is the amount the calculation says can be reimbursed;
+- `applied_policy_cap_huf` is the total cap used in this calculation, or `None` when no cap applies;
+- `amount_over_policy_cap_huf` is only the otherwise eligible amount above that cap; separately
+  excluded items such as alcohol appear in `calculation_breakdown`;
+- `applied_per_person_limit_huf` is the per-person policy limit used to derive a total cap, or `None`
+  for calculations where no per-person rule applies.
 
 Semantics per category:
 
 - **meal**: `cap = limit_per_person × headcount`; `base = amount − non_reimbursable`;
-  `eligible = min(base, cap)`; `excess = max(0, base − cap)`.
+  `reimbursable = min(base, cap)`; `amount_over_cap = max(0, base − cap)`.
 - **travel**: select the rule by `expense_type`; where that rule defines a cap,
-  `eligible = min(amount, cap)`, otherwise calculation returns the submitted amount and leaves
+  `reimbursable = min(amount, cap)`, otherwise calculation returns the submitted amount and leaves
   eligibility and required approval to `check_rules`.
 - **mileage**: `km = distance_km × (2 if one_way else 1)`; `amount = km × rate(transport_mode)`;
   parking/toll added as separate breakdown lines when flagged.
 - **commuting (own car)**: `monthly_km = one_way_km × 2 × days_per_month`;
   `amount = min(monthly_km × rate, monthly_cap)`; hybrid-work pro-rata applies if `days_per_month < 20`.
 - **commuting (pass)**: `amount = round(pass_price × ratio)` capped at `monthly_cap`.
-- **equipment**: `eligible = amount`; approval flag is a rule-checker concern, not a calculator one.
-- **benefits**: `remaining = annual_budget − used`; `eligible = min(amount, remaining)`.
+- **equipment**: `reimbursable = amount`; approval flag is a rule-checker concern, not a calculator one.
+- **benefits**: `remaining = annual_budget − used`; `reimbursable = min(amount, remaining)`.
 
 Conventions: integer HUF, half-up rounding, FX from the fixed table with the rate recorded in the
-breakdown. Every line carries its formula string so the UI and the answer can show the arithmetic.
+calculation breakdown. Every line carries its formula string so the UI and the answer can show the
+arithmetic.
 
 ### 7.2 `rule_checker`
 
@@ -758,16 +787,16 @@ for a non-retrieval tool is met by construction.
 
 ## 8. RAG subgraph
 
-Deliberately plain: **similarity search + one category tag filter**, nothing else. No query rewriting, no
-LLM relevance grading, no reranker, no multi-strategy escalation. The complexity of this project sits
-in the agentic workflow (§6) and the deterministic tools (§7); the retrieval step is a simple,
-readable module — which is also what makes it reusable in another assistant.
+Deliberately plain and framework-native: a LangGraph subgraph invokes a LangChain retriever backed by
+the Redis vector store, then builds the grounded context. It uses **similarity search + one category
+tag filter**, nothing else. No query rewriting, no LLM relevance grading, no reranker, no
+multi-strategy escalation. The complexity of this project sits in the agentic workflow (§6) and the
+deterministic tools (§7); the retrieval step remains reusable as a LangChain `Runnable`.
 
 ```mermaid
 flowchart LR
-    A["embed_query"] --> B["similarity_search<br/>KNN + category filter"]
-    B --> C["build_context"]
-    C --> D([END])
+    A["retrieve_documents<br/>LangChain Redis retriever"] --> B["build_context"]
+    B --> C([END])
 ```
 
 Own state, kept to the same rule as §5 — two inputs and one output:
@@ -779,16 +808,15 @@ class RagState(TypedDict, total=False):
     result: RagResult               # out: hits, then context + citations added by build_context
 ```
 
-Three keys, one output. `similarity_search` writes `RagResult(hits=…, category=…)`; `build_context` returns
+Three keys, one output. `retrieve_documents` writes `RagResult(hits=…, category=…)`; `build_context` returns
 the same object with `context` and `citations` filled in — the chunks are therefore stored exactly once,
-and `confidence` is a property over `result.hits[0].similarity` rather than a field. The query embedding is
-not in state at all (a local value consumed by the next call). `RagResult` becomes the typed artifact
+and `confidence` is a property over `result.hits[0].similarity` rather than a field. Embedding and
+KNN execution are encapsulated by the LangChain retriever and never enter graph state. `RagResult` becomes the typed artifact
 of the `search_policies` `ToolMessage`, so the subgraph's output needs no unpacking.
 
 | Node | How |
 | --- | --- |
-| `embed_query` | the active language's embedding model (`multilingual-e5-small`) with the `query:` prefix |
-| `similarity_search` | one RediSearch KNN call against `idx:chunks:{ACTIVE_LANG}`, `top_k=4`: `(@categories:{commuting\|general})=>[KNN 4 @embedding $vec AS score]`, `similarity = 1 − cosine_distance` |
+| `retrieve_documents` | invoke the LangChain Redis vector-store retriever with `k=4` and, when present, a category metadata filter containing the active category plus `general`; the integration performs embedding and RediSearch KNN |
 | `build_context` | numbered blocks `[S1] doc_title › section` up to a ~1,800-token budget, plus `Citation` objects — returned as one `RagResult` |
 
 Category is the only filter axis. When present, the query includes both the selected category and
@@ -796,11 +824,12 @@ Category is the only filter axis. When present, the query includes both the sele
 search is unfiltered. If a filtered search returns no hits, it retries once without the category.
 There is no further filter taxonomy or multi-stage filter logic.
 
-`build_rag_graph(store, embedder)` returns the compiled subgraph; importing the module performs no
-network or Redis work. The FastAPI lifespan creates it once and injects it into `search_policies`
+`build_rag_graph(retriever_factory)` constructs and compiles a LangGraph `StateGraph`; importing the
+module performs no network or Redis work. The FastAPI lifespan creates it once and injects it into `search_policies`
 while assembling `AgentService`. Tests and the eval runner call the same factory with their own
-dependencies. The subgraph remains reusable because its runtime contract is still only a question
-and optional category.
+LangChain retrievers. The subgraph remains reusable because its runtime contract is still only a
+question and optional category, and its retrieval dependency follows LangChain's `BaseRetriever`
+interface.
 
 Explicitly out of scope here, and why: query rewriting, LLM relevance grading and cross-encoder
 reranking each add latency and a failure mode for a corpus of eight short documents where the
@@ -812,30 +841,39 @@ insufficient, they are the natural next steps, in that order.
 ## 9. LLM layer
 
 - **Serving**: Ollama in its own container; no paid API.
+- **LangChain integration**: application code talks only to LangChain `BaseChatModel` /
+  `Runnable` interfaces. Production uses `ChatOllama` from `langchain-ollama`; nodes do not call the
+  Ollama HTTP API or maintain a custom provider protocol.
 - **Primary model**: `qwen2.5:7b-instruct-q4_K_M` — strong instruction following and reliable JSON at
   7B, ~5 GB in Q4, runs on CPU (slow) or a modest GPU. 7B rather than something larger is the direct
-  consequence of §1.2: it has to share one developer machine with everything else. Primary criterion is structured-output
-  reliability; usable Hungarian is the secondary one, since `ACTIVE_LANG=hu` must also produce sane
-  answers.
+  consequence of §1.2: it has to share one developer machine with everything else. The primary
+  selection criteria are structured-output and tool-calling reliability in English, plus usable
+  Hungarian instruction-following and answer generation. The knowledge base remains English, but
+  the selected model should still be able to handle a Hungarian conversation at a practical,
+  best-effort level.
 - **Alternatives and trade-offs** (documented in the README):
 
 | Model | Pros | Cons |
 | --- | --- | --- |
-| `qwen2.5:7b-instruct` (chosen) | best structured-output reliability at this size | 4–5 GB RAM, slow on pure CPU |
+| `qwen2.5:7b-instruct` (chosen) | best structured-output reliability at this size and usable Hungarian capability | 4–5 GB RAM, slow on pure CPU |
 | `llama3.1:8b-instruct` | strong reasoning on English | weaker Hungarian, larger, slower |
 | `qwen2.5:3b-instruct` | 2–3× faster, fits small machines | more extraction errors |
-| `DummyLLM` (built in) | deterministic, zero-dependency CI and UI smoke tests; emits scripted tool calls so the ReAct loop is testable without a model | canned answers only |
+| LangChain test chat model | deterministic CI and UI smoke tests; emits scripted `AIMessage` tool calls so the LangGraph ReAct loop is testable without Ollama | canned answers only |
 
-`app/integrations/llm.py` selects by `LLM_BACKEND=ollama|dummy` so tests, CI and the load test can run
-without a model. Temperature 0 for classification, extraction and tool selection; 0.2 for the final
-answer.
+`app/integrations/llm.py` returns a LangChain `BaseChatModel`: `ChatOllama` for
+`LLM_BACKEND=ollama`, or a deterministic LangChain-compatible test model for
+`LLM_BACKEND=dummy`, so tests and CI can run without Ollama. Temperature 0 for classification,
+extraction and tool selection; 0.2 for the final answer.
 
-The structured-call helper in `app/integrations/llm.py` wraps every structured call: JSON-schema-constrained output (`format=json`),
-pydantic validation, one repair retry with the validation error appended, then a typed fallback
-value while marking the current Langfuse span as degraded. No `json.loads` scattered across nodes.
+Classification and extraction use LangChain `with_structured_output(PydanticModel)`; agent tool
+selection uses `bind_tools(tools)`. A small LangChain `Runnable` retry composition wraps structured
+calls: pydantic validation, one repair retry with the validation error appended, then a typed
+fallback value while marking the current Langfuse span as degraded. There are no direct Ollama
+requests and no `json.loads` scattered across nodes.
 
 The four prompt names are `classify-intent`, `extract-information`, `agent-step` and
-`generate-response`. Every one has a version-controlled template embedded in
+`generate-response`. Each is rendered as a LangChain `ChatPromptTemplate` and composed with its
+model/parser as a `Runnable`. Every one has a version-controlled template embedded in
 `app/agent/prompts.py`. These
 templates are the guaranteed fallback and make offline development, tests and a fresh clone
 self-contained.
@@ -865,13 +903,13 @@ be versioned and promoted in Langfuse, fetched by an explicit environment label 
 evaluated against the Langfuse dataset before promotion. Application tests would use small prompt
 fixtures or a mocked prompt resolver rather than duplicate production prompt text.
 
-Language handling follows `ACTIVE_LANG`, and there is still **no translation step** in the pipeline:
-the corpus, the question and the answer are all in the active language, because the corpora are mirrors
-(§4.1). Prompt templates themselves stay English (one set, easier to diff) with the target language
-injected as a variable; `generate_response` answers in `ACTIVE_LANG`. Two things are always
-language-independent: rule ids / document ids, quoted verbatim so citations stay checkable, and the
-extraction output, which must emit the English enum values from `rules.yaml` so the tools receive
-canonical field values whichever language the user typed in.
+The knowledge base and canonical prompt templates are English, with no separate translation step or
+language-specific index. The multilingual chat model and embedder may accept a Hungarian question
+and produce a Hungarian answer grounded in the same English passages. This is a best-effort model
+capability; the official functional evaluation remains English. Rule ids and document ids are quoted
+verbatim so citations stay checkable, and extraction emits the canonical enum values from
+`rules.yaml` regardless of the conversation language, so the tools always receive consistent field
+values.
 
 ---
 
@@ -881,7 +919,7 @@ canonical field values whichever language the user typed in.
 
 FastAPI owns the agent. `app/main.py` creates the application, registers `app/api/router.py` and
 defines the `lifespan` that opens the Redis connection pool, verifies
-`idx:chunks:{ACTIVE_LANG}` against `manifest:corpus:{ACTIVE_LANG}`, warms the embedding model,
+`idx:chunks` against `manifest:corpus`, warms the embedding model,
 builds the RAG subgraph and then compiles the main graph once — so the first user request is not the
 one paying for all of it. The HTTP
 schemas live in `app/api/schemas.py`; route modules only handle transport and call
@@ -892,9 +930,10 @@ schemas live in `app/api/schemas.py`; route modules only handle transport and ca
 | `POST` | `/chat` | one turn: `{thread_id, message}` → minimal user-facing `TurnResponse` |
 | `POST` | `/chat/stream` | same, streamed as SSE: public `step`, `source` and `token` events, then one `result` event with the complete `TurnResponse` |
 | `POST` | `/admin/eval` | run one evaluation turn and return the internal structured outputs needed by the eval harness; not used by the UI |
+| `POST` | `/admin/load-test` | synchronously run a named Langfuse dataset as a bounded-concurrency load experiment and return aggregate timings plus Langfuse run links |
 | `GET` | `/health` | liveness — process is up |
 | `GET` | `/ready` | readiness — Redis reachable, index present with matching `DIM`, LLM responding |
-| `POST` | `/admin/ingest` | trigger ingest for one or all languages (no-op when `manifest:corpus:{lang}` matches); used by the entrypoint and by tests |
+| `POST` | `/admin/ingest` | trigger ingest (no-op when `manifest:corpus` matches); used by the entrypoint and by tests |
 | `GET` | `/admin/stats` | chunk count per category and index information |
 | `DELETE` | `/threads/{thread_id}` | drop a conversation's checkpoints ("reset chat") |
 
@@ -958,14 +997,12 @@ by a muted metadata line with the locally formatted `generated_at` value and `re
 
 While the answer is generated, the UI appends incoming `step` and `source` events to a live status
 area. On completion it moves them below the answer into one collapsed expander labelled
-`Used sources / completed steps` (`Felhasznált források / végrehajtott lépések` when
-`ACTIVE_LANG=hu`). Sources show title and section; steps show only the stable public labels. This
-demonstrates the agent workflow and RAG result required by the assignment without exposing raw
-state, prompts, tool arguments or detailed diagnostics; those remain in Langfuse.
+`Used sources / completed steps`. Sources show title and section; steps show only the stable public
+labels. This demonstrates the agent workflow and RAG result required by the assignment without
+exposing raw state, prompts, tool arguments or detailed diagnostics; those remain in Langfuse.
 
-The sidebar provides reset thread (`DELETE /threads/{id}`) plus the read-only active knowledge-base
-language and index stats from `/admin/stats`. Model and retrieval parameters are not UI settings.
-`ACTIVE_LANG` remains a server-side setting, not a per-user toggle.
+The sidebar provides reset thread (`DELETE /threads/{id}`) plus read-only index stats from
+`/admin/stats`. Model and retrieval parameters are not UI settings.
 
 `st.session_state`: `thread_id`, `messages`, with each stored assistant message containing its
 answer metadata, sources and steps. Streaming uses `/chat/stream` via
@@ -1037,7 +1074,6 @@ variables:
 | `LLM_BACKEND` | `ollama` | `ollama` or `dummy` |
 | `OLLAMA_BASE_URL` | `http://ollama:11434` | serving endpoint |
 | `LLM_MODEL` | `qwen2.5:7b-instruct-q4_K_M` | model tag |
-| `ACTIVE_LANG` | `en` | **which index the assistant queries** (`en` or `hu`) and the answer language |
 | `API_BASE_URL` | `http://api:8000` | used by the Streamlit client |
 | `REDIS_URL` | `redis://redis:6379/0` | single datastore connection |
 | `LANGFUSE_ENABLED` | `true` | turn the callback handler on/off; required for official eval and load runs |
@@ -1059,8 +1095,8 @@ environment variable.
 and runs `docker compose up` without looking for them.
 
 `Dockerfile` – Python 3.12 on `python:3.12-slim`, multi-stage; a builder stage installs requirements and
-**pre-downloads the multilingual embedding model weights into the image** (one model serves both
-languages, §4.3) so the first request is not slowed by a model download; the runtime stage copies
+**pre-downloads the embedding model weights into the image** (§4.3) so the first request is not
+slowed by a model download; the runtime stage copies
 site-packages, the pre-downloaded model files and the app, and runs as a
 non-root user. **One image serves both processes** — the API and the UI differ only in their command,
 so both use the same build and cannot drift apart in dependencies.
@@ -1114,7 +1150,7 @@ way a prototype fails it. Four things get pinned, all of them things that would 
 | Models | LLM tag with quantisation (`qwen2.5:7b-instruct-q4_K_M`); the embedding model with an explicit HF **revision** hash, since a repo can be updated under a stable name |
 
 The embedding revision is the one worth calling out: a silently updated model would change every vector
-without changing any config, so `manifest:corpus:{lang}` includes the model **revision**, not just its
+without changing any config, so `manifest:corpus` includes the model **revision**, not just its
 name — a changed revision therefore forces a re-ingest rather than mixing vector generations in one
 index.
 
@@ -1138,12 +1174,13 @@ Quality checks run locally and in CI; they are not application services and add 
 `sonar-project.properties` sets `app` as source, `tests` as tests, reads `coverage.xml`, and excludes
 the fictional DOCX corpus, generated eval reports and local logs from analysis. CI runs Ruff,
 Bandit and pytest first, then submits the result to Sonar and fails when the configured quality gate
-fails. `SONAR_TOKEN` and the Sonar host/project identifiers are CI settings or secrets, not
-`pydantic-settings` application fields.
+fails.
 
-The Sonar service is external to the application runtime. It may be SonarQube or SonarCloud
-depending on the repository environment; the application code and Compose stack are identical
-either way.
+The Sonar service is **SonarCloud** — the free tier, external to the application runtime and to the
+Compose stack. It was chosen over a self-hosted SonarQube container for the same reason as Langfuse
+Cloud (§11): it costs an account and a token, not another container competing with Ollama and Redis
+for RAM/CPU on the one developer machine (§1.2). `SONAR_TOKEN` and the SonarCloud organisation/project
+identifiers are CI secrets, not `pydantic-settings` application fields.
 
 `entrypoint.sh api`: wait for Redis and Ollama → pull the model if absent → run `app.rag.ingest`
 (no-op when `manifest:corpus` matches) → `uvicorn app.main:app`. The UI container skips all of
@@ -1158,7 +1195,7 @@ rather than silently losing the file copy.
 
 ### 13.1 Dataset
 
-`eval/dataset.<lang>.json`, a JSON array of 20 cases covering: general policy question, meal expense, exceeding a cap,
+`eval/dataset.json`, a JSON array of 20 cases covering: general policy question, meal expense, exceeding a cap,
 prohibited item (alcohol), travel, accommodation, taxi, commuting by pass, commuting by own car,
 one-way/round-trip ambiguity, mileage for a client visit, EV rate, work equipment under and over
 the approval threshold, holiday allowance with partial budget used, training allowance eligibility,
@@ -1180,14 +1217,11 @@ deadline still open, deadline expired, missing receipt, unsupported question.
 ]
 ```
 
-One dataset per language — `eval/dataset.en.json` and `eval/dataset.hu.json` — same `id`s, same
-expectations, translated `question` text, because the corpora are mirrors. The runner takes `--lang`
-(default `ACTIVE_LANG`), so the two languages produce comparable metric tables and a Hungarian
-regression cannot hide behind an English-only run. Amounts stay in HUF in both: the currency is part of
-the fictional policy, not a language setting. These repository files are the reviewable source of
-truth; Langfuse holds a synchronised execution copy, never the only copy of the test cases. During
-synchronisation, `id` remains the stable item id, `question` maps to the Langfuse item input, and all
-`expected_*` fields map to expected output and metadata.
+Amounts are in HUF: the currency is part of the fictional policy, not a language setting. This
+repository file is the reviewable source of truth; Langfuse holds a synchronised execution copy,
+never the only copy of the test cases. During synchronisation, `id` remains the stable item id,
+`question` maps to the Langfuse item input, and all `expected_*` fields map to expected output and
+metadata.
 
 ### 13.2 Metrics
 
@@ -1197,7 +1231,7 @@ synchronisation, `id` remains the stable item id, `question` maps to the Langfus
 | Slot accuracy | share of fields in `expected_slots` whose extracted value matches exactly |
 | Retrieval hit@4 | at least one `expected_doc_ids` entry appears in the retrieved top four |
 | Tool-selection accuracy | current-turn ordered tool-name list equals `expected_tools` |
-| Outcome accuracy | `decision` matches and, when present, `eligible_amount_huf` equals `expected_amount_huf` |
+| Outcome accuracy | `decision` matches and, when present, `reimbursable_amount_huf` equals `expected_amount_huf` |
 | Citation accuracy | the answer cites at least one expected document returned by retrieval |
 
 Each case therefore produces six simple Boolean/numeric Langfuse scores. The report aggregates each
@@ -1206,16 +1240,15 @@ score as a percentage and lists failed case ids. A clarification case uses
 
 ### 13.3 Runner
 
-`python -m eval.run_eval --lang en` validates `eval/dataset.en.json`, idempotently
-synchronises its cases to the versioned Langfuse dataset `rag-assistant-functional-en`, and starts a
-named Langfuse experiment. The runner posts each case to the running API (`POST /admin/eval`) with
-the dataset item id and experiment name in trace metadata plus a pinned `reference_date` request
-field, then reads metrics from the internal `EvaluationTurnResponse`. It still measures the
-deployed graph over HTTP, but does not force evaluation-only fields into the user-facing contract.
-Langfuse stores the item-to-trace link, run metadata and six per-case scores. One pass over the
-20 cases is the official PoC evaluation; a suspicious failure can be rerun manually and compared
-through its trace. The runner writes
-`.docs/eval/functional-<lang>-<timestamp>.md` (summary table + per-case rows + failure notes) and a
+`python -m eval.run_eval` validates `eval/dataset.json`, idempotently synchronises its cases to the
+versioned Langfuse dataset `rag-assistant-functional`, and starts a named Langfuse experiment. The
+runner posts each case to the running API (`POST /admin/eval`) with the dataset item id and
+experiment name in trace metadata plus a pinned `reference_date` request field, then reads metrics
+from the internal `EvaluationTurnResponse`. It still measures the deployed graph over HTTP, but does
+not force evaluation-only fields into the user-facing contract. Langfuse stores the item-to-trace
+link, run metadata and six per-case scores. One pass over the 20 cases is the official PoC
+evaluation; a suspicious failure can be rerun manually and compared through its trace. The runner
+writes `.docs/eval/functional-<timestamp>.md` (summary table + per-case rows + failure notes) and a
 machine-readable `.json` next to it, and pushes each metric to Langfuse as a score on that turn's
 trace (§11), so a failure can be opened and inspected step by step. `--node intent` uses the same
 dataset and experiment flow while evaluating only one node in-process (the assignment explicitly
@@ -1223,22 +1256,21 @@ allows node-level evaluation) — useful because intent errors cascade.
 
 ### 13.4 Tests
 
-- **Unit**: calculator per category (incl. rounding, FX, caps), rule checker per rule, deadline
+- **Unit**: `ReimbursementCalculator.calculate(ExpenseClaim)` per category (incl. required-field
+  validation, rounding, FX and caps), plus a tool-adapter test proving `claim` is absent from the
+  model-visible schema and injected by `ToolNode`; rule checker per rule, deadline
   boundaries (day 29/30/31), docx→Markdown conversion (heading levels, list styles, a table kept
-  whole), chunking (table not split, short FAQ sections merged), category metadata and bilingual
+  whole), chunking (table not split, short FAQ sections merged), category metadata and
   heading-path → stable-section → `rule_ids` resolution,
   filtered and unfiltered KNN query building, claim merging,
   structured-output repair.
 - **Consistency**: every numeric limit in `rules.yaml` appears in the policy text of the referenced
   document, every `doc_ref` resolves, and every category has at least one indexed
   chunk. This is what prevents a "cited but wrong number" answer and an unreachable document.
-- **Mirror parity**: `.docs/sources/en/` and `.docs/sources/hu/` contain the same `00`–`07` `doc_id`
-  prefixes, and both indices end up with the same set of
-  `rule_ids` — so `ACTIVE_LANG` changes the language, not the knowledge.
 - **Turn isolation**: a clarification answer merges into its pending claim, while a new expense in
   the same thread replaces the old claim; loop budgets, duplicate-call detection, projected
   artifacts and decisions only inspect `current_turn_messages()`.
-- **API contract**: schema snapshots of `TurnResponse`, `EvaluationTurnResponse` and the OpenAPI
+- **API contract**: schema snapshots of `TurnResponse`, `EvaluationTurnResponse`, `LoadTestResult` and the OpenAPI
   document, plus an SSE test asserting deduplicated `step`/`source` events, answer-only token
   streaming and a final `result` containing the same accumulated steps and sources.
 - **Logging**: both handlers receive the same correlation fields, sensitive payload fields are
@@ -1259,33 +1291,62 @@ allows node-level evaluation) — useful because intent errors cascade.
 
 ## 14. Load test
 
-`eval/load_queries.<lang>.json` is a version-controlled query bank with stable ids and query types.
-`python -m eval.load_test --lang en --n 100 --concurrency 4 --seed 42` selects a reproducible balanced
-mix (60% simple policy questions, 30% calculation-bearing, 10% incomplete) and fires it at `/chat`
-over HTTP with `httpx.AsyncClient`, after a warm-up of 5 unmeasured queries. Each measured query uses
-a fresh `thread_id` and carries the same `load_run_id` plus query id/type as Langfuse trace metadata.
-The shared `load_run_id` makes the 50–200 traces filterable as one scenario in Langfuse; the local
-script, not Langfuse, is the load generator. Because the agent is a service (§10.1), this is a real
-client/server scenario — queue waits and event-loop contention show up instead of being hidden by an
-in-process loop.
+The load test is intentionally one simple synchronous admin endpoint:
 
-Reported: total wall time, throughput (queries/min), mean/median/p95/min/max end-to-end latency
-measured client-side, server-side `response_time_ms`, and the HTTP error/timeout count. Output:
-`.docs/eval/load-<lang>-<timestamp>.md` plus the same measurements and run identifiers in a
-machine-readable `.json`. Per-node and per-generation spans in the matching Langfuse load run
-identify the bottleneck. The report states that Langfuse instrumentation was enabled, so the latency
-figures represent the observable deployed configuration rather than an uninstrumented baseline.
+```http
+POST /admin/load-test
+{
+  "dataset_name": "rag-assistant-functional",
+  "repetitions": 3,
+  "max_concurrency": 4
+}
+```
+
+The endpoint fetches the named dataset from Langfuse and calls its SDK experiment runner with a task
+that invokes the same `AgentService` used by `/chat`. Every item receives a fresh `thread_id`; the
+task measures elapsed time around the complete graph invocation and returns the latency alongside
+the agent result. The Langfuse runner supplies bounded concurrent execution, automatic tracing,
+per-item error isolation and dataset-run links, so the application does not implement a second load
+generator. The default 20-item dataset × 3 repetitions produces 60 measured turns; request
+validation requires a total between 50 and 200 and `max_concurrency` between 1 and 4.
+
+Each repetition creates a named Langfuse experiment run with the same `load_run_id` in metadata, so
+all traces remain filterable as one load scenario. The endpoint waits for all repetitions and then
+returns:
+
+```python
+class LoadTestResult(BaseModel):
+    load_run_id: str
+    dataset_name: str
+    query_count: int
+    max_concurrency: int
+    total_duration_ms: int
+    throughput_queries_per_minute: float
+    latency_mean_ms: float
+    latency_median_ms: float
+    latency_p95_ms: float
+    error_count: int
+    dataset_run_urls: list[str]
+```
+
+This is deliberately not a job system: there is no queue, progress endpoint or cancellation flow,
+and the caller must allow a long HTTP timeout. It measures the deployed graph, model contention and
+Langfuse instrumentation, but not network or `/chat` transport overhead. Per-node and
+per-generation spans in the linked Langfuse runs identify the bottleneck; the returned aggregate is
+copied into the README's evaluation section rather than generating a separate local load-report
+format.
 
 Expected bottleneck: aggregate LLM generation. A complete turn makes two fixed calls (classify and
 extract), one final response call and 1–4 agent calls, so 4–7 in total depending on how many tools the
 agent decides to use (§6.3) — Ollama serialises them, so this dominates by an order of magnitude and is the
-reason concurrency beyond ~2–4 mostly grows queue time rather than throughput. The report therefore
-correlates latency with step count: the tail is turns where the agent took all 4 steps. Query embedding is a single CPU forward
-pass; the Redis KNN search over a few hundred vectors and the tools are sub-millisecond, which is
-precisely why the retrieval step was kept simple.
+reason concurrency beyond ~2–4 mostly grows queue time rather than throughput. The linked Langfuse
+traces allow the tail latency to be compared with agent step count; the expected slowest turns are
+those where the agent uses all 4 steps. Query embedding is a single CPU forward pass; the Redis KNN
+search over a few hundred vectors and the tools are sub-millisecond, which is precisely why the
+retrieval step was kept simple.
 
-The PoC stays uncached so its behaviour and latency remain easy to explain. The load-test report
-proposes these production optimisations without adding them to the prototype:
+The PoC stays uncached so its behaviour and latency remain easy to explain. The README records the
+load result and proposes these production optimisations without adding them to the prototype:
 
 1. **Fast path for simple policy questions** — when intent is `policy_question` with high confidence,
    skip `extract_information` and proceed directly to the agent loop: removes one LLM call without
@@ -1308,10 +1369,11 @@ proposes these production optimisations without adding them to the prototype:
 | Empty/irrelevant retrieval | one unfiltered retry; if still empty or top-1 similarity is below threshold, the answer states that the policy does not cover it and suggests contacting finance |
 | Redis unreachable | compose healthcheck gates startup; at runtime `/ready` flips to failing and the API returns a 503 with a `detail` the UI displays (no index, no state), retry with backoff |
 | Log directory not writable | startup fails before serving traffic with the resolved `./logs` path in the error; stdout remains available to explain the configuration problem |
-| Index for `ACTIVE_LANG` missing / dimension mismatch | the API lifespan verifies `idx:chunks:{ACTIVE_LANG}` against the manifest `DIM` and re-ingests that language instead of serving empty results; the other language is unaffected |
+| Index missing / dimension mismatch | the API lifespan verifies `idx:chunks` against the manifest `DIM` and re-ingests instead of serving empty results |
 | Missing slot the user refuses to give | answer presents the conditional result ("if one-way, then X; if round-trip, then Y") |
 | Cap/limit not found for a category | rule checker emits a `warning` finding, answer is marked lower-confidence |
 | Corpus not ingested at boot | entrypoint runs ingest; ingest failure exits non-zero with the reason |
+| Langfuse disabled or unreachable for `/admin/load-test` | reject the load-test request with a clear 503; normal chat remains available with its configured tracing fallback |
 | Out-of-scope or advice-seeking question (tax/legal) | `out_of_scope` node with an explicit disclaimer |
 | API unreachable from the UI | the UI shows a connection error and keeps the thread — conversation state is server-side, so a retry continues where it stopped |
 
@@ -1324,46 +1386,80 @@ describe a fictional company, are not a real company's rules and are not tax or 
 
 | # | Deliverable | Definition of done |
 | --- | --- | --- |
-| M0 | Skeleton | repo layout, config, `DummyLLM`, Streamlit shell runs |
-| M1 | Data layer | the existing `.docs/sources/en/` and `.docs/sources/hu/` corpora + `rules.yaml` + DOCX-to-Markdown conversion + both Redis indices built + consistency and mirror tests green |
-| M2 | RAG subgraph | standalone invocation returns grounded context + citations from a tag-filtered similarity search, both indices |
-| M3 | Tools | calculator, rule checker, deadline checker + unit tests |
-| M4 | Main graph | all nodes, the ReAct tool loop with its guardrails, clarification-then-resume — verified with a scripted `DummyLLM` that emits fixed tool calls |
-| M5 | API + UI | FastAPI endpoints with the public `TurnResponse` and internal `EvaluationTurnResponse` contracts, Ollama wired, prompts tuned, focused Streamlit chat complete |
+| M0 | Skeleton | repo layout, config, LangChain-compatible `DummyLLM`, Streamlit shell runs |
+| M1 | Data layer | the existing `.docs/sources/en/` corpus + `rules.yaml` + LangChain document pipeline + Redis vector store built + consistency tests green |
+| M2 | RAG subgraph | compiled LangGraph subgraph returns grounded context + citations through the LangChain Redis retriever |
+| M3 | Tools | LangChain tool wrappers for search, calculator and rule checker + direct unit tests for deterministic implementations |
+| M4 | Main graph | compiled LangGraph `StateGraph`, `ToolNode`, ReAct loop guardrails and clarification-then-resume — verified with a scripted LangChain chat model that emits fixed tool calls |
+| M5 | API + UI | FastAPI endpoints with the public `TurnResponse` and internal `EvaluationTurnResponse` contracts, LangChain `ChatOllama` wired, prompts tuned, focused Streamlit chat complete |
 | M6 | Docker | `docker compose up` works from a clean clone |
-| M7 | Evaluation | repository JSON datasets, Langfuse functional experiment and traced load run, local reports in `.docs/eval/`, README written |
+| M7 | Evaluation | repository functional dataset, Langfuse functional experiment, endpoint-triggered traced load run, local functional report in `.docs/eval/`, README written |
 
 During planning, the implementation reference is updated directly. The final README and generated
 evaluation reports are produced at M7; no planning changelog or per-component feature-document tree
 is required.
 
-## 17. Open decisions
+## 17. Design decisions and rationale
 
-- Redis as the single datastore: chosen so the vector index and LangGraph checkpoints live in one
-  service — fewer moving parts in the container setup, one healthcheck, and shared state if the UI
-  is ever scaled out. The costs to state in the README: the RediSearch module is required
+These record every deliberate trade-off in the design, the alternative that was on the table, and why
+this option was chosen instead. Most were settled in a dedicated design-review pass rather than left
+open, so this section is a rationale log, not a list of unresolved questions.
+
+- **The knowledge base is English and uses one index.** This keeps ingestion, retrieval evaluation
+  and citations focused on one authoritative policy corpus. It does not require the conversation to
+  be English: Hungarian questions and answers are supported on a best-effort basis by the selected
+  multilingual embedding and chat models, while the official evaluation remains English.
+- **Hungarian capability is part of model selection.** `multilingual-e5-small` provides
+  cross-lingual retrieval over the English passages, and Qwen was preferred partly because it can
+  follow instructions and answer in Hungarian at a usable level within the 7B local-model budget.
+  This is a model capability, not a claim that the knowledge base itself is localised.
+- **Tool selection is a ReAct loop** (§6.3), kept over the two alternatives that were on the table: a
+  static intent→tool table (fully reproducible, but then "autonomous decision making" would be a
+  lookup) and a single LLM planner call (one decision, easy to grade, but it cannot react to what a
+  tool actually returned). This is the one piece of the design that most directly answers the
+  assignment's autonomy requirement, and the deterministic guardrails already in §6.3 (step budget,
+  duplicate-call detection, argument-retry-then-disable) bound the variance cost. If the eval later
+  shows the agent routinely wasting steps, the planner variant is the documented fallback — the
+  tools, their schemas and the state stay unchanged, only node 5 differs.
+- **Langfuse stays a required part of the official eval and load runs**, not downgraded to an optional
+  bonus layer. The alternative — compute and report all metrics/timings locally and treat Langfuse as
+  best-effort — would remove a third-party cloud dependency from grading-critical runs, but was
+  rejected because the per-case scores, prompt-version linkage and per-generation bottleneck spans are
+  exactly the evaluation and performance-analysis evidence the assignment asks for, and re-deriving
+  that locally would just rebuild a worse version of what Langfuse already gives for free.
+- **SSE streaming (`/chat/stream`) is kept alongside plain `/chat`.** The assignment only requires the
+  UI to show the agent's main steps and RAG result, which a blocking response could also satisfy with
+  less code. It was kept anyway because watching steps and sources appear live is a materially better
+  demonstration of "this is an agent taking steps," which is worth the extra endpoint and UI event
+  handling.
+- **Sonar (SonarCloud) + Bandit + Ruff + CI are kept**, even though the brief only grades code quality
+  and readability by inspection, not by a quality-gate pipeline. Kept because an objective, citable
+  quality signal in the README is worth the one-time SonarCloud account setup, and CI catches
+  regressions automatically while the rest of the system is being built. SonarCloud rather than a
+  self-hosted SonarQube container, for the same reason as Langfuse Cloud (§11): it costs an account,
+  not a fifth container competing with Ollama and Redis for RAM on the one developer machine (§1.2).
+- **Prompt management stays dual-path** (Langfuse-hosted with an embedded fallback, §9), gated by the
+  same `LANGFUSE_ENABLED` flag that already governs tracing (Q5 above) rather than being simplified to
+  embedded-only code. This was weighed against dropping the remote-resolution/label machinery
+  entirely — simpler, no dual-path validation to maintain — but kept so that Langfuse's role in this
+  project (already confirmed as required, not optional) extends to prompt versioning as well as
+  tracing, under one config switch rather than two different toggles for the "Langfuse or not" choice.
+- **Redis as the single datastore.** It is not being used merely as a vector database: Redis is a
+  mature, well-understood database that can reliably hold both the search index and application
+  state. I also have production experience building Redis-backed systems, which reduces
+  implementation and operational risk compared with introducing an unfamiliar specialised vector
+  database. Keeping the vector index and LangGraph checkpoints in one service also means fewer
+  moving parts, one healthcheck and shared state if the UI is ever scaled out. The costs to state in
+  the README: the RediSearch module is required
   (`redis-stack-server`, ~2× the image of `redis:alpine`), an in-memory store holds the whole index,
-  and vector search requires explicit `FT.CREATE`/KNN query strings and FLOAT32 blob handling. For a
-  corpus of a few hundred chunks this is a good trade; for a much larger corpus a dedicated vector
-  database would be worth evaluating.
+  and the LangChain Redis integration still depends on RediSearch index/schema compatibility even
+  though it encapsulates `FT.CREATE`, KNN query construction and vector serialisation. For a corpus
+  of a few hundred chunks this is a good trade; for a much larger corpus a dedicated vector database
+  would be worth evaluating behind the same LangChain vector-store/retriever interfaces.
 - `RedisSaver` from `langgraph-checkpoint-redis` vs a hand-rolled checkpointer: use the library, fall
   back to `MemorySaver` in tests.
-- Language: both an English and a Hungarian index are built, and `ACTIVE_LANG` selects which one the
-  assistant uses — a restart, not a re-ingest. Config-level rather than per-request, because a mixed
-  session would make the eval and the citations ambiguous for no demo value. Keeping a Hungarian corpus at
-  all is a realism decision (§4.1): real internal documents are not English-only. The open part is
-  empirical — whether `multilingual-e5-small` carries both languages, or whether the eval justifies
-  `multilingual-e5-base` or `Qwen3-Embedding-0.6B` (§4.3), which on a CPU-only machine (§1.2) is a real
-  cost, not a free upgrade.
 - `rules.yaml` is hand-authored in this PoC; §4.5 records what a production version would do instead
   (extract the catalogue from the documents, validate against the cited text, review the diff).
-- Tool selection is a **ReAct loop** (§6.3), chosen over the two alternatives that were on the table: a
-  static intent→tool table (fully reproducible, but then "autonomous decision making" would be a lookup)
-  and a single LLM planner call (one decision, easy to grade, but it cannot react to what a tool actually
-  returned). The loop costs an LLM call per step and run-to-run variance; the mitigations are the
-  deterministic guardrails in §6.3 and the official eval in §13.3. The open part is empirical: if the eval
-  shows the agent routinely wasting steps, the planner variant is the documented fallback — the tools,
-  their schemas and the state stay unchanged, only node 5 differs.
 
 ---
 
@@ -1375,17 +1471,44 @@ rather than oversights, and so a reviewer can see that the line was drawn on pur
 | Not in scope | Why, and what it would take |
 | --- | --- |
 | **Authentication / authorisation** | Anyone who can reach the UI can ask anything; there is no user identity, so "am *I* eligible" is answered from what the user types, not from an HR record. Real version: SSO on the UI, a token on the API, and the employee's tenure / cost centre / remaining benefit budget read from HR — which would also remove several clarification questions. |
-| **Multi-tenancy** | One fictional company, one policy set, one `rules.yaml`. Tenant-scoped indices (`idx:chunks:{tenant}:{lang}`) and a per-tenant catalogue would be the shape, but nothing in the design assumes a single tenant except the config. |
+| **Multi-tenancy** | One fictional company, one policy set, one `rules.yaml`. Tenant-scoped indices (`idx:chunks:{tenant}`) and a per-tenant catalogue would be the shape, but nothing in the design assumes a single tenant except the config. |
 | **Real financial integration** | No booking, no submission, no ERP call. The assistant tells you what is claimable and what to attach; a real one would create the claim and attach the receipt. |
 | **Live FX rates** | Fixed fictional rates in `rules.yaml` (§4.4). A real system needs a rate provider plus the policy's rate-date rule (transaction date vs submission date), which is a rule question, not a plumbing one. |
 | **Receipt/OCR input** | Amounts come from the conversation, not from an uploaded invoice. Document intake would add an extraction step whose output feeds the same `ExpenseClaim` — the claim schema is already the seam for it. |
 | **Rule versioning / effective dates** | One current catalogue; no "which rule applied last March". §4.5's versioned-catalogue direction is the prerequisite. |
 | **Audit trail** | Langfuse traces and the seven-day operational logs are for debugging, not audit: they have no tamper resistance or per-user attribution, and Langfuse lives in a third-party service. |
-| **Personal data handling** | Conversations sit in Redis with a 24 h TTL and no encryption, redaction or export/delete flow. Fine for fictional policies and made-up amounts; not fine for real employee data. |
+| **Personal data handling and content safety** | Conversations sit in Redis with a 24 h TTL and no encryption, redaction or export/delete flow. Fine for fictional policies and made-up amounts; not fine for real employee data. A production system should add a PII detection and redaction layer before prompts, persistence and observability, with controlled re-identification only where the business flow requires it. A self-hosted deployment could use Microsoft Presidio; an Azure deployment could use Azure-native PII detection together with Azure AI Content Safety or the selected model endpoint's content filters. The same policy should inspect uploaded documents, user input and generated output, with blocked/redacted events recorded in an audit trail without storing the sensitive value itself. |
 | **Horizontal scale / rate limiting** | One `uvicorn` process, one Ollama, no queue, no per-client limits. State is already in Redis, so more API workers is a compose change; the LLM is the actual constraint (§14). |
 | **Prompt-injection hardening** | The corpus is trusted because we wrote it. If policies came from users or the web, the retrieved context would need treating as untrusted input — the current design has no defence there. |
+| **Localised policy corpora** | The PoC indexes one English policy corpus. A production system that requires independently maintained Hungarian source policies would add language-scoped indices and manifests, a corpus selector, per-language evaluation datasets and parity/versioning checks. The current multilingual embedding and chat models already provide best-effort Hungarian interaction over the English corpus without that additional data layer. |
 
 None of these change the graph, the tools or the retrieval path; each is an integration or an operational
 concern layered around them. That is the argument for the seams the design does keep: `ExpenseClaim` as
 the single input contract for the tools, `rules.yaml` as the single source of numbers, and the API as the
 single entry point.
+
+**Regulatory compliance:** an operational system would also need a dedicated assessment and
+implementation plan for EU AI Act and GDPR compliance. This is important for production use, but
+legal classification, governance processes, documentation and compliance controls were not
+addressed as part of this PoC.
+
+From an EU AI Act perspective, indicative gaps include:
+
+- no documented AI-literacy and role-specific training programme for the people operating,
+  supervising or supporting the system;
+- no compliance control that explicitly informs the employee that they are interacting with an AI
+  system, or evidence that this transparency notice is consistently presented;
+- no formal assessment of whether the intended production use remains an informational assistant or
+  materially influences decisions about employees' reimbursement or access to benefits. The latter
+  could bring employment-related high-risk classification and additional obligations into scope;
+- if classified as high-risk, no complete risk-management system, data-governance process, technical
+  documentation, compliant event logging, human-oversight procedure, accuracy/robustness/cybersecurity
+  evidence, post-market monitoring or serious-incident process;
+- no process for informing affected employees and, where required, workers' representatives before a
+  high-risk workplace system is deployed;
+- no assessed mechanism for machine-readable identification of AI-generated output where the
+  transparency rules require it.
+
+These are preliminary engineering observations, not a legal determination. The organisation's role
+(provider, deployer or both), the intended use and the system's actual influence on employment
+decisions must be assessed by qualified legal and compliance specialists before production.
