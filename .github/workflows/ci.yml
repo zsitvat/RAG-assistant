@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality and SonarQube Cloud
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      LLM_BACKEND: dummy
+      LANGFUSE_ENABLED: "false"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.32"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install locked dependencies
+        run: uv sync --locked --dev
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+      - name: Run security checks
+        run: uv run bandit -c pyproject.toml -r app
+
+      - name: Test with coverage
+        run: uv run pytest --cov=app --cov-report=term-missing --cov-report=xml
+
+      - name: Write SonarQube Cloud project configuration
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
+          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+        run: |
+          if [ -z "${SONAR_ORGANIZATION}" ] || [ -z "${SONAR_PROJECT_KEY}" ]; then
+            echo "SONAR_ORGANIZATION and SONAR_PROJECT_KEY repository variables are required."
+            exit 1
+          fi
+          sed \
+            -e "s/<your-sonarcloud-organization-key>/${SONAR_ORGANIZATION}/" \
+            -e "s/<your-sonarcloud-project-key>/${SONAR_PROJECT_KEY}/" \
+            sonar-project.properties.example > sonar-project.properties
+
+      - name: Analyze with SonarQube Cloud
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -z "${SONAR_TOKEN}" ]; then
+            echo "SONAR_TOKEN repository secret is required for SonarQube Cloud analysis."
+            exit 1
+          fi
+          uv run pysonar

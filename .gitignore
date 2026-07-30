@@ -155,8 +155,15 @@ activemq-data/
 # SageMath parsed files
 *.sage.py
 
+# SonarQube scanner workspace and local project identity (see sonar-project.properties.example)
+.sonar/
+/sonar-project.properties
+
 # Application logs (bind-mounted at runtime, not part of the repository)
 /logs/
+
+# Emergency pre-history-rewrite mirror; move it outside the repo when no longer needed
+/RAG-assistant-backup.git/
 
 # Environments
 .env
@@ -211,6 +218,9 @@ cython_debug/
 #   and can be added to the global gitignore or merged into this file. However, if you prefer, 
 #   you could uncomment the following to ignore the entire vscode folder
 # .vscode/
+# Personal SonarLint connected-mode identity (see .vscode/settings.json.example)
+.vscode/settings.json
+
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
 

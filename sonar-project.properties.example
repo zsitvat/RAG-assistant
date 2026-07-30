@@ -1,0 +1,11 @@
+sonar.organization=<your-sonarcloud-organization-key>
+sonar.projectKey=<your-sonarcloud-project-key>
+sonar.projectName=RAG-assistant
+
+sonar.sources=app
+sonar.tests=tests
+sonar.sourceEncoding=UTF-8
+sonar.python.version=3.12
+sonar.python.coverage.reportPaths=coverage.xml
+sonar.coverage.exclusions=app/ui.py
+sonar.qualitygate.wait=true

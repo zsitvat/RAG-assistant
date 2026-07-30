@@ -9,7 +9,7 @@ class HealthResponse(BaseModel):
 
 class ReadinessCheck(BaseModel):
     name: str
-    status: Literal["ok", "not_configured"]
+    status: Literal["ok", "not_configured", "unavailable"]
     detail: str
 
 

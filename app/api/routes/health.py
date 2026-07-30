@@ -1,19 +1,38 @@
+from typing import Annotated
+
+import redis
 from fastapi import APIRouter, Depends
 
 from app.api.schemas import HealthResponse, ReadinessCheck, ReadyResponse
 from app.core.config import Settings
-from app.dependencies import get_settings
+from app.dependencies import get_redis_client, get_settings
+from app.integrations.redis import RedisIndex
 
 router = APIRouter(tags=["health"])
 
 
-@router.get("/health", response_model=HealthResponse)
+@router.get("/health")
 async def health() -> HealthResponse:
     return HealthResponse()
 
 
-@router.get("/ready", response_model=ReadyResponse)
-async def ready(settings: Settings = Depends(get_settings)) -> ReadyResponse:
+def _check_redis(redis_index: RedisIndex | None) -> ReadinessCheck:
+    if redis_index is None:
+        return ReadinessCheck(
+            name="redis", status="unavailable", detail="Redis was unreachable at startup."
+        )
+    try:
+        redis_index.ping()
+    except redis.RedisError:
+        return ReadinessCheck(name="redis", status="unavailable", detail="Redis ping failed.")
+    return ReadinessCheck(name="redis", status="ok", detail="Redis is reachable.")
+
+
+@router.get("/ready")
+async def ready(
+    settings: Annotated[Settings, Depends(get_settings)],
+    redis_index: Annotated[RedisIndex | None, Depends(get_redis_client)],
+) -> ReadyResponse:
     is_dummy = settings.llm_backend == "dummy"
     llm_check = ReadinessCheck(
         name="llm",
@@ -24,9 +43,5 @@ async def ready(settings: Settings = Depends(get_settings)) -> ReadyResponse:
             else f"Ollama backend at {settings.ollama_base_url} is not health-checked yet."
         ),
     )
-    redis_check = ReadinessCheck(
-        name="redis",
-        status="not_configured",
-        detail="Redis integration is not part of this milestone yet.",
-    )
-    return ReadyResponse(ready=True, checks=[llm_check, redis_check])
+    redis_check = _check_redis(redis_index)
+    return ReadyResponse(ready=redis_check.status != "unavailable", checks=[llm_check, redis_check])

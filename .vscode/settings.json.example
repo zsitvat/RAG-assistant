@@ -1,0 +1,6 @@
+{
+    "sonarlint.connectedMode.project": {
+        "connectionId": "<your-sonarcloud-organization-key>",
+        "projectKey": "<your-sonarcloud-project-key>"
+    }
+}

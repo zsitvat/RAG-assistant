@@ -15,7 +15,7 @@
 - Added focused tests: `tests/test_api.py`, `tests/test_llm.py`, `tests/test_logging.py` (14 tests,
   99% coverage of `app/`, `app/ui.py` excluded from coverage — it is a Streamlit script exercised by
   manual smoke run, not pytest).
-- Set up SonarQube Cloud integration for project `zsitvat_RAG-assistant`: locked `pysonar`,
+- Set up SonarQube Cloud integration for the project's SonarCloud organization/project: locked `pysonar`,
   `sonar-project.properties`, a token-guarded `make sonar` target that waits for the quality gate,
   and the separately installed `sonar` management CLI.
 - Updated [`02-technical-design.en.md`](../plan/02-technical-design.en.md) §3 to reflect the
@@ -56,4 +56,4 @@ test files.
 Live smoke test: `uvicorn app.main:app` (`LLM_BACKEND=dummy`) + `streamlit run app/ui.py` against it,
 both start and respond correctly. The scanner configuration dry-run recognises the project, source,
 test and coverage settings. A real SonarQube Cloud submission remains pending a `SONAR_TOKEN`; the
-optional management CLI browser connection remains pending `sonar auth login -o zsitvat`.
+optional management CLI browser connection remains pending `sonar auth login -o <organization>`.
