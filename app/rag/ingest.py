@@ -1,5 +1,3 @@
-"""Orchestrates loading, chunking, validating and upserting the policy corpus into Redis."""
-
 import logging
 from pathlib import Path
 
@@ -9,11 +7,11 @@ from langchain_redis import RedisVectorStore
 
 from app.core.config import Settings, get_settings
 from app.integrations.redis import RedisIndex
+from app.rag.build_info import IndexBuildInfoBuilder
 from app.rag.chunker import MarkdownChunker
 from app.rag.docx_loader import CORPUS_DIR, DocxMarkdownLoader
 from app.rag.errors import IngestionError
 from app.rag.index_schema import VECTOR_DIMENSION
-from app.rag.manifest import CorpusManifestBuilder
 from app.rag.model import IngestResult
 from app.rag.rule_metadata import RuleMetadataResolver
 from app.rag.store import (
@@ -25,16 +23,16 @@ from app.rag.store import (
 from app.rules.loader import get_rule_catalogue
 from app.rules.model import RuleCatalogue
 
-RULES_PATH = Path("rules.yaml")
+RULES_PATH = Path("config/rules.yaml")
 INGEST_BATCH_SIZE = 128
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["IngestionError", "PolicyCorpusIngestor", "connect_and_ingest"]
+__all__ = ["IngestionError", "CorpusIngestor", "connect_and_ingest"]
 
 
-class PolicyCorpusIngestor:
-    """Loads, chunks, validates and upserts the policy corpus into Redis."""
+class CorpusIngestor:
+    """Loads, chunks, validates and upserts the corpus into Redis."""
 
     def __init__(
         self,
@@ -42,10 +40,11 @@ class PolicyCorpusIngestor:
         rules_path: Path = RULES_PATH,
         chunker: MarkdownChunker | None = None,
     ) -> None:
+        """Stores the corpus paths and chunker used for ingestion."""
         self._corpus_dir = corpus_dir
         self._rules_path = rules_path
         self._chunker = chunker or MarkdownChunker()
-        self._manifest_builder = CorpusManifestBuilder(corpus_dir, rules_path)
+        self._build_info_builder = IndexBuildInfoBuilder(corpus_dir, rules_path)
 
     def load_and_chunk(
         self, rule_catalogue: RuleCatalogue
@@ -65,6 +64,7 @@ class PolicyCorpusIngestor:
         resolver = RuleMetadataResolver(rule_catalogue)
         resolver.attach(chunks)
         resolver.validate_anchors_resolve(chunks)
+        resolver.validate_categories_reachable(chunks)
         return source_documents, chunks
 
     def run(
@@ -73,27 +73,24 @@ class PolicyCorpusIngestor:
         vector_store: RedisVectorStore,
         rule_catalogue: RuleCatalogue | None = None,
     ) -> IngestResult:
-        """Ingests the corpus into Redis, skipping embed/upsert when the manifest matches."""
+        """Ingests the corpus into Redis, skipping embed/upsert when the build info matches."""
         rule_catalogue = rule_catalogue or get_rule_catalogue()
         _, chunks = self.load_and_chunk(rule_catalogue)
 
-        manifest = self._manifest_builder.build(
+        build_info = self._build_info_builder.build(
             EMBEDDING_MODEL_NAME, EMBEDDING_MODEL_REVISION, VECTOR_DIMENSION
         )
-        existing_manifest = redis_index.read_manifest()
+        existing_build_info = redis_index.read_build_info()
 
-        if existing_manifest == manifest:
+        if existing_build_info == build_info:
             action = "reused"
         else:
-            action = "rebuilt" if existing_manifest is not None else "built"
-            if existing_manifest is not None:
-                # Recreates the index schema and discards its old documents; dropping the
-                # index only through the raw Redis client would leave the vector store's own
-                # SearchIndex unaware the schema is gone, so later add_texts calls would
-                # silently write unindexed hashes.
+            action = "rebuilt" if existing_build_info is not None else "built"
+            if existing_build_info is not None:
+                # Recreate through SearchIndex so later writes remain indexed.
                 vector_store.index.create(overwrite=True, drop=True)
             self._upsert_chunks(vector_store, chunks)
-            redis_index.write_manifest(manifest)
+            redis_index.write_build_info(build_info)
 
         return IngestResult(
             action=action, chunk_count=len(chunks), category_counts=self._count_categories(chunks)
@@ -132,13 +129,13 @@ def connect_and_ingest(
         return None, None
 
     vector_store = build_vector_store(settings.redis_url, build_embeddings())
-    PolicyCorpusIngestor().run(redis_index, vector_store, rule_catalogue=rule_catalogue)
+    CorpusIngestor().run(redis_index, vector_store, rule_catalogue=rule_catalogue)
     return redis_index, vector_store
 
 
 if __name__ == "__main__":
     settings = get_settings()
-    result = PolicyCorpusIngestor().run(
+    result = CorpusIngestor().run(
         RedisIndex(settings.redis_url),
         build_vector_store(settings.redis_url, build_embeddings()),
         rule_catalogue=get_rule_catalogue(),

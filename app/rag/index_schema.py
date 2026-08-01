@@ -1,8 +1,8 @@
-"""Redis index schema for the vector store."""
-
 INDEX_NAME = "idx:chunks"
 KEY_PREFIX = "chunk"
 TOP_K = 5
+MIN_CONFIDENCE_THRESHOLD = 0.8
+CONTEXT_TOKEN_BUDGET = 1800
 
 VECTOR_DIMENSION = 384
 DISTANCE_METRIC = "COSINE"

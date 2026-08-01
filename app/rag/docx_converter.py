@@ -1,5 +1,3 @@
-"""Converts one policy `.docx` file to Markdown, preserving headings, lists and tables."""
-
 from pathlib import Path
 
 import docx

@@ -28,6 +28,12 @@ Beyond that, the problem is:
 - decision-heavy – limits, eligibility, deadlines, approval thresholds;
 - calculation-heavy – so it needs deterministic tools, not just LLM text generation.
 
+Large frontier models such as Claude Opus, Fable or GPT-5.6-class models can often perform these
+reimbursement and deadline calculations directly. This design still assigns arithmetic and date
+rules to deterministic tools: the same inputs always produce the same testable result, and a model
+cannot silently invent a limit, miscount a boundary day or change a formula between requests. The
+LLM interprets the request and explains the result; application code owns the financial decision.
+
 ## 3. What user need it serves
 
 The employee asks in natural language and gets, in a single answer:
@@ -72,7 +78,8 @@ missing data.
   filtering by expense category → context building with citations. A standalone, reusable
   module; the complexity of the project lives in the agentic workflow and the tools, not in the retriever.
 - **Tools (deterministic Python, not the LLM):** expense and reimbursement calculator, rule
-  checker and deadline calculator.
+  checker and deadline calculator. The calculator returns only the reimbursable amount, effective
+  cap, excess and warnings; detailed policy findings remain the rule checker's responsibility.
 - **Data source:** fictional company policies as `.docx` documents under `.docs/sources/en/`,
   converted to Markdown at ingest so the heading structure survives; reviewed by hand for internal
   consistency, small in volume – the emphasis is on quality processing. A Hungarian mirror corpus
@@ -88,7 +95,7 @@ missing data.
   (`intfloat/multilingual-e5-small`, §4.3) even though only English is served — swapping to an
   English-only embedder would touch more of the design than the language cut already requires, for a
   retrieval-quality difference that is unlikely to be measurable on a corpus this small.
-- **Storage:** Redis (Redis Stack) as the single datastore – vector indices for the policy chunks
+- **Storage:** Redis 8 as the single datastore – vector indices for the policy chunks
   and LangGraph conversation checkpoints.
 - **Model:** locally runnable open-source LLM (no paid API); dummy LLM fallback if needed.
 - **Service split:** the agent runs as a FastAPI service; Streamlit is a thin client over HTTP, so the

@@ -5,6 +5,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """Holds the application's runtime configuration, loaded from environment and .env."""
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     llm_backend: Literal["ollama", "dummy"] = "ollama"
@@ -24,4 +26,5 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """Returns the cached application settings instance."""
     return Settings()

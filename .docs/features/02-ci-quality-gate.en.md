@@ -8,20 +8,19 @@ SonarQube Cloud and wait for its quality gate.
 
 ## How it works
 
-The single `quality` job in `.github/workflows/ci.yml` runs on Ubuntu with read-only repository
-permissions and a 20-minute timeout. It installs Python 3.12 and the pinned uv version through the
-official `astral-sh/setup-uv` action, restores uv's dependency cache, and installs exactly
-`uv.lock` with `uv sync --locked --dev`.
+The workflow uses separate `ruff` and `pytest` jobs on Ubuntu with read-only repository permissions.
+Each job installs Python 3.12 and the pinned uv version through the official
+`astral-sh/setup-uv` action, restores uv's dependency cache, and installs exactly `uv.lock` with
+`uv sync --locked --dev`.
 
-The job executes, in order:
+The jobs execute these checks:
 
-1. Ruff lint.
-2. Ruff format verification.
-3. Bandit application security checks.
-4. Pytest with terminal and XML coverage.
-5. Materialise `sonar-project.properties` from `sonar-project.properties.example`, substituting the
+1. The `ruff` job runs Ruff lint and format verification.
+2. The `pytest` job runs Bandit and pytest with terminal and XML coverage.
+3. The `pytest` job materialises `sonar-project.properties` from
+   `sonar-project.properties.example`, substituting the
    `SONAR_ORGANIZATION`/`SONAR_PROJECT_KEY` repository variables.
-6. The locked `pysonar` scanner using that generated `sonar-project.properties`.
+4. The `pytest` job runs the locked `pysonar` scanner using that generated configuration.
 
 `LLM_BACKEND=dummy` and `LANGFUSE_ENABLED=false` keep CI independent of Ollama, Redis and Langfuse.
 The Sonar steps receive `SONAR_TOKEN`, `SONAR_ORGANIZATION` and `SONAR_PROJECT_KEY` only through

@@ -23,7 +23,7 @@
 - [ ] The submission deadline is read from the catalogue and the day-30 boundary is interpreted consistently across findings, decisions, tests, and evaluation.
 - [ ] Expired claims include the documented exception-procedure reference rather than an invented remedy.
 - [ ] Document-requirement questions can call the rule checker directly without forcing an irrelevant calculation.
-- [ ] Receipt presence, receipt type, approval status, and category-specific attachments produce explicit pass, fail, warning, or not-applicable findings.
+- [ ] Receipt presence, approval status, and category-specific attachments produce explicit pass, fail, warning, or not-applicable findings; document types live only in the attachment list.
 - [ ] Every finding contains a stable rule identifier and resolvable policy reference when one exists.
 - [ ] The agent can choose a short tool path for deadline and document questions while retaining the longer search/calculate/check path for benefit-amount questions.
 - [ ] Missing dates, tenure, used budget, category, or document facts produce focused clarification rather than default values.

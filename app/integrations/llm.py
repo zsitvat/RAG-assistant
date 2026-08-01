@@ -10,6 +10,7 @@ DUMMY_RESPONSES = [
 
 
 def build_chat_model(settings: Settings) -> BaseChatModel:
+    """Builds the configured chat model backend, dummy or Ollama."""
     if settings.llm_backend == "dummy":
         return FakeListChatModel(responses=DUMMY_RESPONSES)
     return ChatOllama(base_url=settings.ollama_base_url, model=settings.llm_model)

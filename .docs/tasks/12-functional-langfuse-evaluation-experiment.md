@@ -25,7 +25,7 @@
 - [ ] Each evaluation request uses a fresh thread, pinned reference date, dataset item identity, experiment name, and trace metadata.
 - [ ] The runner executes the running application over HTTP and links each response trace to its Langfuse dataset item and experiment run.
 - [ ] Classification accuracy, slot accuracy, retrieval hit@4, tool-selection accuracy, outcome accuracy, and citation accuracy are computed from typed values and pushed as Langfuse scores.
-- [ ] Outcome scoring compares `reimbursable_amount_huf` with the expected amount when present, and citation scoring requires an expected retrieved document actually used by the answer.
+- [ ] Outcome scoring compares calculation `amount_huf` with the expected amount when present, and citation scoring requires an expected retrieved document actually used by the answer.
 - [ ] Clarification and unsupported cases are scored according to their explicit decisions without requiring irrelevant calculation or retrieval expectations.
 - [ ] One failing item does not abort the remaining experiment and is reported with enough context to open the corresponding trace.
 - [ ] A timestamped Markdown summary and machine-readable result contain aggregate percentages, per-case outcomes, failure notes, prompt/model metadata, and the Langfuse experiment link.

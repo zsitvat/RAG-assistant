@@ -2,12 +2,13 @@ import docx
 import pytest
 from langchain_core.documents import Document
 
+from app.rag.build_info import IndexBuildInfoBuilder
 from app.rag.chunker import CHUNK_SIZE, MarkdownChunker
 from app.rag.docx_converter import DocxToMarkdownConverter
 from app.rag.errors import IngestionError
-from app.rag.ingest import PolicyCorpusIngestor
-from app.rag.manifest import CorpusManifestBuilder
+from app.rag.ingest import CorpusIngestor
 from app.rag.rule_metadata import RuleMetadataResolver
+from app.rules.loader import load_rule_catalogue
 from app.rules.model import RuleCatalogue
 
 RULES_FIXTURE = {
@@ -150,13 +151,68 @@ def test_validate_anchors_resolve_passes_when_heading_present():
     RuleMetadataResolver(catalogue).validate_anchors_resolve([chunk])
 
 
+def test_validate_categories_reachable_passes_when_every_category_has_a_chunk():
+    catalogue = RuleCatalogue.model_validate(RULES_FIXTURE)
+    chunk = Document(
+        page_content="x",
+        metadata={"doc_id": "01", "section": "4. Business meals", "categories": ["meal"]},
+    )
+
+    resolver = RuleMetadataResolver(catalogue)
+    resolver.attach([chunk])
+    resolver.validate_categories_reachable([chunk])
+
+
+def test_validate_categories_reachable_rejects_a_category_with_no_chunk():
+    fixture = {
+        **RULES_FIXTURE,
+        "categories": {
+            **RULES_FIXTURE["categories"],
+            "equipment": {"rules": [], "required_documents": []},
+        },
+    }
+    catalogue = RuleCatalogue.model_validate(fixture)
+    chunk = Document(
+        page_content="x",
+        metadata={"doc_id": "01", "section": "4. Business meals", "categories": ["meal"]},
+    )
+    resolver = RuleMetadataResolver(catalogue)
+    resolver.attach([chunk])
+
+    with pytest.raises(IngestionError, match="equipment"):
+        resolver.validate_categories_reachable([chunk])
+
+
+def test_cross_document_rule_adds_its_own_category_to_the_referenced_section():
+    catalogue = load_rule_catalogue()
+    chunk = Document(
+        page_content="Traffic and parking fines are not reimbursable.",
+        metadata={"doc_id": "01", "section": "6. Non-reimbursable items"},
+    )
+
+    RuleMetadataResolver(catalogue).attach([chunk])
+
+    assert "travel" in chunk.metadata["categories"]
+    assert "R-TRAVEL-04" in chunk.metadata["rule_ids"]
+
+
+def test_validate_categories_reachable_rejects_missing_rule_evidence():
+    catalogue = RuleCatalogue.model_validate(RULES_FIXTURE)
+    chunk = Document(page_content="x", metadata={"doc_id": "01", "section": "Other"})
+    resolver = RuleMetadataResolver(catalogue)
+    resolver.attach([chunk])
+
+    with pytest.raises(IngestionError, match="meal:R-MEAL-01"):
+        resolver.validate_categories_reachable([chunk])
+
+
 def test_compute_corpus_hash_changes_when_a_document_changes(tmp_path):
     corpus_dir = tmp_path / "corpus"
     corpus_dir.mkdir()
     rules_path = tmp_path / "rules.yaml"
     rules_path.write_text("version: 1\n")
     _build_docx(corpus_dir / "01_sample.docx")
-    builder = CorpusManifestBuilder(corpus_dir, rules_path)
+    builder = IndexBuildInfoBuilder(corpus_dir, rules_path)
 
     first_hash = builder.compute_hash()
     second_hash = builder.compute_hash()
@@ -172,7 +228,7 @@ def test_compute_corpus_hash_changes_when_rules_change(tmp_path):
     corpus_dir.mkdir()
     _build_docx(corpus_dir / "01_sample.docx")
     rules_path = tmp_path / "rules.yaml"
-    builder = CorpusManifestBuilder(corpus_dir, rules_path)
+    builder = IndexBuildInfoBuilder(corpus_dir, rules_path)
 
     rules_path.write_text("version: 1\n")
     first_hash = builder.compute_hash()
@@ -189,23 +245,23 @@ def test_load_and_chunk_end_to_end(tmp_path):
     _build_docx(corpus_dir / "01_sample.docx")
     catalogue = RuleCatalogue.model_validate(RULES_FIXTURE)
 
-    sources, chunks = PolicyCorpusIngestor(corpus_dir).load_and_chunk(catalogue)
+    sources, chunks = CorpusIngestor(corpus_dir).load_and_chunk(catalogue)
 
     assert len(sources) == 1
     assert sources[0].metadata["doc_id"] == "01"
     assert any(c.metadata["rule_ids"] == ["R-MEAL-01"] for c in chunks)
 
 
-def test_manifest_builder_reflects_chunking_and_embedding_settings(tmp_path):
+def test_build_info_builder_reflects_chunking_and_embedding_settings(tmp_path):
     corpus_dir = tmp_path / "corpus"
     corpus_dir.mkdir()
     _build_docx(corpus_dir / "01_sample.docx")
     rules_path = tmp_path / "rules.yaml"
     rules_path.write_text("version: 1\n")
 
-    manifest = CorpusManifestBuilder(corpus_dir, rules_path).build("model-x", "rev-1", 384)
+    build_info = IndexBuildInfoBuilder(corpus_dir, rules_path).build("model-x", "rev-1", 384)
 
-    assert manifest.chunk_size == CHUNK_SIZE
-    assert manifest.embedding_model == "model-x"
-    assert manifest.embedding_revision == "rev-1"
-    assert manifest.dimension == 384
+    assert build_info.chunk_size == CHUNK_SIZE
+    assert build_info.embedding_model == "model-x"
+    assert build_info.embedding_revision == "rev-1"
+    assert build_info.dimension == 384

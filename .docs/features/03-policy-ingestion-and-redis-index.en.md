@@ -14,7 +14,7 @@ index state through the application (`/admin/ingest`, `/admin/stats`, the Stream
 
 ### The rule catalogue (`app/rules/`)
 
-`rules.yaml` (repository root) is the deterministic rule catalogue: per-document category and
+`config/rules.yaml` is the deterministic rule catalogue: per-document category and
 section-anchor declarations, and per-category rule definitions (limits, rates, approval tiers,
 deadlines). Every number in it was read directly from the source `.docx` files, not copied from the
 technical design's illustrative example — several values differ (see the deviation note below).
@@ -48,10 +48,10 @@ Each concern is one small class in its own module:
   every chunk; it raises `errors.IngestionError` for an unknown `doc_id` and, separately,
   `validate_anchors_resolve()` raises if a declared rules.yaml anchor's heading never actually
   appears in the ingested corpus.
-- **`manifest.CorpusManifestBuilder`** hashes every source `.docx` plus `rules.yaml` together with
+- **`build_info.IndexBuildInfoBuilder`** hashes every source `.docx` plus `rules.yaml` together with
   the chunking parameters, embedding model name/revision and vector dimension.
-- **`ingest.PolicyCorpusIngestor.run()`** loads+chunks the corpus, compares the freshly computed
-  manifest against the one stored in Redis, and only embeds/upserts when they differ — reporting
+- **`ingest.CorpusIngestor.run()`** loads+chunks the corpus, compares the freshly computed
+  build info against the one stored in Redis, and only embeds/upserts when they differ — reporting
   `built`/`rebuilt`/`reused`. A **rebuild** calls `vector_store.index.create(overwrite=True,
   drop=True)` (the LangChain integration's own index object) before re-upserting, not a raw
   `FT.DROPINDEX` — see the deviation note.
@@ -77,10 +77,10 @@ automatically by the integration's `key_prefix`).
 ### Redis lifecycle (`app/integrations/redis.py`)
 
 **`RedisIndex`** wraps the raw Redis connection (constructed from a `redis_url`) plus everything the
-LangChain integration doesn't own: `ping()`, `manifest:corpus` read/write (as JSON), and
+LangChain integration doesn't own: `ping()`, `build_info:corpus` read/write (as JSON), and
 `get_index_stats()` (chunk count + per-category counts, read via `FT.INFO` + a `categories`-only
 `FT.SEARCH`). It is the one object threaded through the app for anything Redis-shaped —
-`app.state.redis_client`, the `/ready` check, and `PolicyCorpusIngestor.run()`. A `.client` property
+`ApplicationDependencies.redis_index`, the `/ready` check, and `CorpusIngestor.run()`. A `.client` property
 exposes the underlying `redis.Redis` for the rare case (tests) that need raw access. All chunk writes
 and similarity searches go through `RedisVectorStore`, never through `RedisIndex`.
 
@@ -90,16 +90,16 @@ and similarity searches go through `RedisVectorStore`, never through `RedisIndex
   `detail` when Redis is unavailable, instead of a raw 500.
 - `GET /ready` (`app/api/routes/health.py`) now pings the real Redis client; overall `ready` is
   `false` when Redis is unreachable (previously a fixed `not_configured` placeholder from task 1).
-- The FastAPI lifespan (`app/main.py`) calls `connect_and_ingest()`; if Redis is unreachable it logs a
-  warning and leaves `app.state.redis_client`/`vector_store` as `None` rather than failing startup —
-  the task-1 "runs without Redis" dummy-backend story still holds.
+- `ApplicationDependencies.build()` calls `connect_and_ingest()` during the FastAPI lifespan. If
+  Redis is unreachable it logs a warning and stores `None` in the container's `redis_index` and
+  `vector_store` fields rather than failing startup, so dummy/offline mode remains available.
 - The Streamlit sidebar (`app/ui.py`) calls `GET /admin/stats` and renders indexed-chunk count and
   per-category counts; it contains no Redis-specific logic.
 
 ## How to use
 
 ```bash
-docker run -d -p 6379:6379 redis/redis-stack-server:7.4.0-v6 redis-stack-server --appendonly yes
+docker compose up -d redis redisinsight
 uv run python -m app.rag.ingest          # one-off CLI ingest
 # or just start the API — its lifespan ingests automatically:
 uv run uvicorn app.main:app --port 8000
@@ -107,7 +107,7 @@ curl -X POST http://127.0.0.1:8000/admin/ingest
 curl http://127.0.0.1:8000/admin/stats
 ```
 
-Run the Redis-Stack integration test (skipped automatically if unreachable):
+Run the Redis 8 integration test (skipped automatically if unreachable):
 
 ```bash
 TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest tests/test_redis_integration.py -v
@@ -117,7 +117,7 @@ TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest tests/test_redis_integrati
 
 | File | Responsibility |
 | --- | --- |
-| `rules.yaml` | deterministic rule catalogue, hand-authored from the real corpus |
+| `config/rules.yaml` | deterministic rule catalogue, hand-authored from the real corpus |
 | `app/rules/model.py` | `RuleCatalogue` typed models + cross-reference validation |
 | `app/rules/loader.py` | `load_rule_catalogue()`, cached `get_rule_catalogue()` |
 | `app/rag/errors.py` | `IngestionError` |
@@ -125,16 +125,16 @@ TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest tests/test_redis_integrati
 | `app/rag/docx_loader.py` | `DocxMarkdownLoader` (LangChain `BaseLoader`) |
 | `app/rag/chunker.py` | `MarkdownChunker` |
 | `app/rag/rule_metadata.py` | `RuleMetadataResolver` |
-| `app/rag/manifest.py` | `CorpusManifestBuilder` |
-| `app/rag/ingest.py` | `PolicyCorpusIngestor`, `connect_and_ingest`, CLI entry point |
+| `app/rag/build_info.py` | `IndexBuildInfoBuilder` |
+| `app/rag/ingest.py` | `CorpusIngestor`, `connect_and_ingest`, CLI entry point |
 | `app/rag/index_schema.py` | Redis index name, key prefix, vector/schema constants |
 | `app/rag/store.py` | `E5Embeddings`, `RedisVectorStore` factory |
-| `app/integrations/redis.py` | `RedisIndex` — connection, manifest read/write, index stats |
+| `app/integrations/redis.py` | `RedisIndex` — connection, build-info read/write, index stats |
 | `app/api/routes/admin.py` | `/admin/ingest`, `/admin/stats` |
 | `app/api/routes/health.py` | real Redis check in `/ready` |
 | `app/ui.py` | sidebar index stats |
 | `tests/test_rules.py`, `tests/test_ingest.py`, `tests/test_run_ingest.py`, `tests/test_admin.py`, `tests/test_health_readiness.py` | unit tests (no Redis required) |
-| `tests/test_redis_integration.py` | integration tests against a real Redis Stack |
+| `tests/test_redis_integration.py` | integration tests against a real Redis 8 instance |
 
 ## Deliberate deviations from the technical design
 

@@ -1,6 +1,6 @@
 # 02 — Policy ingestion and Redis index visibility
 
-**What to build:** A reviewer can ingest the fictional English policy documents into Redis Stack and inspect the resulting index through the application. The slice preserves headings and tables, attaches stable policy metadata, validates the deterministic rule catalogue, and makes repeated ingestion safe and observable.
+**What to build:** A reviewer can ingest the fictional English policy documents into Redis 8 and inspect the resulting index through the application. The slice preserves headings and tables, attaches stable policy metadata, validates the deterministic rule catalogue, and makes repeated ingestion safe and observable.
 
 **Blocked by:** 01 — Runnable application shell.
 
@@ -35,5 +35,5 @@
 - [x] Corpus/index and manifest keys have no expiry, while checkpoint keys use their separately owned retention policy rather than inheriting corpus lifetime.
 - [x] The Streamlit sidebar can display index readiness and category counts without containing Redis-specific logic.
 - [x] Unit tests cover document conversion, tables, chunk boundaries, metadata validation, and manifest decisions.
-- [x] An integration test against Redis Stack proves a complete ingest, idempotent re-run, and dimension-mismatch rebuild; vector search is not faked with an incompatible Redis substitute.
+- [x] An integration test against Redis 8 proves a complete ingest, idempotent re-run, and dimension-mismatch rebuild; vector search is not faked with an incompatible Redis substitute.
 - [x] Redis unavailability, failed rebuild, and an invalid index manifest produce an actionable startup/admin failure rather than an apparently empty knowledge base.

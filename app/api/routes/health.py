@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 
 from app.api.schemas import HealthResponse, ReadinessCheck, ReadyResponse
 from app.core.config import Settings
-from app.dependencies import get_redis_client, get_settings
+from app.dependencies import get_redis_index, get_settings
 from app.integrations.redis import RedisIndex
 
 router = APIRouter(tags=["health"])
@@ -13,6 +13,7 @@ router = APIRouter(tags=["health"])
 
 @router.get("/health")
 async def health() -> HealthResponse:
+    """Reports basic liveness of the service."""
     return HealthResponse()
 
 
@@ -31,8 +32,9 @@ def _check_redis(redis_index: RedisIndex | None) -> ReadinessCheck:
 @router.get("/ready")
 async def ready(
     settings: Annotated[Settings, Depends(get_settings)],
-    redis_index: Annotated[RedisIndex | None, Depends(get_redis_client)],
+    redis_index: Annotated[RedisIndex | None, Depends(get_redis_index)],
 ) -> ReadyResponse:
+    """Reports whether the LLM backend and Redis dependencies are ready to serve requests."""
     is_dummy = settings.llm_backend == "dummy"
     llm_check = ReadinessCheck(
         name="llm",
