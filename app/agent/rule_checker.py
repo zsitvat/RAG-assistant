@@ -4,6 +4,8 @@ from app.agent.deadline import DeadlineChecker
 from app.agent.model import ExpenseClaim, Finding, Intent
 from app.rules.model import ApprovalTier, Category, RuleCatalogue, RuleDefinition
 
+PUBLIC_TRANSPORT_COMMUTING_MODES = ("pass", "ticket")
+
 
 class DocumentChecker:
     """Checks receipts and category-specific supporting documents."""
@@ -281,7 +283,21 @@ class EligibilityChecker:
             ),
             None,
         )
-        if rule is None or claim.distance_km is None or claim.distance_is_one_way is None:
+        if rule is None:
+            return []
+        if claim.expense_type in PUBLIC_TRANSPORT_COMMUTING_MODES:
+            return [
+                Finding(
+                    rule_id=rule.id,
+                    status="not_applicable",
+                    message=(
+                        "the minimum-distance condition applies to personal-vehicle commuting, "
+                        f"not to a {claim.expense_type} claim"
+                    ),
+                    doc_ref=rule.doc_ref,
+                )
+            ]
+        if claim.distance_km is None or claim.distance_is_one_way is None:
             return []
         one_way_km = claim.distance_km if claim.distance_is_one_way else claim.distance_km / 2
         if one_way_km < rule.min_one_way_km:

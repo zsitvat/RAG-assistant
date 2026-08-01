@@ -3,12 +3,13 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import router
-from app.core.config import get_settings
-from app.core.logging import configure_logging
-from app.core.observability import RequestContextMiddleware
 from app.dependencies import ApplicationDependencies
+from app.logging.config import configure_logging
+from app.logging.middleware import RequestContextMiddleware
+from app.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 def create_app() -> FastAPI:
     """Builds the FastAPI application with its middleware and routes."""
     app = FastAPI(title="RAG Assistant API", lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[get_settings().ui_origin],
+        allow_methods=["GET", "POST", "DELETE"],
+        allow_headers=["*"],
+    )
     app.add_middleware(RequestContextMiddleware)
     app.include_router(router)
     return app

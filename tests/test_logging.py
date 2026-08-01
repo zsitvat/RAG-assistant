@@ -3,7 +3,7 @@ import logging
 
 import pytest
 
-from app.core.logging import configure_logging, request_id_var
+from app.logging.config import configure_logging, request_id_var
 
 
 def test_configure_logging_writes_json_with_correlation_fields(tmp_path, capsys):

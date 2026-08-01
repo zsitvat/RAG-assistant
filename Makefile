@@ -32,5 +32,5 @@ run-ui:
 	API_BASE_URL=http://127.0.0.1:8000 uv run streamlit run app/ui.py
 
 clean:
-	rm -rf .ruff_cache .pytest_cache .mypy_cache htmlcov .coverage coverage.xml logs
+	rm -rf .ruff_cache .pytest_cache .mypy_cache .sonar htmlcov .coverage coverage.xml logs
 	find . -type d -name '__pycache__' -not -path './.venv/*' -exec rm -rf {} +

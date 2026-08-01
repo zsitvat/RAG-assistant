@@ -12,6 +12,7 @@ dependencies = [
     "langchain-ollama==1.1.0",
     "langchain-redis==0.2.5",
     "langchain-text-splitters==1.1.2",
+    "langfuse>=4.14.2",
     "langgraph==1.2.10",
     "langgraph-checkpoint-redis>=0.5.1",
     "pydantic==2.13.4",

@@ -2,8 +2,8 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolCall
 from langchain_ollama import ChatOllama
 
-from app.core.config import Settings
 from app.integrations.llm import build_chat_model
+from app.settings import Settings
 
 
 def test_dummy_backend_returns_invokable_chat_model():

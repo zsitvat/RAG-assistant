@@ -17,15 +17,11 @@ from app.agent.messages import (
     OUT_OF_SCOPE_MESSAGE,
 )
 from app.agent.model import CalculationResult, Decision, ExpenseClaim, IntentClassification
-from app.agent.prompts import (
-    AGENT_STEP_PROMPT,
-    CLASSIFY_INTENT_PROMPT,
-    EXTRACT_INFORMATION_PROMPT,
-    GENERATE_RESPONSE_PROMPT,
-)
+from app.agent.prompt_library import PromptLibrary
 from app.agent.slots import RequiredSlotTable
 from app.agent.state import MAX_AGENT_STEPS, MAX_TOOL_ARG_ERRORS, AgentState
 from app.agent.structured import StructuredOutputRunner
+from app.integrations.langfuse import Observability
 
 logger = logging.getLogger(__name__)
 
@@ -41,19 +37,25 @@ class AgentNodes:
         response_chat_model: BaseChatModel,
         tools: list[BaseTool],
         calculator: ReimbursementCalculator,
+        prompts: PromptLibrary | None = None,
     ) -> None:
-        """Stores the chat models, tools and calculator used by the graph nodes."""
+        """Stores the chat models, tools, calculator and resolved prompts used by the nodes."""
         self._tools = tools
         self._calculator = calculator
         self._agent_step_model = structured_chat_model
         self._response_model = response_chat_model
+        self._prompts = prompts or PromptLibrary(Observability(None))
         self._classify_runner = StructuredOutputRunner(
-            structured_chat_model, CLASSIFY_INTENT_PROMPT, IntentClassification
+            structured_chat_model, self._prompt("classify_intent"), IntentClassification
         )
         self._extract_runner = StructuredOutputRunner(
-            structured_chat_model, EXTRACT_INFORMATION_PROMPT, ExpenseClaim
+            structured_chat_model, self._prompt("extract_information"), ExpenseClaim
         )
         self._slot_table = RequiredSlotTable()
+
+    def _prompt(self, name: str):
+        """Returns the resolved chat template for a prompt name."""
+        return self._prompts.get(name).template
 
     @property
     def tools(self) -> list[BaseTool]:
@@ -70,7 +72,7 @@ class AgentNodes:
 
     def extract_information(self, state: AgentState) -> AgentState:
         """Extracts and merges expense claim fields from the conversation so far."""
-        previous_claim = state.get("claim") or ExpenseClaim()
+        previous_claim = ExpenseClaim.from_state(state.get("claim"))
         previous_decision = state.get("decision")
         category = state.get("category")
 
@@ -89,12 +91,16 @@ class AgentNodes:
         """Routes to clarification, the agent step, or out-of-scope handling."""
         if state["intent"] == "unsupported":
             return "out_of_scope"
-        missing = self._slot_table.missing(state["intent"], state.get("category"), state["claim"])
+        missing = self._slot_table.missing(
+            state["intent"], state.get("category"), ExpenseClaim.from_state(state.get("claim"))
+        )
         return "ask_clarification" if missing else "agent_step"
 
     def ask_clarification(self, state: AgentState) -> AgentState:
         """Asks for the next missing slot, or answers conditionally if it was already asked."""
-        missing = self._slot_table.missing(state["intent"], state.get("category"), state["claim"])
+        missing = self._slot_table.missing(
+            state["intent"], state.get("category"), ExpenseClaim.from_state(state.get("claim"))
+        )
         question = CLARIFICATION_QUESTIONS.get(missing[0], DEFAULT_CLARIFICATION_QUESTION)
         if CurrentRequest(state["messages"]).was_already_asked(question):
             conditional = self._conditional_distance_answer(state, missing)
@@ -109,7 +115,9 @@ class AgentNodes:
         if missing != [DISTANCE_DIRECTION_SLOT]:
             return None
         try:
-            outcomes = self._calculator.calculate_both_directions(state["claim"])
+            outcomes = self._calculator.calculate_both_directions(
+                ExpenseClaim.from_state(state.get("claim"))
+            )
         except CalculationInputError:
             logger.warning("cannot resolve the distance ambiguity from the current claim")
             return None
@@ -129,7 +137,9 @@ class AgentNodes:
             t for t in self._tools if request.tool_error_count(t.name) < MAX_TOOL_ARG_ERRORS
         ]
         model = self._bind_tools(available_tools)
-        response = self._invoke_with_retry(AGENT_STEP_PROMPT | model, request.model_context())
+        response = self._invoke_with_retry(
+            self._prompt("agent_step") | model, request.model_context()
+        )
         if response is None:
             return {"messages": [AIMessage(content=LLM_UNAVAILABLE_MESSAGE)]}
 
@@ -191,7 +201,7 @@ class AgentNodes:
 
         decision = self._derive_decision(tool_messages)
         answer = self._invoke_with_retry(
-            GENERATE_RESPONSE_PROMPT | self._response_model, request.model_context()
+            self._prompt("generate_response") | self._response_model, request.model_context()
         )
         if answer is None:
             return {"messages": [AIMessage(content=LLM_UNAVAILABLE_MESSAGE)], "decision": decision}

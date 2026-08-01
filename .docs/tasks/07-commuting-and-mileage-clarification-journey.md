@@ -15,7 +15,7 @@
 - Merge new extraction into a previous claim only when the checkpointed decision is `needs_info` and the intent/category remain compatible.
 - Use current-turn message slicing for tool-loop guards while allowing the classifier, extractor, and final-answer prompt to see conversational history.
 - Keep commuting and mileage formulas inside the calculator module and expose only the resulting amount, effective cap, excess, and warnings in the typed result.
-- Use `RedisSaver` in the running application and `MemorySaver` in isolated graph tests; the checkpointer is an infrastructure adapter, not a second conversation-memory implementation.
+- Use `RedisSaver` in the running application and `InMemorySaver` only in isolated graph tests; the checkpointer is an infrastructure adapter, not a second conversation-memory implementation.
 
 - [ ] Own-car commuting calculates monthly round-trip distance, attendance days, rate, monthly cap, and hybrid-work pro-rating from catalogue rules.
 - [ ] Public-pass commuting applies the reimbursement ratio, monthly cap, integer-HUF convention, and required-document rules.

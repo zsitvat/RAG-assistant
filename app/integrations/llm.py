@@ -2,7 +2,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_ollama import ChatOllama
 
-from app.core.config import Settings
+from app.settings import Settings
 
 DUMMY_RESPONSES = [
     "This is a response from the dummy LLM backend; no model is loaded.",

@@ -5,7 +5,6 @@ import redis
 from langchain_core.documents import Document
 from langchain_redis import RedisVectorStore
 
-from app.core.config import Settings, get_settings
 from app.integrations.redis import RedisIndex
 from app.rag.build_info import IndexBuildInfoBuilder
 from app.rag.chunker import MarkdownChunker
@@ -22,6 +21,7 @@ from app.rag.store import (
 )
 from app.rules.loader import get_rule_catalogue
 from app.rules.model import RuleCatalogue
+from app.settings import Settings, get_settings
 
 RULES_PATH = Path("config/rules.yaml")
 INGEST_BATCH_SIZE = 128
@@ -125,7 +125,7 @@ def connect_and_ingest(
         redis_index = RedisIndex(settings.redis_url)
         redis_index.ping()
     except redis.RedisError:
-        logger.warning("Redis unavailable at startup; RAG features disabled")
+        logger.warning("Redis unavailable at startup")
         return None, None
 
     vector_store = build_vector_store(settings.redis_url, build_embeddings())

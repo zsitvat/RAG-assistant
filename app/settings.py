@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     llm_model: str = "qwen2.5:7b-instruct-q4_K_M"
 
     api_base_url: str = "http://api:8000"
+    ui_origin: str = "http://localhost:8501"
     redis_url: str = "redis://redis:6379/0"
 
     langfuse_enabled: bool = True

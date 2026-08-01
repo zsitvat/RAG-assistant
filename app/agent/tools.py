@@ -26,7 +26,7 @@ def build_calculate_tool(calculator: ReimbursementCalculator) -> BaseTool:
     @tool(response_format="content_and_artifact", description=CALCULATE_DESCRIPTION)
     def calculate(runtime: ToolRuntime) -> tuple[str, CalculationResult]:
         """Calculates the reimbursement result for the claim held in the graph state."""
-        claim = ExpenseClaim.model_validate(runtime.state["claim"])
+        claim = ExpenseClaim.from_state(runtime.state["claim"])
         result = calculator.calculate(claim)
         return result.compact_summary(), result
 
@@ -41,7 +41,7 @@ def build_check_rules_tool(
     @tool(response_format="content_and_artifact", description=CHECK_RULES_DESCRIPTION)
     def check_rules(runtime: ToolRuntime) -> tuple[str, list[Finding]]:
         """Checks the claim held in the graph state against all applicable rules."""
-        claim = ExpenseClaim.model_validate(runtime.state["claim"])
+        claim = ExpenseClaim.from_state(runtime.state["claim"])
         findings = rule_checker.check(claim, reference_date_provider(), runtime.state.get("intent"))
         summary = "; ".join(f"{f.rule_id}:{f.status}" for f in findings) or "no applicable rules"
         return summary, findings

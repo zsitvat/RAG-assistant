@@ -67,6 +67,15 @@ class RagResult(BaseModel):
     context: str = ""
     citations: list[Citation] = []
 
+    @classmethod
+    def from_artifact(cls, value: "RagResult | dict | None") -> "RagResult":
+        """Rebuilds a result from a tool artifact, which a checkpoint restores as a plain dict."""
+        if isinstance(value, cls):
+            return value
+        if not value:
+            return cls()
+        return cls.model_validate(value.get("kwargs", value) if value.get("lc") else value)
+
     @property
     def confidence(self) -> float:
         """Returns the top result's similarity score, or 0.0 if there are no results."""

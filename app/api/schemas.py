@@ -60,3 +60,15 @@ class ThreadResetResponse(BaseModel):
 
     thread_id: str
     reset: bool = True
+
+
+class StreamEvent(BaseModel):
+    """One public server-sent event of a streamed chat turn."""
+
+    event: Literal["step", "source", "token", "result"]
+    data: str | ChatSource | ChatResponse
+
+    def to_sse(self) -> str:
+        """Renders the event in the server-sent events wire format."""
+        payload = self.model_dump_json(include={"data"})
+        return f"event: {self.event}\ndata: {payload}\n\n"

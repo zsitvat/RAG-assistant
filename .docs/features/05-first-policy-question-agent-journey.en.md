@@ -107,8 +107,8 @@ duplicate-call detection, source collection and decision derivation — only the
   explicitly, or defaults to the classifier's.
 - **`calculate`** (`ReimbursementCalculator`) — category dispatch over the loaded `RuleCatalogue`:
   meal (`cap = limit_per_person × headcount`), travel (per-`expense_type` cap or submitted amount),
-  mileage (`distance × (2 if one-way) × rate`), commuting (monthly distance × rate, capped, with the
-  cap pro-rated for hybrid-work schedules under 20 days/month), equipment (full amount), benefits
+  mileage (`distance × (2 if one-way) × rate`), commuting (monthly distance × rate, capped at the
+  flat monthly maximum — see feature 09), equipment (full amount), benefits
   (`min(amount, remaining budget) × reimbursement_ratio`). Missing required fields raise
   `CalculationInputError`, which `ToolNode` turns into an error `ToolMessage`.
   Its artifact is the compact `CalculationResult` from `app/agent/model.py`: `amount_huf`, optional
@@ -153,8 +153,8 @@ thin transport wrapper, running the synchronous call via `run_in_threadpool`.
 bound at two temperatures (`0` for classification/extraction/tool-selection, `0.2` for the final
 answer), the calculator and rule checker from the loaded `RuleCatalogue`, the RAG graph (built from
 a `Retriever`), the three tools, `AgentNodes`, and the compiled agent graph wrapped in
-`AgentService`. If Redis is unreachable, `build()` raises rather than degrading, since the agent
-graph has no way to serve grounded answers without it. `app/main.py`'s lifespan calls only
+`AgentService`. If Redis is unreachable, `build()` raises and FastAPI startup fails because grounded
+policy retrieval and durable conversation state are required. `app/main.py`'s lifespan calls only
 `ApplicationDependencies.build()`.
 
 ## How to use

@@ -4,9 +4,9 @@ import redis
 from fastapi import APIRouter, Depends
 
 from app.api.schemas import HealthResponse, ReadinessCheck, ReadyResponse
-from app.core.config import Settings
 from app.dependencies import get_redis_index, get_settings
 from app.integrations.redis import RedisIndex
+from app.settings import Settings
 
 router = APIRouter(tags=["health"])
 
@@ -20,7 +20,7 @@ async def health() -> HealthResponse:
 def _check_redis(redis_index: RedisIndex | None) -> ReadinessCheck:
     if redis_index is None:
         return ReadinessCheck(
-            name="redis", status="unavailable", detail="Redis was unreachable at startup."
+            name="redis", status="unavailable", detail="Redis dependency is unavailable."
         )
     try:
         redis_index.ping()

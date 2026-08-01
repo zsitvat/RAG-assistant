@@ -3,7 +3,7 @@ import uuid
 from starlette.requests import Request
 from starlette.types import ASGIApp
 
-from app.core.logging import request_id_var
+from app.logging.config import request_id_var
 
 REQUEST_ID_HEADER = "X-Request-ID"
 

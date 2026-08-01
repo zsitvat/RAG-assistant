@@ -9,11 +9,12 @@ from app.agent.calculator import ReimbursementCalculator
 from app.agent.deadline import DeadlineChecker
 from app.agent.graph import build_agent_graph
 from app.agent.nodes import AgentNodes
+from app.agent.prompt_library import PromptLibrary
 from app.agent.rule_checker import RuleChecker
 from app.agent.service import AgentService
 from app.agent.tools import build_tools
-from app.core.config import Settings
 from app.integrations.checkpointer import build_checkpointer
+from app.integrations.langfuse import Observability
 from app.integrations.llm import build_chat_model
 from app.integrations.redis import RedisIndex
 from app.rag.graph import build_rag_graph
@@ -21,6 +22,7 @@ from app.rag.ingest import connect_and_ingest
 from app.rag.retriever import Retriever
 from app.rules.loader import get_rule_catalogue as load_rule_catalogue
 from app.rules.model import RuleCatalogue
+from app.settings import Settings
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +40,10 @@ class ApplicationDependencies:
     def build(settings: Settings) -> "ApplicationDependencies":
         """Builds the application dependency container."""
 
+        # Observability and prompts
+        observability = Observability.build(settings)
+        prompts = PromptLibrary(observability)
+
         # Chat model
         chat_model = build_chat_model(settings)
 
@@ -46,8 +52,8 @@ class ApplicationDependencies:
 
         # Redis
         redis_index, vector_store = connect_and_ingest(settings, rule_catalogue)
-        if vector_store is None:
-            raise RuntimeError("Redis is unreachable; cannot build the policy retriever")
+        if redis_index is None or vector_store is None:
+            raise RuntimeError("Redis is required but unavailable at startup")
 
         # Retriever and RAG graph
         retriever = Retriever(vector_store)
@@ -66,6 +72,7 @@ class ApplicationDependencies:
             chat_model.bind(temperature=0),
             tools,
             calculator,
+            prompts,
         )
         checkpointer = build_checkpointer(settings.redis_url)
         return ApplicationDependencies(
@@ -74,7 +81,7 @@ class ApplicationDependencies:
             redis_index=redis_index,
             vector_store=vector_store,
             checkpointer=checkpointer,
-            agent_service=AgentService(build_agent_graph(nodes, checkpointer)),
+            agent_service=AgentService(build_agent_graph(nodes, checkpointer), observability),
         )
 
     @staticmethod

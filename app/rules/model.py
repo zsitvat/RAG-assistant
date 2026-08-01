@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from typing import Literal
 
 from pydantic import BaseModel, model_validator
@@ -114,49 +115,41 @@ class RuleCatalogue(BaseModel):
 
     @model_validator(mode="after")
     def _validate_references(self) -> "RuleCatalogue":
-        errors: list[str] = []
-
-        for doc_id in self.documents:
-            if not (len(doc_id) == 2 and doc_id.isdigit()):
-                errors.append(f"invalid document id {doc_id!r}: must be two digits")
-
-        seen_rule_ids: set[str] = set()
-        for category_rules in self.categories.values():
-            for rule in category_rules.rules:
-                if rule.id in seen_rule_ids:
-                    errors.append(f"duplicate rule id {rule.id!r}")
-                seen_rule_ids.add(rule.id)
-                errors.extend(self._validate_doc_ref(rule))
-            if category_rules.required_documents_rule_id:
-                if category_rules.required_documents_rule_id in seen_rule_ids:
-                    errors.append(
-                        f"duplicate rule id {category_rules.required_documents_rule_id!r}"
-                    )
-                seen_rule_ids.add(category_rules.required_documents_rule_id)
-                errors.extend(
-                    self._validate_reference(
-                        category_rules.required_documents_rule_id,
-                        category_rules.required_documents_doc_ref,
-                    )
-                )
-
-        submission_references = (
-            (self.submission.deadline_rule_id, self.submission.deadline_doc_ref),
-            (self.submission.approval_rule_id, self.submission.approval_doc_ref),
-            (self.submission.receipt_rule_id, self.submission.receipt_doc_ref),
-        )
-        for rule_id, doc_ref in submission_references:
-            if rule_id in seen_rule_ids:
-                errors.append(f"duplicate rule id {rule_id!r}")
-            seen_rule_ids.add(rule_id)
-            errors.extend(self._validate_reference(rule_id, doc_ref))
-
+        errors = [*self._document_id_errors(), *self._reference_errors()]
         if errors:
             raise ValueError("; ".join(errors))
         return self
 
-    def _validate_doc_ref(self, rule: RuleDefinition) -> list[str]:
-        return self._validate_reference(rule.id, rule.doc_ref)
+    def _document_id_errors(self) -> list[str]:
+        return [
+            f"invalid document id {doc_id!r}: must be two digits"
+            for doc_id in self.documents
+            if not (len(doc_id) == 2 and doc_id.isdigit())
+        ]
+
+    def _declared_references(self) -> Iterator[tuple[str, str | None]]:
+        """Yields every (rule_id, doc_ref) pair the catalogue declares, in declaration order."""
+        for category_rules in self.categories.values():
+            for rule in category_rules.rules:
+                yield rule.id, rule.doc_ref
+            if category_rules.required_documents_rule_id:
+                yield (
+                    category_rules.required_documents_rule_id,
+                    category_rules.required_documents_doc_ref,
+                )
+        yield self.submission.deadline_rule_id, self.submission.deadline_doc_ref
+        yield self.submission.approval_rule_id, self.submission.approval_doc_ref
+        yield self.submission.receipt_rule_id, self.submission.receipt_doc_ref
+
+    def _reference_errors(self) -> list[str]:
+        errors: list[str] = []
+        seen_rule_ids: set[str] = set()
+        for rule_id, doc_ref in self._declared_references():
+            if rule_id in seen_rule_ids:
+                errors.append(f"duplicate rule id {rule_id!r}")
+            seen_rule_ids.add(rule_id)
+            errors.extend(self._validate_reference(rule_id, doc_ref))
+        return errors
 
     def _validate_reference(self, rule_id: str, doc_ref: str | None) -> list[str]:
         if doc_ref is None:

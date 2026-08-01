@@ -38,6 +38,15 @@ class ExpenseClaim(BaseModel):
     is_international_trip: bool | None = None
     provided_documents: list[str] | None = None
 
+    @classmethod
+    def from_state(cls, value: "ExpenseClaim | dict | None") -> "ExpenseClaim":
+        """Rebuilds a claim from graph state; a Redis checkpoint restores it as a plain dict."""
+        if isinstance(value, cls):
+            return value
+        if not value:
+            return cls()
+        return cls.model_validate(value.get("kwargs", value) if value.get("lc") else value)
+
     def merged_with(self, update: "ExpenseClaim") -> "ExpenseClaim":
         """New non-null fields win; fields the update leaves unset keep their prior value."""
         return self.model_copy(update=update.model_dump(exclude_none=True))

@@ -58,7 +58,8 @@ uv run streamlit run app/ui.py
 `make check` runs the full local quality gate (ruff lint + format check, bandit, pytest + coverage).
 With `SONAR_TOKEN` exported, `make sonar` regenerates `coverage.xml`, runs the locked `pysonar`
 scanner and waits for the SonarQube Cloud quality gate.
-`make clean` removes local caches (`.ruff_cache`, `.pytest_cache`, coverage files, `__pycache__`).
+`make clean` removes local caches (`.ruff_cache`, `.pytest_cache`, `.sonar`, coverage files,
+`__pycache__`).
 
 ## Key files
 

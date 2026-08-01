@@ -4,8 +4,8 @@ import pytest
 import redis as redis_lib
 from httpx2 import ASGITransport, AsyncClient
 
-from app.core.config import get_settings
 from app.main import app
+from app.settings import get_settings
 
 TEST_REDIS_URL = os.environ.get("TEST_REDIS_URL", "redis://127.0.0.1:6379/0")
 

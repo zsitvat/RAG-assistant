@@ -28,8 +28,8 @@ in the `redis8_data` and `redisinsight_data` Docker volumes. Use `docker compose
 services without deleting their data.
 
 `Settings` loads `.env` automatically. The committed `.env.example` documents every application
-setting; the ignored local `.env` is the place for machine-specific URLs and credentials. For an
-offline shell, set `LLM_BACKEND=dummy` and `LANGFUSE_ENABLED=false`.
+setting; the ignored local `.env` is the place for machine-specific URLs and credentials. For a
+model-offline shell, set `LLM_BACKEND=dummy` and `LANGFUSE_ENABLED=false`; Redis remains required.
 
 Run the quality gates:
 

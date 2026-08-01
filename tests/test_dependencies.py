@@ -8,7 +8,6 @@ from langchain_redis import RedisVectorStore
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from app.agent.service import AgentService
-from app.core.config import Settings
 from app.dependencies import (
     ApplicationDependencies,
     get_agent_service,
@@ -20,6 +19,7 @@ from app.dependencies import (
 )
 from app.integrations.redis import RedisIndex
 from app.rules.model import RuleCatalogue
+from app.settings import Settings
 
 
 def test_providers_read_the_typed_application_container():
@@ -44,8 +44,8 @@ def test_providers_read_the_typed_application_container():
     assert get_agent_service(request) is dependencies.agent_service
 
 
-def test_build_raises_when_redis_is_unreachable():
+def test_build_fails_when_redis_is_unreachable():
     settings = Settings(llm_backend="dummy", redis_url="redis://127.0.0.1:1/0")
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="Redis is required but unavailable at startup"):
         ApplicationDependencies.build(settings)

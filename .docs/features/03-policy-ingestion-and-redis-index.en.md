@@ -91,8 +91,9 @@ and similarity searches go through `RedisVectorStore`, never through `RedisIndex
 - `GET /ready` (`app/api/routes/health.py`) now pings the real Redis client; overall `ready` is
   `false` when Redis is unreachable (previously a fixed `not_configured` placeholder from task 1).
 - `ApplicationDependencies.build()` calls `connect_and_ingest()` during the FastAPI lifespan. If
-  Redis is unreachable it logs a warning and stores `None` in the container's `redis_index` and
-  `vector_store` fields rather than failing startup, so dummy/offline mode remains available.
+  Redis is unreachable, dependency construction raises and FastAPI startup fails. This prevents the
+  application from serving chat without policy retrieval or durable conversation state. `/ready`
+  and Redis-dependent admin endpoints still report failures if Redis becomes unavailable later.
 - The Streamlit sidebar (`app/ui.py`) calls `GET /admin/stats` and renders indexed-chunk count and
   per-category counts; it contains no Redis-specific logic.
 

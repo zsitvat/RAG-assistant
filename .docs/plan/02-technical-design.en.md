@@ -582,7 +582,8 @@ persisted by the
 (`langgraph-checkpoint-redis`, `RedisSaver`) keyed by `thread_id = streamlit session id`, under the
 `checkpoint:*` namespace with a 24 h TTL. Redis rather than SQLite because it is already the
 project's datastore, it survives container restarts without a mounted file, and it lets several
-Streamlit workers share one conversation store.
+Streamlit workers share one conversation store. Redis is required at startup; the API fails fast
+rather than serving chat without policy retrieval or durable conversation state.
 
 ---
 
@@ -1205,7 +1206,7 @@ services:
     volumes: ["./logs:/app/logs", "./.docs/sources:/app/.docs/sources:ro"]
     logging: { driver: local, options: { max-size: "10m", max-file: "3" } }
     healthcheck: curl -f http://localhost:8000/ready
-    ports: ["8000:8000"]
+    ports: ["127.0.0.1:8000:8000"]              # local Swagger; UI uses api:8000 internally
   ui:
     build: .
     command: streamlit run app/ui.py --server.port 8501 --server.address 0.0.0.0
@@ -1216,6 +1217,13 @@ services:
     ports: ["8501:8501"]
 volumes: { ollama_models: {}, redis8_data: {}, redisinsight_data: {} }
 ```
+
+The API's host binding is intentionally loopback-only: Streamlit calls `http://api:8000` over the
+Compose network, while a developer can use Swagger at `http://127.0.0.1:8000/docs`. This limits
+remote network exposure but does not authenticate callers on the host. Token-based authentication
+and authorisation are outside the PoC scope. A production deployment should require a Streamlit
+service token and a separate authorised-user token exposed through Swagger's `Authorize` flow;
+CORS or Docker network membership alone must not be treated as access control.
 
 Redis 8 replaces the former Redis Stack distribution: Search, JSON, time-series and probabilistic
 data structures are built into Redis Open Source. Redis Insight runs as a separate development UI.
@@ -1370,7 +1378,7 @@ allows node-level evaluation) — useful because intent errors cascade.
   (testcontainers, or a `REDIS_URL` pointing at the compose service) with a `test:` key prefix and a
   flush per test — RediSearch vector search cannot be faked with `fakeredis`. Covers routing,
   clarification-then-resume across two turns, tool-loop termination and the out-of-scope path. Checkpointing in
-  unit tests uses `MemorySaver` to keep them Redis-free.
+  unit tests uses `InMemorySaver` to keep them Redis-free.
 
 ---
 
@@ -1452,7 +1460,7 @@ load result and proposes these production optimisations without adding them to t
 | Agent calls a tool with invalid arguments | the pydantic error goes back as the `ToolMessage` so it can retry; twice-failed tool is disabled for the turn (§6.3) |
 | Agent answers without calling any tool | `generate_response` refuses to present a policy-dependent conclusion without a tool artifact and states that evidence is missing |
 | Empty/irrelevant retrieval | one unfiltered retry; if still empty or top-1 similarity is below threshold, the answer states that it could not find enough policy evidence and suggests contacting finance without claiming the policy does not cover the topic |
-| Redis unreachable | compose healthcheck gates startup; at runtime `/ready` flips to failing and the API returns a 503 with a `detail` the UI displays (no index, no state), retry with backoff |
+| Redis unreachable | compose healthcheck gates dependent containers; API startup fails fast, while `/ready` and Redis-dependent admin endpoints report failure if Redis is lost after startup |
 | Log directory not writable | startup fails before serving traffic with the resolved `./logs` path in the error; stdout remains available to explain the configuration problem |
 | Index missing / dimension mismatch | the API lifespan verifies `idx:chunks` against the manifest `DIM` and re-ingests instead of serving empty results |
 | Missing slot the user refuses to give | answer presents the conditional result ("if one-way, then X; if round-trip, then Y") |
@@ -1540,8 +1548,8 @@ open, so this section is a rationale log, not a list of unresolved questions.
   though it encapsulates `FT.CREATE`, KNN query construction and vector serialisation. For a corpus
   of a few hundred chunks this is a good trade; for a much larger corpus a dedicated vector database
   would be worth evaluating behind the same LangChain vector-store/retriever interfaces.
-- `RedisSaver` from `langgraph-checkpoint-redis` vs a hand-rolled checkpointer: use the library, fall
-  back to `MemorySaver` in tests.
+- `RedisSaver` from `langgraph-checkpoint-redis` vs a hand-rolled checkpointer: use the library;
+  isolated graph tests use `InMemorySaver`, while the running application requires Redis.
 - `rules.yaml` is hand-authored in this PoC; §4.5 records what a production version would do instead
   (extract the catalogue from the documents, validate against the cited text, review the diff).
 

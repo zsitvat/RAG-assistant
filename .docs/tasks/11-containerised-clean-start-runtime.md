@@ -10,7 +10,16 @@
 
 **Technical notes:**
 
-- Build one application image and select API or UI behaviour by command, eliminating dependency drift between two Python runtimes.
+- Add a root multi-stage `Dockerfile` that builds one application image, then select API or UI
+  behaviour through each Compose service command to eliminate dependency drift between two Python
+  runtimes.
+- Extend Compose with an `api` service running Uvicorn and a `ui` service running Streamlit. The UI
+  reaches the backend through the internal `http://api:8000` service address. Bind the API host
+  port to `127.0.0.1` only so local Swagger remains available without exposing the backend on every
+  network interface.
+- Token-based API authentication is production hardening and is explicitly outside this PoC. A
+  production version should give Streamlit a service token and let authorised Swagger users supply
+  a separate token through `Authorize`; network placement and CORS are not substitutes for auth.
 - Keep model and embedding acquisition at different lifecycle stages: bake embedding weights into the image, but persist the larger Ollama model in its named runtime volume.
 - Gate startup in dependency order—Redis, Ollama, model availability, catalogue/index validation, ingestion, then Uvicorn readiness.
 - Use Redis 8 because Search and vector indexing are built in; isolate vector, manifest, and checkpoint key namespaces.
@@ -18,10 +27,13 @@
 - Keep the official runtime to one Uvicorn worker: local Ollama serialises generation, so additional workers do not remove the actual bottleneck.
 
 - [ ] One multi-stage Python image serves both API and UI commands and runs the application as a non-root user.
+- [ ] The Compose `api` service builds the application image, starts the FastAPI backend with Uvicorn, binds `127.0.0.1:8000` for local Swagger, and waits for required Redis and Ollama health checks.
+- [ ] The Compose `ui` service uses the same image, starts Streamlit on port 8501, sets `API_BASE_URL=http://api:8000`, and waits for API readiness.
+- [ ] The runtime documentation states that token authentication and authorisation are not implemented in the PoC and describes service-token plus Swagger `Authorize` handling as a production requirement.
 - [ ] The runtime and development dependency inputs produce fully pinned lock files with hashes, and installation rejects unverified dependency drift.
 - [ ] The Python base image, Redis 8 image, Redis Insight image, Ollama image, LLM quantisation tag, and embedding revision are explicitly pinned for reproducibility.
 - [ ] Embedding weights are downloaded during the image build so startup does not fetch them on the first user request.
-- [ ] Compose defines healthy API, UI, Redis 8, Redis Insight, and Ollama services with the intended ports, named data volumes, source mounts, log mounts, and bounded container logging.
+- [ ] Compose defines healthy API, UI, Redis 8, Redis Insight, and Ollama services with the intended ports, named data volumes, read-only source mounts, log mounts, restart behavior, and bounded container logging.
 - [ ] Redis enables durable append-only storage and provides both vector indexing and LangGraph checkpoint persistence.
 - [ ] Redis 8 is documented as a mature general-purpose datastore chosen for both vector search and application state, including the project owner's production experience with Redis-backed systems.
 - [ ] API startup waits for Redis and Ollama, ensures the configured model is available, runs idempotent ingestion, verifies log-directory permissions, and starts serving only after readiness succeeds.
