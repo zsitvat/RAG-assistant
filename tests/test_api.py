@@ -56,11 +56,6 @@ async def test_unknown_route_returns_fastapi_default_404(client):
     assert response.json() == {"detail": "Not Found"}
 
 
-async def test_request_id_header_is_echoed(client):
-    response = await client.get("/health", headers={"X-Request-ID": "test-request-id"})
-    assert response.headers["x-request-id"] == "test-request-id"
-
-
 async def test_openapi_includes_shell_endpoints(client):
     schema = (await client.get("/openapi.json")).json()
     assert "/health" in schema["paths"]

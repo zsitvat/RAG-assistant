@@ -16,14 +16,13 @@ settings, structured logging, request correlation, and a LangChain-compatible LL
   `LOG_LEVEL`); Langfuse credentials are optional so offline/dummy development needs no secrets.
   `Settings` reads `.env`; `.env.example` is the committed Compose-oriented template, while the
   ignored local `.env` selects dummy mode, loopback service URLs and disabled Langfuse.
-- **Logging** (`app/core/logging.py`): `configure_logging()` attaches one JSON formatter to a
+- **Logging** (`app/logging/config.py`): `configure_logging()` attaches one JSON formatter to a
   stdout handler and a stdlib `TimedRotatingFileHandler` (UTC midnight, `backupCount=7`) writing
   under `./logs` — the handler's own count-based retention is enough for a daily-rotating file, so
   no custom retention helper was needed. Uvicorn, FastAPI and Streamlit loggers are redirected
-  through the same handlers so framework logs share the format.
-- **Request correlation** (`app/core/observability.py`): `RequestContextMiddleware` reads or
-  generates `X-Request-ID`, binds it to a `contextvars.ContextVar` for the duration of the request
-  (consumed by the logging formatter), and echoes it back as a response header.
+  through the same handlers so framework logs share the format. There is no per-request
+  correlation id — an earlier `RequestContextMiddleware` binding an `X-Request-ID` into log lines
+  was removed as unneeded for this project's scale.
 - **Error handling**: no custom exception handler. FastAPI/Starlette's own default error shapes
   (404s, validation errors, unhandled exceptions) are used as-is, and unhandled exceptions are
   logged by Uvicorn's default error logging. `debug=False` (FastAPI's default) already guarantees
@@ -69,9 +68,8 @@ scanner and waits for the SonarQube Cloud quality gate.
 | `pyproject.toml`, `uv.lock` | dependency declarations and reproducible lock |
 | `Makefile` | local quality, Sonar and run commands |
 | `sonar-project.properties` | SonarQube Cloud project, scope, coverage and gate settings |
-| `app/core/config.py` | `Settings`, `get_settings()` |
-| `app/core/logging.py` | JSON logging, retention |
-| `app/core/observability.py` | request correlation middleware |
+| `app/settings.py` | `Settings`, `get_settings()` |
+| `app/logging/config.py` | JSON logging, retention |
 | `app/integrations/llm.py` | chat-model backend factory |
 | `app/dependencies.py` | FastAPI dependency providers |
 | `app/api/schemas.py` | `HealthResponse`, `ReadyResponse` |
