@@ -117,16 +117,94 @@ def test_commuting_full_time_uses_full_monthly_cap(calculator):
     assert result.warnings == []
 
 
-def test_commuting_hybrid_prorates_the_monthly_cap(calculator):
+def test_commuting_hybrid_scales_distance_by_office_days_not_the_cap(calculator):
     claim = ExpenseClaim(
         category="commuting", distance_km=15, distance_is_one_way=True, commute_days_per_month=10
     )
 
     result = calculator.calculate(claim)
 
-    assert result.cap_huf == 20000
     assert result.amount_huf == 9000
-    assert result.warnings
+    assert result.cap_huf == 40000
+    assert result.excess_huf == 0
+
+
+def test_commuting_reproduces_the_policy_worked_example(calculator):
+    claim = ExpenseClaim(
+        category="commuting", distance_km=18, distance_is_one_way=True, commute_days_per_month=10
+    )
+
+    result = calculator.calculate(claim)
+
+    assert result.amount_huf == 10800
+    assert result.cap_huf == 40000
+
+
+def test_commuting_vehicle_caps_at_the_flat_monthly_maximum(calculator):
+    claim = ExpenseClaim(
+        category="commuting", distance_km=60, distance_is_one_way=True, commute_days_per_month=20
+    )
+
+    result = calculator.calculate(claim)
+
+    assert result.amount_huf == 40000
+    assert result.cap_huf == 40000
+    assert result.excess_huf == 32000
+
+
+def test_commuting_pass_applies_the_reimbursement_ratio(calculator):
+    claim = ExpenseClaim(category="commuting", expense_type="pass", amount_huf=20000)
+
+    result = calculator.calculate(claim)
+
+    assert result.amount_huf == 16000
+    assert result.cap_huf == 30000
+    assert result.excess_huf == 0
+
+
+def test_commuting_pass_caps_at_the_monthly_maximum(calculator):
+    claim = ExpenseClaim(category="commuting", expense_type="pass", amount_huf=50000)
+
+    result = calculator.calculate(claim)
+
+    assert result.amount_huf == 30000
+    assert result.cap_huf == 30000
+    assert result.excess_huf == 10000
+
+
+def test_commuting_ticket_caps_by_daily_limit_times_office_days(calculator):
+    claim = ExpenseClaim(
+        category="commuting", expense_type="ticket", amount_huf=30000, commute_days_per_month=8
+    )
+
+    result = calculator.calculate(claim)
+
+    assert result.cap_huf == 24000
+    assert result.amount_huf == 24000
+    assert result.excess_huf == 0
+
+
+def test_commuting_ticket_below_the_daily_cap_applies_the_ratio(calculator):
+    claim = ExpenseClaim(
+        category="commuting", expense_type="ticket", amount_huf=10000, commute_days_per_month=8
+    )
+
+    result = calculator.calculate(claim)
+
+    assert result.amount_huf == 8000
+    assert result.cap_huf == 24000
+
+
+def test_mileage_uses_the_same_rate_for_every_powertrain(calculator):
+    electric = ExpenseClaim(
+        category="mileage", expense_type="electric", distance_km=250, distance_is_one_way=False
+    )
+    petrol = ExpenseClaim(
+        category="mileage", expense_type="petrol", distance_km=250, distance_is_one_way=False
+    )
+
+    assert calculator.calculate(electric).amount_huf == 11250
+    assert calculator.calculate(petrol).amount_huf == 11250
 
 
 def test_equipment_reimburses_the_full_amount(calculator):

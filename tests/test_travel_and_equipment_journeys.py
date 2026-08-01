@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from httpx2 import ASGITransport, AsyncClient
 from langchain_core.messages import AIMessage
 
+from app.agent.calculator import ReimbursementCalculator
 from app.agent.graph import build_agent_graph
 from app.agent.model import ExpenseClaim, IntentClassification
 from app.agent.nodes import AgentNodes
@@ -15,6 +16,7 @@ from app.rules.loader import load_rule_catalogue
 from tests.fakes import ScriptedChatModel, build_agent_tools, policy_document, tool_message
 
 CATALOGUE = load_rule_catalogue()
+CALCULATOR = ReimbursementCalculator(CATALOGUE)
 
 
 def test_domestic_accommodation_within_threshold_is_deterministically_approved():
@@ -70,7 +72,7 @@ def test_domestic_accommodation_within_threshold_is_deterministically_approved()
             ]
         ),
     )
-    nodes = AgentNodes(model, model, tools)
+    nodes = AgentNodes(model, model, tools, CALCULATOR)
     graph = build_agent_graph(nodes)
 
     result = graph.invoke(
@@ -152,7 +154,7 @@ def test_equipment_above_threshold_without_approval_is_rejected():
             ]
         ),
     )
-    nodes = AgentNodes(model, model, tools)
+    nodes = AgentNodes(model, model, tools, CALCULATOR)
     graph = build_agent_graph(nodes)
 
     result = graph.invoke(
@@ -218,7 +220,7 @@ async def test_travel_journey_is_exposed_through_the_chat_endpoint(monkeypatch):
             ]
         ),
     )
-    graph = build_agent_graph(AgentNodes(model, model, tools))
+    graph = build_agent_graph(AgentNodes(model, model, tools, CALCULATOR))
     test_app = FastAPI()
     test_app.include_router(router)
     service = AgentService(graph)

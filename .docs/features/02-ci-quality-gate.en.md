@@ -8,24 +8,24 @@ SonarQube Cloud and wait for its quality gate.
 
 ## How it works
 
-The workflow uses separate `ruff` and `pytest` jobs on Ubuntu with read-only repository permissions.
-Each job installs Python 3.12 and the pinned uv version through the official
-`astral-sh/setup-uv` action, restores uv's dependency cache, and installs exactly `uv.lock` with
-`uv sync --locked --dev`.
 
 The jobs execute these checks:
 
-1. The `ruff` job runs Ruff lint and format verification.
-2. The `pytest` job runs Bandit and pytest with terminal and XML coverage.
-3. The `pytest` job materialises `sonar-project.properties` from
+1. The `lint` job runs Ruff lint verification.
+2. The `format` job runs Ruff format verification.
+3. The `bandit` job runs the security scan.
+4. The `pytest` job runs the test suite with terminal and XML coverage, then uploads `coverage.xml`
+   as a short-lived artifact.
+5. After all quality jobs pass, the `sonar` job downloads the coverage artifact and materialises
+   `sonar-project.properties` from
    `sonar-project.properties.example`, substituting the
    `SONAR_ORGANIZATION`/`SONAR_PROJECT_KEY` repository variables.
-4. The `pytest` job runs the locked `pysonar` scanner using that generated configuration.
+6. The `sonar` job runs the locked `pysonar` scanner using that generated configuration.
 
 `LLM_BACKEND=dummy` and `LANGFUSE_ENABLED=false` keep CI independent of Ollama, Redis and Langfuse.
-The Sonar steps receive `SONAR_TOKEN`, `SONAR_ORGANIZATION` and `SONAR_PROJECT_KEY` only through
-their step environment; none of the three are committed to the repository. They run for pushes,
-workflow dispatches and pull requests whose source branch belongs to this repository, and are
+The Sonar job receives `SONAR_TOKEN`, `SONAR_ORGANIZATION` and `SONAR_PROJECT_KEY` only through
+its step environment; none of the three are committed to the repository. It runs for pushes,
+workflow dispatches and pull requests whose source branch belongs to this repository, and is
 skipped for fork pull requests because GitHub does not expose repository secrets/variables to them;
 lint, security and tests still run.
 

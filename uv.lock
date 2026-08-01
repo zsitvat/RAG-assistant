@@ -601,6 +601,21 @@ wheels = [
 ]
 
 [[package]]
+name = "langgraph-checkpoint-redis"
+version = "0.5.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "langgraph-checkpoint" },
+    { name = "orjson" },
+    { name = "redis" },
+    { name = "redisvl" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/52/81/8a578f048e8ae3ff79cdd223b98158c8b23e3efc640281f3986b03bc8779/langgraph_checkpoint_redis-0.5.1.tar.gz", hash = "sha256:ea3696f7b78ec8380949961cd9b9767c373437ec0c6fcc56dfbab3bde4d78ff4", size = 119869, upload-time = "2026-07-14T17:46:45.176Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4f/71/e968397941d24d013a833e894731a3dadd5022e6bf3650b898efddf10a5b/langgraph_checkpoint_redis-0.5.1-py3-none-any.whl", hash = "sha256:9c9b1184fb98991d49ebed6a7b81ff05f2e994ee7d695bfb91410a9a512c178c", size = 131688, upload-time = "2026-07-14T17:46:43.723Z" },
+]
+
+[[package]]
 name = "langgraph-prebuilt"
 version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1144,6 +1159,7 @@ dependencies = [
     { name = "langchain-redis" },
     { name = "langchain-text-splitters" },
     { name = "langgraph" },
+    { name = "langgraph-checkpoint-redis" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-docx" },
@@ -1177,6 +1193,7 @@ requires-dist = [
     { name = "langchain-redis", specifier = "==0.2.5" },
     { name = "langchain-text-splitters", specifier = "==1.1.2" },
     { name = "langgraph", specifier = "==1.2.10" },
+    { name = "langgraph-checkpoint-redis", specifier = ">=0.5.1" },
     { name = "pydantic", specifier = "==2.13.4" },
     { name = "pydantic-settings", specifier = "==2.14.2" },
     { name = "python-docx", specifier = "==1.2.0" },

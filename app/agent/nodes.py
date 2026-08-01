@@ -5,9 +5,11 @@ from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 
+from app.agent.calculator import CalculationInputError, ReimbursementCalculator
 from app.agent.current_request import CurrentRequest
 from app.agent.messages import (
     CLARIFICATION_QUESTIONS,
+    CONDITIONAL_DISTANCE_ANSWER,
     DEFAULT_CLARIFICATION_QUESTION,
     INCOMPLETE_EVIDENCE_NOTE,
     LLM_UNAVAILABLE_MESSAGE,
@@ -27,6 +29,8 @@ from app.agent.structured import StructuredOutputRunner
 
 logger = logging.getLogger(__name__)
 
+DISTANCE_DIRECTION_SLOT = "distance_is_one_way"
+
 
 class AgentNodes:
     """Implements the LangGraph node callbacks that drive the agent's conversation flow."""
@@ -36,9 +40,11 @@ class AgentNodes:
         structured_chat_model: BaseChatModel,
         response_chat_model: BaseChatModel,
         tools: list[BaseTool],
+        calculator: ReimbursementCalculator,
     ) -> None:
-        """Stores the chat models and tools used by the graph nodes."""
+        """Stores the chat models, tools and calculator used by the graph nodes."""
         self._tools = tools
+        self._calculator = calculator
         self._agent_step_model = structured_chat_model
         self._response_model = response_chat_model
         self._classify_runner = StructuredOutputRunner(
@@ -87,10 +93,31 @@ class AgentNodes:
         return "ask_clarification" if missing else "agent_step"
 
     def ask_clarification(self, state: AgentState) -> AgentState:
-        """Asks the user for the next missing required slot."""
+        """Asks for the next missing slot, or answers conditionally if it was already asked."""
         missing = self._slot_table.missing(state["intent"], state.get("category"), state["claim"])
         question = CLARIFICATION_QUESTIONS.get(missing[0], DEFAULT_CLARIFICATION_QUESTION)
+        if CurrentRequest(state["messages"]).was_already_asked(question):
+            conditional = self._conditional_distance_answer(state, missing)
+            if conditional is not None:
+                return conditional
         return {"messages": [AIMessage(content=question)], "decision": "needs_info"}
+
+    def _conditional_distance_answer(
+        self, state: AgentState, missing: list[str]
+    ) -> AgentState | None:
+        """Answers with both distance readings once the user has declined to disambiguate."""
+        if missing != [DISTANCE_DIRECTION_SLOT]:
+            return None
+        try:
+            outcomes = self._calculator.calculate_both_directions(state["claim"])
+        except CalculationInputError:
+            logger.warning("cannot resolve the distance ambiguity from the current claim")
+            return None
+        answer = CONDITIONAL_DISTANCE_ANSWER.format(
+            one_way=outcomes[True].compact_summary(),
+            round_trip=outcomes[False].compact_summary(),
+        )
+        return {"messages": [AIMessage(content=answer)], "decision": "needs_info"}
 
     def agent_step(self, state: AgentState) -> AgentState:
         """Invokes the tool-calling model for one reasoning step, reusing duplicate calls."""

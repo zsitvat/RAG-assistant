@@ -42,6 +42,12 @@ NO_TOOL_ARTIFACT_MESSAGE = (
 LLM_UNAVAILABLE_MESSAGE = (
     "The language model is currently unreachable, even after retrying. Please try again shortly."
 )
+CONDITIONAL_DISTANCE_ANSWER = (
+    "You have not told me whether that distance is one-way or a round trip, so here is both:\n"
+    "- if it is one-way (the return journey is counted): {one_way}\n"
+    "- if it is already the round-trip distance: {round_trip}\n"
+    "Tell me which one applies and I can confirm a single amount."
+)
 INCOMPLETE_EVIDENCE_NOTE = (
     "\n\n(Note: I stopped gathering evidence after the maximum number of policy lookups for this "
     "request, so this answer may be based on incomplete information.)"

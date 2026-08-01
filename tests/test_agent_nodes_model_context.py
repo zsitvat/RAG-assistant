@@ -1,8 +1,12 @@
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
+from app.agent.calculator import ReimbursementCalculator
 from app.agent.model import ExpenseClaim, IntentClassification
 from app.agent.nodes import AgentNodes
+from app.rules.loader import load_rule_catalogue
 from tests.fakes import ScriptedChatModel
+
+CALCULATOR = ReimbursementCalculator(load_rule_catalogue())
 
 
 def _old_request():
@@ -22,7 +26,7 @@ def test_classify_intent_sends_the_model_only_the_filtered_context():
         chat_responses=iter([]),
         structured_responses=iter([IntentClassification(intent="policy_question")]),
     )
-    nodes = AgentNodes(model, model, [])
+    nodes = AgentNodes(model, model, [], CALCULATOR)
 
     nodes.classify_intent(
         {"messages": [old_human, old_tool_call, old_tool_message, old_final_answer, current_human]}
@@ -36,7 +40,7 @@ def test_extract_information_sends_the_model_only_the_filtered_context():
     old_human, old_tool_call, old_tool_message, old_final_answer = _old_request()
     current_human = HumanMessage(content="new question")
     model = ScriptedChatModel(chat_responses=iter([]), structured_responses=iter([ExpenseClaim()]))
-    nodes = AgentNodes(model, model, [])
+    nodes = AgentNodes(model, model, [], CALCULATOR)
 
     nodes.extract_information(
         {"messages": [old_human, old_tool_call, old_tool_message, old_final_answer, current_human]}
@@ -50,7 +54,7 @@ def test_agent_step_sends_the_model_only_the_filtered_context():
     old_human, old_tool_call, old_tool_message, old_final_answer = _old_request()
     current_human = HumanMessage(content="new question")
     model = ScriptedChatModel(chat_responses=iter([AIMessage(content="")]))
-    nodes = AgentNodes(model, model, [])
+    nodes = AgentNodes(model, model, [], CALCULATOR)
 
     nodes.agent_step(
         {"messages": [old_human, old_tool_call, old_tool_message, old_final_answer, current_human]}
@@ -73,7 +77,7 @@ def test_generate_response_sends_the_model_only_the_filtered_context():
         content="found again", tool_call_id="2", name="search_policies"
     )
     model = ScriptedChatModel(chat_responses=iter([AIMessage(content="Final answer.")]))
-    nodes = AgentNodes(model, model, [])
+    nodes = AgentNodes(model, model, [], CALCULATOR)
 
     nodes.generate_response(
         {

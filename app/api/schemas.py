@@ -53,3 +53,10 @@ class ChatResponse(BaseModel):
     decision: Decision | None
     sources: list[ChatSource]
     steps: list[str]
+
+
+class ThreadResetResponse(BaseModel):
+    """Confirms that a conversation thread's stored state was deleted."""
+
+    thread_id: str
+    reset: bool = True

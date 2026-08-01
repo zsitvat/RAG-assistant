@@ -2,6 +2,7 @@ from datetime import date
 
 from langchain_core.messages import AIMessage
 
+from app.agent.calculator import ReimbursementCalculator
 from app.agent.graph import build_agent_graph
 from app.agent.model import ExpenseClaim, IntentClassification
 from app.agent.nodes import AgentNodes
@@ -15,6 +16,7 @@ from tests.fakes import (
 )
 
 CATALOGUE = load_rule_catalogue()
+CALCULATOR = ReimbursementCalculator(CATALOGUE)
 
 
 def test_recreational_benefit_claim_produces_the_expected_reimbursement_and_decision():
@@ -69,7 +71,7 @@ def test_recreational_benefit_claim_produces_the_expected_reimbursement_and_deci
             ]
         ),
     )
-    nodes = AgentNodes(model, model, tools)
+    nodes = AgentNodes(model, model, tools, CALCULATOR)
     graph = build_agent_graph(nodes)
 
     result = graph.invoke(
@@ -138,7 +140,7 @@ def test_deadline_question_uses_only_search_and_check_rules_no_calculation():
             ]
         ),
     )
-    nodes = AgentNodes(model, model, tools)
+    nodes = AgentNodes(model, model, tools, CALCULATOR)
     graph = build_agent_graph(nodes)
 
     result = graph.invoke(
@@ -197,7 +199,7 @@ def test_document_question_uses_only_search_and_check_rules():
             ]
         ),
     )
-    graph = build_agent_graph(AgentNodes(model, model, tools))
+    graph = build_agent_graph(AgentNodes(model, model, tools, CALCULATOR))
 
     result = graph.invoke(
         {"messages": [("human", "Which documents do I need for a travel claim?")]},

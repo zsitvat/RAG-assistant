@@ -18,7 +18,9 @@ _REQUIRED_SLOTS: dict[tuple[Intent, Category | None], list[str]] = {
     ],
     ("expense_check", "equipment"): ["amount_huf", "is_business_related"],
     ("calculation", "mileage"): ["distance_km", "distance_is_one_way"],
-    ("calculation", "commuting"): ["distance_km", "distance_is_one_way", "commute_days_per_month"],
+    ("expense_check", "mileage"): ["distance_km", "distance_is_one_way"],
+    ("calculation", "commuting"): ["expense_type"],
+    ("expense_check", "commuting"): ["expense_type"],
     ("expense_check", "benefits"): [
         "expense_type",
         "amount_huf",
@@ -28,6 +30,12 @@ _REQUIRED_SLOTS: dict[tuple[Intent, Category | None], list[str]] = {
     ("deadline_check", None): ["expense_date"],
 }
 
+_COMMUTING_MODE_SLOTS: dict[str, list[str]] = {
+    "pass": ["amount_huf"],
+    "ticket": ["amount_huf", "commute_days_per_month"],
+}
+_COMMUTING_VEHICLE_SLOTS = ["distance_km", "distance_is_one_way", "commute_days_per_month"]
+
 
 class RequiredSlotTable:
     """Looks up the required slots for an (intent, category) pair and reports which are missing."""
@@ -35,4 +43,13 @@ class RequiredSlotTable:
     def missing(self, intent: Intent, category: Category | None, claim: ExpenseClaim) -> list[str]:
         """Returns the required slot names that are still unset on the claim."""
         required = _REQUIRED_SLOTS.get((intent, category), _REQUIRED_SLOTS.get((intent, None), []))
+        if category == "commuting":
+            required = required + self._commuting_mode_slots(claim.expense_type)
         return [slot for slot in required if getattr(claim, slot, None) is None]
+
+    @staticmethod
+    def _commuting_mode_slots(expense_type: str | None) -> list[str]:
+        """Returns the slots the declared commuting transport mode needs."""
+        if expense_type is None:
+            return []
+        return _COMMUTING_MODE_SLOTS.get(expense_type, _COMMUTING_VEHICLE_SLOTS)

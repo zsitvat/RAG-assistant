@@ -5,12 +5,14 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import Request
 from langchain_redis import RedisVectorStore
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from app.agent.service import AgentService
 from app.core.config import Settings
 from app.dependencies import (
     ApplicationDependencies,
     get_agent_service,
+    get_checkpointer,
     get_redis_index,
     get_rule_catalogue,
     get_settings,
@@ -26,6 +28,7 @@ def test_providers_read_the_typed_application_container():
         rule_catalogue=MagicMock(spec=RuleCatalogue),
         redis_index=MagicMock(spec=RedisIndex),
         vector_store=MagicMock(spec=RedisVectorStore),
+        checkpointer=MagicMock(spec=BaseCheckpointSaver),
         agent_service=MagicMock(spec=AgentService),
     )
     request = cast(
@@ -37,6 +40,7 @@ def test_providers_read_the_typed_application_container():
     assert get_rule_catalogue(request) is dependencies.rule_catalogue
     assert get_redis_index(request) is dependencies.redis_index
     assert get_vector_store(request) is dependencies.vector_store
+    assert get_checkpointer(request) is dependencies.checkpointer
     assert get_agent_service(request) is dependencies.agent_service
 
 

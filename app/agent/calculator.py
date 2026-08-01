@@ -3,7 +3,8 @@ import math
 from app.agent.model import CalculationResult, ExpenseClaim
 from app.rules.model import Category, RuleCatalogue, RuleDefinition
 
-HYBRID_WORK_FULL_TIME_DAYS = 20
+COMMUTING_TRANSIT_CARD = "pass"
+COMMUTING_TICKET = "ticket"
 
 
 class CalculationInputError(RuntimeError):
@@ -43,6 +44,14 @@ class ReimbursementCalculator:
             )
         return handler(claim)
 
+    def calculate_both_directions(self, claim: ExpenseClaim) -> dict[bool, CalculationResult]:
+        """Calculates the result for both the one-way and round-trip reading of the distance."""
+
+        return {
+            one_way: self.calculate(claim.model_copy(update={"distance_is_one_way": one_way}))
+            for one_way in (True, False)
+        }
+
     def _rules_for(self, category: Category) -> list[RuleDefinition]:
         """Returns the rules configured for a category."""
 
@@ -55,6 +64,18 @@ class ReimbursementCalculator:
             (rule for rule in self._rules_for("meal") if rule.limit_per_person_huf is not None),
             None,
         )
+
+    def _first_rule_with(self, category: Category, field_name: str) -> RuleDefinition:
+        """Returns the first rule in the category with a value for field_name, or raises."""
+
+        rule = next(
+            (r for r in self._rules_for(category) if getattr(r, field_name) is not None), None
+        )
+        if rule is None:
+            raise CalculationInputError(
+                f"no {field_name} configured for category {category!r} in the rule catalogue"
+            )
+        return rule
 
     @staticmethod
     def _require(claim: ExpenseClaim, *fields: str) -> None:
@@ -135,33 +156,53 @@ class ReimbursementCalculator:
         return CalculationResult(amount_huf=_round_half_up(amount))
 
     def _calculate_commuting(self, claim: ExpenseClaim) -> CalculationResult:
-        """Calculates min(monthly round-trip distance * rate, prorated monthly cap)."""
+        """Dispatches to the pass, ticket or personal-vehicle commuting calculation."""
+
+        if claim.expense_type == COMMUTING_TRANSIT_CARD:
+            return self._calculate_commuting_pass(claim)
+        if claim.expense_type == COMMUTING_TICKET:
+            return self._calculate_commuting_ticket(claim)
+        return self._calculate_commuting_vehicle(claim)
+
+    def _calculate_commuting_vehicle(self, claim: ExpenseClaim) -> CalculationResult:
+        """Calculates min(office-day round-trip distance * rate, flat monthly cap)."""
 
         self._require(claim, "distance_km", "distance_is_one_way", "commute_days_per_month")
-        rate_rule = next(
-            r
-            for r in self._rules_for("commuting")
-            if r.rate_huf_per_km is not None and r.monthly_cap_huf is not None
-        )
+        rule = self._first_rule_with("commuting", "rate_huf_per_km")
         km_per_day = claim.distance_km * (2 if claim.distance_is_one_way else 1)
         monthly_km = km_per_day * claim.commute_days_per_month
-        raw_amount = monthly_km * rate_rule.rate_huf_per_km
-        effective_cap = rate_rule.monthly_cap_huf * (
-            min(claim.commute_days_per_month, HYBRID_WORK_FULL_TIME_DAYS)
-            / HYBRID_WORK_FULL_TIME_DAYS
-        )
-        reimbursable = min(raw_amount, effective_cap)
-        warnings = []
-        if claim.commute_days_per_month < HYBRID_WORK_FULL_TIME_DAYS:
-            warnings.append(
-                f"monthly cap pro-rated to {_round_half_up(effective_cap)} HUF for "
-                f"{claim.commute_days_per_month} hybrid-work days/month"
-            )
+        raw_amount = monthly_km * rule.rate_huf_per_km
+        cap = rule.monthly_cap_huf
         return CalculationResult(
-            amount_huf=_round_half_up(reimbursable),
-            cap_huf=_round_half_up(effective_cap),
-            excess_huf=_round_half_up(max(0.0, raw_amount - effective_cap)),
-            warnings=warnings,
+            amount_huf=_round_half_up(min(raw_amount, cap)),
+            cap_huf=cap,
+            excess_huf=_round_half_up(max(0.0, raw_amount - cap)),
+        )
+
+    def _calculate_commuting_pass(self, claim: ExpenseClaim) -> CalculationResult:
+        """Calculates min(pass price * reimbursement ratio, monthly cap)."""
+
+        self._require(claim, "amount_huf")
+        rule = self._first_rule_with("commuting", "pass_reimbursement_ratio")
+        raw_amount = claim.amount_huf * rule.pass_reimbursement_ratio
+        cap = rule.monthly_cap_huf
+        return CalculationResult(
+            amount_huf=_round_half_up(min(raw_amount, cap)),
+            cap_huf=cap,
+            excess_huf=_round_half_up(max(0.0, raw_amount - cap)),
+        )
+
+    def _calculate_commuting_ticket(self, claim: ExpenseClaim) -> CalculationResult:
+        """Calculates min(ticket spend * reimbursement ratio, daily cap * office days)."""
+
+        self._require(claim, "amount_huf", "commute_days_per_month")
+        rule = self._first_rule_with("commuting", "ticket_reimbursement_ratio")
+        raw_amount = claim.amount_huf * rule.ticket_reimbursement_ratio
+        cap = rule.daily_cap_huf * claim.commute_days_per_month
+        return CalculationResult(
+            amount_huf=_round_half_up(min(raw_amount, cap)),
+            cap_huf=cap,
+            excess_huf=_round_half_up(max(0.0, raw_amount - cap)),
         )
 
     def _calculate_equipment(self, claim: ExpenseClaim) -> CalculationResult:

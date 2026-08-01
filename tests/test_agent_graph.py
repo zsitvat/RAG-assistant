@@ -1,12 +1,16 @@
 from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
 
+from app.agent.calculator import ReimbursementCalculator
 from app.agent.graph import build_agent_graph
 from app.agent.messages import LLM_UNAVAILABLE_MESSAGE, OUT_OF_SCOPE_MESSAGE
 from app.agent.model import ExpenseClaim, IntentClassification
 from app.agent.nodes import AgentNodes
 from app.agent.state import MAX_AGENT_STEPS
+from app.rules.loader import load_rule_catalogue
 from tests.fakes import ScriptedChatModel
+
+CALCULATOR = ReimbursementCalculator(load_rule_catalogue())
 
 
 class _AlwaysFailingChatModel(ScriptedChatModel):
@@ -36,7 +40,7 @@ def _make_failing_tool(name: str = "failing_tool"):
 
 
 def _invoke(model, tools, messages, config=None):
-    nodes = AgentNodes(model, model, tools)
+    nodes = AgentNodes(model, model, tools, CALCULATOR)
     graph = build_agent_graph(nodes)
     return graph.invoke(
         {"messages": messages},
@@ -116,7 +120,7 @@ def test_clarification_answer_merges_into_the_pending_claim():
             ]
         ),
     )
-    nodes = AgentNodes(model, model, [])
+    nodes = AgentNodes(model, model, [], CALCULATOR)
     graph = build_agent_graph(nodes)
     config = {"configurable": {"thread_id": "t2"}, "recursion_limit": 20}
 

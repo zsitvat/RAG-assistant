@@ -3,6 +3,7 @@ from datetime import date
 
 from fastapi import Request
 from langchain_redis import RedisVectorStore
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from app.agent.calculator import ReimbursementCalculator
 from app.agent.deadline import DeadlineChecker
@@ -12,6 +13,7 @@ from app.agent.rule_checker import RuleChecker
 from app.agent.service import AgentService
 from app.agent.tools import build_tools
 from app.core.config import Settings
+from app.integrations.checkpointer import build_checkpointer
 from app.integrations.llm import build_chat_model
 from app.integrations.redis import RedisIndex
 from app.rag.graph import build_rag_graph
@@ -29,6 +31,7 @@ class ApplicationDependencies:
     rule_catalogue: RuleCatalogue
     redis_index: RedisIndex | None
     vector_store: RedisVectorStore | None
+    checkpointer: BaseCheckpointSaver
     agent_service: AgentService
 
     @staticmethod
@@ -62,13 +65,16 @@ class ApplicationDependencies:
             chat_model.bind(temperature=0),
             chat_model.bind(temperature=0),
             tools,
+            calculator,
         )
+        checkpointer = build_checkpointer(settings.redis_url)
         return ApplicationDependencies(
             settings=settings,
             rule_catalogue=rule_catalogue,
             redis_index=redis_index,
             vector_store=vector_store,
-            agent_service=AgentService(build_agent_graph(nodes)),
+            checkpointer=checkpointer,
+            agent_service=AgentService(build_agent_graph(nodes, checkpointer)),
         )
 
     @staticmethod
@@ -106,3 +112,9 @@ def get_agent_service(request: Request) -> AgentService:
     """Provides the agent service."""
 
     return ApplicationDependencies.from_request(request).agent_service
+
+
+def get_checkpointer(request: Request) -> BaseCheckpointSaver:
+    """Provides the conversation checkpointer."""
+
+    return ApplicationDependencies.from_request(request).checkpointer

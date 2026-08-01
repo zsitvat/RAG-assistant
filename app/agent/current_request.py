@@ -15,6 +15,13 @@ class CurrentRequest:
                 return self._messages[index:]
         return list(self._messages)
 
+    def was_already_asked(self, question: str) -> bool:
+        """Reports whether the assistant already asked this exact question earlier in the thread."""
+        return any(
+            isinstance(message, AIMessage) and message.content == question
+            for message in self._messages[:-1]
+        )
+
     def agent_step_count(self) -> int:
         """Counts the agent tool-calling steps taken so far in the current request."""
         return sum(

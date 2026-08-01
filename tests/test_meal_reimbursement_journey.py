@@ -1,5 +1,6 @@
 from langchain_core.messages import AIMessage
 
+from app.agent.calculator import ReimbursementCalculator
 from app.agent.graph import build_agent_graph
 from app.agent.model import ExpenseClaim, IntentClassification
 from app.agent.nodes import AgentNodes
@@ -7,6 +8,7 @@ from app.rules.loader import load_rule_catalogue
 from tests.fakes import ScriptedChatModel, build_agent_tools, policy_document, tool_message
 
 CATALOGUE = load_rule_catalogue()
+CALCULATOR = ReimbursementCalculator(CATALOGUE)
 
 
 def test_reference_dinner_example_produces_the_expected_reimbursement_and_citations():
@@ -59,7 +61,7 @@ def test_reference_dinner_example_produces_the_expected_reimbursement_and_citati
             ]
         ),
     )
-    nodes = AgentNodes(model, model, tools)
+    nodes = AgentNodes(model, model, tools, CALCULATOR)
     graph = build_agent_graph(nodes)
 
     result = graph.invoke(

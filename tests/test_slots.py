@@ -51,12 +51,36 @@ def test_benefits_requires_the_benefit_type():
 
 
 def test_commuting_treats_ambiguous_direction_as_missing():
-    claim = ExpenseClaim(distance_km=10, commute_days_per_month=20)
+    claim = ExpenseClaim(expense_type="own_car", distance_km=10, commute_days_per_month=20)
 
     missing = TABLE.missing("calculation", "commuting", claim)
 
     assert missing == ["distance_is_one_way"]
 
 
+def test_commuting_asks_for_the_transport_mode_first():
+    missing = TABLE.missing("calculation", "commuting", ExpenseClaim())
+
+    assert missing == ["expense_type"]
+
+
+def test_commuting_pass_only_needs_the_purchase_price():
+    missing = TABLE.missing("calculation", "commuting", ExpenseClaim(expense_type="pass"))
+
+    assert missing == ["amount_huf"]
+
+
+def test_commuting_ticket_needs_price_and_office_days():
+    missing = TABLE.missing("calculation", "commuting", ExpenseClaim(expense_type="ticket"))
+
+    assert missing == ["amount_huf", "commute_days_per_month"]
+
+
+def test_commuting_vehicle_needs_the_distance_facts():
+    missing = TABLE.missing("calculation", "commuting", ExpenseClaim(expense_type="own_car"))
+
+    assert missing == ["distance_km", "distance_is_one_way", "commute_days_per_month"]
+
+
 def test_unmapped_intent_category_has_no_required_slots():
-    assert TABLE.missing("expense_check", "commuting", ExpenseClaim()) == []
+    assert TABLE.missing("calculation", "meal", ExpenseClaim()) == []
