@@ -7,7 +7,7 @@ from app.integrations.redis import RedisIndex
 from app.rag.graph import build_rag_graph
 from app.rag.index_schema import MIN_CONFIDENCE_THRESHOLD
 from app.rag.ingest import PolicyCorpusIngestor
-from app.rag.retriever import PolicyRetriever
+from app.rag.retriever import Retriever
 from app.rag.store import build_embeddings, build_vector_store
 from app.rules.loader import load_rule_catalogue
 
@@ -125,7 +125,7 @@ def test_rag_graph_returns_grounded_evidence_for_each_category(
     redis_index, vector_store, category, question
 ):
     PolicyCorpusIngestor().run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
-    graph = build_rag_graph(PolicyRetriever(vector_store))
+    graph = build_rag_graph(Retriever(vector_store))
 
     result = graph.invoke({"question": question, "category": category})["result"]
 
@@ -137,7 +137,7 @@ def test_rag_graph_returns_grounded_evidence_for_each_category(
 
 def test_rag_graph_flags_low_confidence_for_an_irrelevant_question(redis_index, vector_store):
     PolicyCorpusIngestor().run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
-    graph = build_rag_graph(PolicyRetriever(vector_store))
+    graph = build_rag_graph(Retriever(vector_store))
 
     result = graph.invoke({"question": "what is the weather like on mars today", "category": None})[
         "result"

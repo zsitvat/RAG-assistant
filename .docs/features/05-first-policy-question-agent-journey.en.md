@@ -145,10 +145,10 @@ thin transport wrapper, running the synchronous call via `run_in_threadpool`.
 
 `ApplicationDependencies.build(settings)` constructs everything once at startup: the chat model
 bound at two temperatures (`0` for classification/extraction/tool-selection, `0.2` for the final
-answer), the calculator and rule checker from the loaded `RuleCatalogue`, the RAG graph (using
-`NullPolicyRetriever` in place of `PolicyRetriever` when Redis is unreachable, so the agent graph —
-and thus the whole app — still constructs and runs), the three tools, `AgentNodes`, and the compiled
-agent graph wrapped in `AgentService`. `app/main.py`'s lifespan calls only
+answer), the calculator and rule checker from the loaded `RuleCatalogue`, the RAG graph (built from
+a `Retriever`), the three tools, `AgentNodes`, and the compiled agent graph wrapped in
+`AgentService`. If Redis is unreachable, `build()` raises rather than degrading, since the agent
+graph has no way to serve grounded answers without it. `app/main.py`'s lifespan calls only
 `ApplicationDependencies.build()`.
 
 ## How to use

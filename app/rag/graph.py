@@ -4,7 +4,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from app.rag.index_schema import CONTEXT_TOKEN_BUDGET
 from app.rag.model import Citation, RagResult, RetrievedResult
-from app.rag.retriever import PolicyRetriever
+from app.rag.retriever import Retriever
 from app.rag.state import RagState
 
 CHARS_PER_TOKEN = 4
@@ -13,7 +13,7 @@ CHARS_PER_TOKEN = 4
 class RagNodes:
     """The subgraph's two nodes, bound to an injected retriever."""
 
-    def __init__(self, retriever: PolicyRetriever) -> None:
+    def __init__(self, retriever: Retriever) -> None:
         """Stores the policy retriever used to search documents."""
         self._retriever = retriever
 
@@ -86,7 +86,7 @@ class RagNodes:
         return "\n\n".join(blocks), citations
 
 
-def build_rag_graph(retriever: PolicyRetriever) -> CompiledStateGraph:
+def build_rag_graph(retriever: Retriever) -> CompiledStateGraph:
     """Compiles the standalone retrieve_documents -> build_context RAG subgraph."""
 
     nodes = RagNodes(retriever)

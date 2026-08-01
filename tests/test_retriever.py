@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 from langchain_core.documents import Document
 from langchain_redis import RedisVectorStore
 
-from app.rag.retriever import PolicyRetriever
+from app.rag.retriever import Retriever
 
 
 def _vector_store_returning(*doc_and_distance):
@@ -13,17 +13,17 @@ def _vector_store_returning(*doc_and_distance):
 
 
 def test_filter_expression_includes_category_and_general():
-    assert PolicyRetriever._filter_expression("meal") == "@categories:{meal|general}"
+    assert Retriever._filter_expression("meal") == "@categories:{meal|general}"
 
 
 def test_filter_expression_is_none_without_a_category():
-    assert PolicyRetriever._filter_expression(None) is None
+    assert Retriever._filter_expression(None) is None
 
 
 def test_search_converts_distance_to_similarity():
     doc = Document(page_content="x", metadata={})
     vector_store = _vector_store_returning((doc, 0.1))
-    retriever = PolicyRetriever(vector_store)
+    retriever = Retriever(vector_store)
 
     results = retriever.search("question", None)
 
@@ -32,7 +32,7 @@ def test_search_converts_distance_to_similarity():
 
 def test_search_passes_k_and_filter_to_the_vector_store():
     vector_store = _vector_store_returning()
-    retriever = PolicyRetriever(vector_store, k=3)
+    retriever = Retriever(vector_store, k=3)
 
     retriever.search("question", "mileage")
 

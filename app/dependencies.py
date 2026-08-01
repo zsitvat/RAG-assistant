@@ -16,7 +16,7 @@ from app.integrations.llm import build_chat_model
 from app.integrations.redis import RedisIndex
 from app.rag.graph import build_rag_graph
 from app.rag.ingest import connect_and_ingest
-from app.rag.retriever import NullPolicyRetriever, PolicyRetriever
+from app.rag.retriever import Retriever
 from app.rules.loader import get_rule_catalogue as load_rule_catalogue
 from app.rules.model import RuleCatalogue
 
@@ -43,11 +43,11 @@ class ApplicationDependencies:
 
         # Redis
         redis_index, vector_store = connect_and_ingest(settings, rule_catalogue)
+        if vector_store is None:
+            raise RuntimeError("Redis is unreachable; cannot build the policy retriever")
 
         # Retriever and RAG graph
-        retriever = (
-            PolicyRetriever(vector_store) if vector_store is not None else NullPolicyRetriever()
-        )
+        retriever = Retriever(vector_store)
         rag_graph = build_rag_graph(retriever)
 
         # Policy tools

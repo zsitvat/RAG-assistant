@@ -5,7 +5,7 @@ from app.rag.index_schema import TOP_K
 from app.rules.model import Category
 
 
-class PolicyRetriever:
+class Retriever:
     """Wraps the policy vector store; the category filter is chosen per search call."""
 
     def __init__(self, vector_store: RedisVectorStore, k: int = TOP_K) -> None:
@@ -30,11 +30,3 @@ class PolicyRetriever:
     def _with_similarity(doc: Document, distance: float) -> Document:
         doc.metadata["similarity"] = 1.0 - distance
         return doc
-
-
-class NullPolicyRetriever:
-    """Used when Redis is unreachable at startup; every search returns no results."""
-
-    def search(self, query: str, category: Category | None) -> list[Document]:
-        """Always returns no results."""
-        return []

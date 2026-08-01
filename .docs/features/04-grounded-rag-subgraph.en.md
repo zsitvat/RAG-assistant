@@ -15,7 +15,7 @@ independently of the main agent and exposed to it as a `search_policies` LangCha
 
 `RagState` is a `TypedDict` with three keys: `question` and `category` in, `result: RagResult` out.
 It lives separately from graph construction and node behaviour. `RagNodes` holds the injected
-`PolicyRetriever` and provides the two nodes:
+`Retriever` and provides the two nodes:
 
 - **`retrieve_documents`** calls `retriever.search(question, category)`. If the category filter
   returns nothing, it retries once with `retriever.search(question, None)` (unfiltered) and the
@@ -34,7 +34,7 @@ or Redis work — the retriever is only called when a node runs.
 
 ### Retrieval (`app/rag/retriever.py`)
 
-`PolicyRetriever` wraps a `RedisVectorStore` and exposes one method, `search(query, category)`. It
+`Retriever` wraps a `RedisVectorStore` and exposes one method, `search(query, category)`. It
 calls `similarity_search_with_score(query, k=TOP_K, filter=...)` and converts the raw cosine
 **distance** each result carries into `similarity = 1 - distance`, stored in
 `Document.metadata["similarity"]`. `similarity_search_with_relevance_scores()` is not usable here —
@@ -43,7 +43,7 @@ so this conversion is done directly rather than relying on that LangChain conven
 category filter, built fresh on every call, is `@categories:{<category>|general}` (RediSearch TAG
 OR-syntax) when a category is given, matching chunks tagged with either the active category or
 `general`; without a category, no filter is applied. The category is a search-time argument rather
-than construction state, so one `PolicyRetriever` instance (injected into `build_rag_graph`) serves
+than construction state, so one `Retriever` instance (injected into `build_rag_graph`) serves
 every category — tests supply a fake with the same `search(query, category)` shape, and only the
 real Redis integration constructs the genuine one.
 
@@ -80,10 +80,10 @@ without re-parsing the content string.
 
 ```python
 from app.rag.graph import build_rag_graph
-from app.rag.retriever import PolicyRetriever
+from app.rag.retriever import Retriever
 from app.rag.tool import build_search_policies_tool
 
-graph = build_rag_graph(PolicyRetriever(vector_store))
+graph = build_rag_graph(Retriever(vector_store))
 result = graph.invoke({"question": "how much can I claim for a business meal?", "category": "meal"})["result"]
 print(result.context, result.citations, result.confidence)
 
@@ -96,7 +96,7 @@ search_policies = build_search_policies_tool(graph)
 | --- | --- |
 | `app/rag/state.py` | `RagState` LangGraph state contract |
 | `app/rag/graph.py` | `RagNodes`, `build_rag_graph` |
-| `app/rag/retriever.py` | `PolicyRetriever` |
+| `app/rag/retriever.py` | `Retriever` |
 | `app/rag/tool.py` | `build_search_policies_tool` (`search_policies`) |
 | `app/rag/model.py` | `RetrievedResult`, `Citation`, `RagResult` |
 | `app/rag/index_schema.py` | `MIN_CONFIDENCE_THRESHOLD`, `CONTEXT_TOKEN_BUDGET` (alongside `TOP_K`) |
