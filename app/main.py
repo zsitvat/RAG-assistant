@@ -8,7 +8,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import router
 from app.dependencies import ApplicationDependencies
 from app.logging.config import configure_logging
-from app.logging.middleware import RequestContextMiddleware
 from app.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -34,7 +33,6 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["*"],
     )
-    app.add_middleware(RequestContextMiddleware)
     app.include_router(router)
     return app
 

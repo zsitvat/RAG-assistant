@@ -9,7 +9,6 @@ from app.agent.current_request import CurrentRequest
 from app.agent.state import RECURSION_LIMIT
 from app.api.schemas import ChatResponse, ChatSource, StreamEvent
 from app.integrations.langfuse import Observability
-from app.logging.config import request_id_var
 from app.rag.model import RagResult
 
 STEP_LABELS = {
@@ -77,7 +76,7 @@ class AgentService:
     def _config(self, thread_id: str) -> dict:
         """Builds the graph config, attaching one Langfuse trace per turn when enabled."""
         config = {"configurable": {"thread_id": thread_id}, "recursion_limit": RECURSION_LIMIT}
-        return config | self._observability.trace_config(thread_id, request_id_var.get())
+        return config | self._observability.trace_config(thread_id)
 
     def _project(self, thread_id: str, state: dict, start: float) -> ChatResponse:
         """Builds the public reply from final graph state, shared by both endpoints."""

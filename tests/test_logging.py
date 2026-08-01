@@ -3,21 +3,16 @@ import logging
 
 import pytest
 
-from app.logging.config import configure_logging, request_id_var
+from app.logging.config import configure_logging
 
 
-def test_configure_logging_writes_json_with_correlation_fields(tmp_path, capsys):
+def test_configure_logging_writes_json_lines(tmp_path, capsys):
     configure_logging(service="test-service", log_level="INFO", log_dir=tmp_path)
-    token = request_id_var.set("req-123")
-    try:
-        logging.getLogger("app.test").info("hello world")
-    finally:
-        request_id_var.reset(token)
+    logging.getLogger("app.test").info("hello world")
 
     record = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert record["service"] == "test-service"
     assert record["event"] == "hello world"
-    assert record["request_id"] == "req-123"
 
 
 def test_configure_logging_includes_exception_field(tmp_path, capsys):

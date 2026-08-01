@@ -1,4 +1,3 @@
-import contextvars
 import json
 import logging
 import logging.handlers
@@ -22,21 +21,6 @@ _NOISY_THIRD_PARTY_LOGGERS = (
     "filelock",
 )
 
-request_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "request_id", default=None
-)
-thread_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "thread_id", default=None
-)
-
-
-class _CorrelationFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        """Attaches the current request and thread correlation ids to the record."""
-        record.request_id = request_id_var.get()
-        record.thread_id = thread_id_var.get()
-        return True
-
 
 class _JsonFormatter(logging.Formatter):
     def __init__(self, service: str) -> None:
@@ -52,8 +36,6 @@ class _JsonFormatter(logging.Formatter):
             "service": self._service,
             "logger": record.name,
             "event": record.getMessage(),
-            "request_id": getattr(record, "request_id", None),
-            "thread_id": getattr(record, "thread_id", None),
         }
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
@@ -61,24 +43,21 @@ class _JsonFormatter(logging.Formatter):
 
 
 def configure_logging(service: str, log_level: str, log_dir: Path = DEFAULT_LOG_DIR) -> None:
-    """Sets up JSON stdout and rotating file logging with correlation ids for the service."""
+    """Sets up JSON stdout and rotating file logging for the service."""
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         raise RuntimeError(f"Log directory '{log_dir.resolve()}' is not writable: {exc}") from exc
 
     formatter = _JsonFormatter(service=service)
-    correlation_filter = _CorrelationFilter()
 
     stdout_handler = logging.StreamHandler(sys.stdout)
     stdout_handler.setFormatter(formatter)
-    stdout_handler.addFilter(correlation_filter)
 
     file_handler = logging.handlers.TimedRotatingFileHandler(
         log_dir / f"{service}.jsonl", when="midnight", utc=True, backupCount=LOG_RETENTION_DAYS
     )
     file_handler.setFormatter(formatter)
-    file_handler.addFilter(correlation_filter)
 
     root = logging.getLogger()
     root.handlers.clear()

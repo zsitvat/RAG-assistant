@@ -46,15 +46,13 @@ class Observability:
         """Returns the Langfuse client when tracing is enabled."""
         return self._client
 
-    def trace_config(self, thread_id: str, request_id: str | None) -> dict:
+    def trace_config(self, thread_id: str) -> dict:
         """Builds the LangChain config fragment that attaches one trace to a turn."""
         if self._client is None:
             return {}
         from langfuse.langchain import CallbackHandler
 
         metadata = {"langfuse_session_id": thread_id, "langfuse_tags": ["chat"]}
-        if request_id:
-            metadata["request_id"] = request_id
         return {"callbacks": [CallbackHandler()], "metadata": metadata}
 
     def update_trace(self, **attributes: object) -> None:
