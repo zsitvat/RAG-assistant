@@ -1,14 +1,30 @@
+import os
+
 import pytest
+import redis as redis_lib
 from httpx2 import ASGITransport, AsyncClient
 
 from app.core.config import get_settings
 from app.main import app, create_app
 
+TEST_REDIS_URL = os.environ.get("TEST_REDIS_URL", "redis://127.0.0.1:6379/0")
+
+
+def _redis_available() -> bool:
+    try:
+        redis_lib.Redis.from_url(TEST_REDIS_URL).ping()
+    except redis_lib.RedisError:
+        return False
+    return True
+
+
+pytestmark = pytest.mark.skipif(not _redis_available(), reason="Redis 8 not reachable")
+
 
 @pytest.fixture
 async def client(monkeypatch):
     monkeypatch.setenv("LLM_BACKEND", "dummy")
-    monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:1/0")
+    monkeypatch.setenv("REDIS_URL", TEST_REDIS_URL)
     get_settings.cache_clear()
     async with app.router.lifespan_context(app):
         transport = ASGITransport(app=app)
@@ -23,15 +39,15 @@ async def test_health_reports_ok(client):
     assert response.json() == {"status": "ok"}
 
 
-async def test_ready_reports_dummy_llm_ok_and_redis_unavailable_without_a_server(client):
+async def test_ready_reports_dummy_llm_ok_and_redis_ok(client):
     response = await client.get("/ready")
     assert response.status_code == 200
 
     body = response.json()
-    assert body["ready"] is False
+    assert body["ready"] is True
     checks = {check["name"]: check for check in body["checks"]}
     assert checks["llm"]["status"] == "ok"
-    assert checks["redis"]["status"] == "unavailable"
+    assert checks["redis"]["status"] == "ok"
 
 
 async def test_unknown_route_returns_fastapi_default_404(client):
@@ -51,7 +67,7 @@ async def test_openapi_includes_shell_endpoints(client):
     assert "/ready" in schema["paths"]
 
 
-async def test_chat_returns_a_typed_response_even_without_a_real_llm_or_redis(client):
+async def test_chat_returns_a_typed_response_even_without_a_real_llm(client):
     response = await client.post("/chat", json={"thread_id": "t1", "message": "hello"})
 
     assert response.status_code == 200
