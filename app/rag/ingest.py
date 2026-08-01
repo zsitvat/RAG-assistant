@@ -28,11 +28,11 @@ INGEST_BATCH_SIZE = 128
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["IngestionError", "PolicyCorpusIngestor", "connect_and_ingest"]
+__all__ = ["IngestionError", "CorpusIngestor", "connect_and_ingest"]
 
 
-class PolicyCorpusIngestor:
-    """Loads, chunks, validates and upserts the policy corpus into Redis."""
+class CorpusIngestor:
+    """Loads, chunks, validates and upserts the corpus into Redis."""
 
     def __init__(
         self,
@@ -64,6 +64,7 @@ class PolicyCorpusIngestor:
         resolver = RuleMetadataResolver(rule_catalogue)
         resolver.attach(chunks)
         resolver.validate_anchors_resolve(chunks)
+        resolver.validate_categories_reachable(chunks)
         return source_documents, chunks
 
     def run(
@@ -128,13 +129,13 @@ def connect_and_ingest(
         return None, None
 
     vector_store = build_vector_store(settings.redis_url, build_embeddings())
-    PolicyCorpusIngestor().run(redis_index, vector_store, rule_catalogue=rule_catalogue)
+    CorpusIngestor().run(redis_index, vector_store, rule_catalogue=rule_catalogue)
     return redis_index, vector_store
 
 
 if __name__ == "__main__":
     settings = get_settings()
-    result = PolicyCorpusIngestor().run(
+    result = CorpusIngestor().run(
         RedisIndex(settings.redis_url),
         build_vector_store(settings.redis_url, build_embeddings()),
         rule_catalogue=get_rule_catalogue(),

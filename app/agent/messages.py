@@ -1,3 +1,8 @@
+"""Fixed, non-LLM-generated user-facing strings, so clarification questions, refusals, and
+system-state messages stay deterministic and testable rather than varying with model wording. This
+much hardcoding is mainly needed because the current chat model is small; a larger, more capable
+model could likely generate this text reliably on its own instead."""
+
 CLARIFICATION_QUESTIONS: dict[str, str] = {
     "category": (
         "Which expense category is this about — meal, travel, equipment, commuting, mileage, "
@@ -5,15 +10,22 @@ CLARIFICATION_QUESTIONS: dict[str, str] = {
     ),
     "amount_huf": "What is the total amount, in HUF?",
     "headcount": "How many people were included?",
+    "non_reimbursable_amount": (
+        "How much of the total was for excluded items such as alcohol, tobacco, or tips? Enter 0 "
+        "if there were none."
+    ),
     "expense_type": (
         "What type of expense is this (for example accommodation, per diem, or transport)?"
     ),
+    "is_business_related": "Was the expense incurred for a documented business purpose?",
+    "is_international_trip": "Was this a domestic or international trip?",
     "distance_km": "What is the distance, in kilometers?",
     "distance_is_one_way": "Is that distance one-way or round-trip?",
     "commute_days_per_month": "How many days per month do you commute?",
     "annual_budget_used_huf": (
         "How much of your annual benefit budget have you already used this year?"
     ),
+    "tenure_months": "How many months have you been continuously employed?",
     "expense_date": "What date was the expense incurred?",
 }
 DEFAULT_CLARIFICATION_QUESTION = "Could you share a few more details?"

@@ -52,6 +52,12 @@ needs `amount_huf`+`headcount`; and so on). `route_after_extraction` sends
 missing slot or proceeds to `agent_step`. An unmapped (intent, category) pair has no required slots
 and falls through to the agent, matching the design's stated trade-off.
 
+`app/agent/messages.py` holds every clarification question, refusal, and system-state message as a
+fixed string rather than letting a node generate it. This much hardcoding is mainly a consequence of
+running a small chat model: a larger, more capable model could likely be trusted to phrase these
+reliably on its own, without the risk of inconsistent or unclear wording that motivates fixing them
+here today.
+
 ### The autonomous loop and its guardrails (`app/agent/current_request.py`, `app/agent/nodes.py`)
 
 `CurrentRequest` slices `messages` to the suffix starting at the latest `HumanMessage` and derives
@@ -68,7 +74,7 @@ every loop guardrail from that slice alone:
   `find_duplicate_call` looks for an identical `(name, args)` call already made this turn; if found,
   `agent_step` fabricates the matching `ToolMessage` from the prior result itself (skipping
   re-execution) and logs a warning.
-- **Recursion backstop** — `RECURSION_LIMIT` (20) is passed as LangGraph's own `recursion_limit` at
+- **Recursion backstop** — `RECURSION_LIMIT` (12) is passed as LangGraph's own `recursion_limit` at
   invoke time, the hard backstop behind the step budget.
 - **Ollama unreachable** — `agent_step` and `generate_response` invoke the model through
   `Runnable.with_retry()` (3 attempts, exponential backoff with jitter) and return a fixed
@@ -126,16 +132,16 @@ fallback rather than a crash.
 
 ### Deriving the decision (`app/agent/nodes.py::AgentNodes._derive_decision`)
 
-`generate_response` collects every `check_rules` `Finding` from the current turn's `ToolMessage`s:
-any `fail` → `not_eligible`; else any `warning` → `partially_eligible`; else (findings present but
-all `pass`) → `eligible`; no `check_rules` call this turn → `decision=None` (not applicable — a pure
-policy question has no eligibility to derive).
+`generate_response` collects every `check_rules` `Finding` and calculation artifact from the current
+request's `ToolMessage`s: any `fail` → `not_eligible`; otherwise a rule warning, calculation warning,
+or positive `excess_huf` → `partially_eligible`; otherwise findings present → `eligible`. With no
+rule findings, `decision=None` because a pure policy question has no eligibility decision.
 
 ### HTTP surface (`app/agent/service.py`, `app/api/routes/chat.py`, `app/api/schemas.py`)
 
 `AgentService.respond(thread_id, message)` invokes the compiled graph (`recursion_limit=20`),
 times the call, and projects the result into `ChatResponse` (`answer` = `messages[-1]`,
-`generated_at` UTC, `response_time_ms`, deduplicated `sources` built from every current-turn
+`generated_at` UTC, `response_time_ms`, the deterministic `decision`, deduplicated `sources` built from every current-request
 `search_policies` `ToolMessage`'s `RagResult.citations`, and stable `steps` labels — "Request
 understood", "Information extracted", then any of "Policies searched"/"Rules checked"/"Amount
 calculated" that actually ran, then "Answer prepared"). `POST /chat` (`app/api/routes/chat.py`) is a
@@ -175,6 +181,7 @@ curl -X POST http://127.0.0.1:8000/chat \
 | `app/agent/rule_checker.py` | `RuleChecker`, `Finding` |
 | `app/agent/tools.py` | `build_calculate_tool`, `build_check_rules_tool`, `build_tools` |
 | `app/agent/nodes.py` | `AgentNodes` — all custom nodes and routing functions |
+| `app/agent/messages.py` | fixed clarification/refusal/system-state strings, kept deterministic mainly because the current chat model is small |
 | `app/agent/graph.py` | `build_agent_graph` |
 | `app/agent/service.py` | `AgentService` — graph output → `ChatResponse` |
 | `app/api/routes/chat.py` | `POST /chat` |

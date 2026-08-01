@@ -24,3 +24,28 @@ def test_expired_includes_exception_procedure():
 
     assert result.status == "expired"
     assert result.exception_procedure is not None
+
+
+def test_day_29_is_within_the_deadline_window():
+    result = CHECKER.check(date(2026, 7, 1), date(2026, 7, 30))
+
+    assert result.days_elapsed == 29
+    assert result.status == "due_soon"
+    assert result.exception_procedure is None
+
+
+def test_day_30_is_the_last_day_within_the_deadline():
+    result = CHECKER.check(date(2026, 7, 1), date(2026, 7, 31))
+
+    assert result.days_elapsed == 30
+    assert result.days_remaining == 0
+    assert result.status == "due_soon"
+    assert result.exception_procedure is None
+
+
+def test_day_31_is_expired():
+    result = CHECKER.check(date(2026, 7, 1), date(2026, 8, 1))
+
+    assert result.days_elapsed == 31
+    assert result.status == "expired"
+    assert result.exception_procedure is not None

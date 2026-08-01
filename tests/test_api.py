@@ -75,6 +75,7 @@ async def test_chat_returns_a_typed_response_even_without_a_real_llm(client):
     assert body["thread_id"] == "t1"
     assert isinstance(body["answer"], str) and body["answer"]
     assert isinstance(body["response_time_ms"], int)
+    assert body["decision"] is None
     assert body["sources"] == []
     assert "Request understood" in body["steps"]
     assert "Answer prepared" in body["steps"]

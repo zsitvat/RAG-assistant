@@ -78,3 +78,4 @@ uv run streamlit run app/ui.py
 
 `GET /health` reports liveness, `GET /ready` reports per-dependency readiness (`llm`, `redis`); with
 `LLM_BACKEND=dummy` the LLM check is `ok` and no external service is contacted.
+`POST /chat` returns the answer together with the deterministic eligibility `decision`, cited sources, and stable completed-step labels.

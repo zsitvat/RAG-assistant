@@ -48,6 +48,14 @@ class ReimbursementCalculator:
 
         return self._rules.categories[category].rules
 
+    def _meal_limit_rule(self) -> RuleDefinition | None:
+        """Returns the configured meal limit rule when present."""
+
+        return next(
+            (rule for rule in self._rules_for("meal") if rule.limit_per_person_huf is not None),
+            None,
+        )
+
     @staticmethod
     def _require(claim: ExpenseClaim, *fields: str) -> None:
         """Rejects a claim when required calculation fields are missing."""
@@ -62,15 +70,27 @@ class ReimbursementCalculator:
         """Calculates min(amount - excluded, per-person limit * headcount)."""
 
         self._require(claim, "amount_huf", "headcount")
-        rule = next(r for r in self._rules_for("meal") if r.limit_per_person_huf is not None)
-        cap = rule.limit_per_person_huf * claim.headcount
         non_reimbursable = claim.non_reimbursable_amount or 0.0
-        base = claim.amount_huf - non_reimbursable
+        base = max(0.0, claim.amount_huf - non_reimbursable)
+        rule = self._meal_limit_rule()
+        if rule is None:
+            return CalculationResult(
+                amount_huf=_round_half_up(base),
+                warnings=["no meal limit is configured; reimbursement confidence is reduced"],
+            )
+        cap = rule.limit_per_person_huf * claim.headcount
         reimbursable = min(base, cap)
+        warnings = []
+        if non_reimbursable > 0:
+            warnings.append(
+                f"{_round_half_up(non_reimbursable)} HUF of explicitly excluded items (e.g. "
+                "alcohol, tobacco, tips) was deducted before applying the per-person cap"
+            )
         return CalculationResult(
             amount_huf=_round_half_up(reimbursable),
             cap_huf=_round_half_up(cap),
             excess_huf=_round_half_up(max(0.0, base - cap)),
+            warnings=warnings,
         )
 
     def _calculate_travel(self, claim: ExpenseClaim) -> CalculationResult:

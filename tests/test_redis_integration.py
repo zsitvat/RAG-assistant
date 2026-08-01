@@ -6,7 +6,7 @@ import redis as redis_lib
 from app.integrations.redis import RedisIndex
 from app.rag.graph import build_rag_graph
 from app.rag.index_schema import MIN_CONFIDENCE_THRESHOLD
-from app.rag.ingest import PolicyCorpusIngestor
+from app.rag.ingest import CorpusIngestor
 from app.rag.retriever import Retriever
 from app.rag.store import build_embeddings, build_vector_store
 from app.rules.loader import load_rule_catalogue
@@ -63,7 +63,7 @@ def test_full_ingest_idempotent_rerun_and_dimension_mismatch_rebuild(
     redis_client, redis_index, vector_store
 ):
     catalogue = load_rule_catalogue()
-    ingestor = PolicyCorpusIngestor()
+    ingestor = CorpusIngestor()
 
     first = ingestor.run(redis_index, vector_store, rule_catalogue=catalogue)
     assert first.action == "built"
@@ -84,7 +84,7 @@ def test_full_ingest_idempotent_rerun_and_dimension_mismatch_rebuild(
 
 
 def test_similarity_search_returns_relevant_grounded_chunks(redis_index, vector_store):
-    ingestor = PolicyCorpusIngestor()
+    ingestor = CorpusIngestor()
     ingestor.run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
 
     results = vector_store.similarity_search(
@@ -96,7 +96,7 @@ def test_similarity_search_returns_relevant_grounded_chunks(redis_index, vector_
 
 
 def test_similarity_search_respects_category_tag_filter(redis_index, vector_store):
-    ingestor = PolicyCorpusIngestor()
+    ingestor = CorpusIngestor()
     ingestor.run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
 
     results = vector_store.similarity_search(
@@ -110,7 +110,7 @@ def test_similarity_search_respects_category_tag_filter(redis_index, vector_stor
 
 
 def test_get_index_stats_reports_total_chunks_and_category_counts(redis_index, vector_store):
-    ingestor = PolicyCorpusIngestor()
+    ingestor = CorpusIngestor()
     ingestor.run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
 
     stats = redis_index.get_index_stats()
@@ -124,7 +124,7 @@ def test_get_index_stats_reports_total_chunks_and_category_counts(redis_index, v
 def test_rag_graph_returns_grounded_evidence_for_each_category(
     redis_index, vector_store, category, question
 ):
-    PolicyCorpusIngestor().run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
+    CorpusIngestor().run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
     graph = build_rag_graph(Retriever(vector_store))
 
     result = graph.invoke({"question": question, "category": category})["result"]
@@ -136,7 +136,7 @@ def test_rag_graph_returns_grounded_evidence_for_each_category(
 
 
 def test_rag_graph_flags_low_confidence_for_an_irrelevant_question(redis_index, vector_store):
-    PolicyCorpusIngestor().run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
+    CorpusIngestor().run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
     graph = build_rag_graph(Retriever(vector_store))
 
     result = graph.invoke({"question": "what is the weather like on mars today", "category": None})[

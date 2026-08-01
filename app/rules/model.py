@@ -40,6 +40,7 @@ class RuleDefinition(BaseModel):
     # meal
     limit_per_person_huf: int | None = None
     excluded_items: list[str] | None = None
+    business_use_required: bool | None = None
 
     # equipment
     approval_tiers: list[ApprovalTier] | None = None
@@ -63,6 +64,8 @@ class RuleDefinition(BaseModel):
     annual_budget_huf: int | None = None
     reimbursement_ratio: float | None = None
     approval_above_huf: int | None = None
+    approval_required: bool | None = None
+    approver: str | None = None
     eligible_after_months: int | None = None
     carry_over: bool | None = None
 
@@ -72,6 +75,18 @@ class CategoryRules(BaseModel):
 
     rules: list[RuleDefinition] = []
     required_documents: list[str] = []
+    required_documents_rule_id: str | None = None
+    required_documents_doc_ref: str | None = None
+
+    @model_validator(mode="after")
+    def _document_requirements_are_source_linked(self) -> "CategoryRules":
+        if self.required_documents and (
+            self.required_documents_rule_id is None or self.required_documents_doc_ref is None
+        ):
+            raise ValueError(
+                "required_documents needs required_documents_rule_id and required_documents_doc_ref"
+            )
+        return self
 
 
 class SubmissionRules(BaseModel):
@@ -79,6 +94,12 @@ class SubmissionRules(BaseModel):
 
     deadline_days: int
     approval_tiers: list[ApprovalTier]
+    deadline_rule_id: str = "SUBMISSION-DEADLINE"
+    deadline_doc_ref: str | None = None
+    approval_rule_id: str = "SUBMISSION-APPROVAL"
+    approval_doc_ref: str | None = None
+    receipt_rule_id: str = "SUBMISSION-DOCUMENTS"
+    receipt_doc_ref: str | None = None
 
 
 class RuleCatalogue(BaseModel):
@@ -106,24 +127,50 @@ class RuleCatalogue(BaseModel):
                     errors.append(f"duplicate rule id {rule.id!r}")
                 seen_rule_ids.add(rule.id)
                 errors.extend(self._validate_doc_ref(rule))
+            if category_rules.required_documents_rule_id:
+                if category_rules.required_documents_rule_id in seen_rule_ids:
+                    errors.append(
+                        f"duplicate rule id {category_rules.required_documents_rule_id!r}"
+                    )
+                seen_rule_ids.add(category_rules.required_documents_rule_id)
+                errors.extend(
+                    self._validate_reference(
+                        category_rules.required_documents_rule_id,
+                        category_rules.required_documents_doc_ref,
+                    )
+                )
+
+        submission_references = (
+            (self.submission.deadline_rule_id, self.submission.deadline_doc_ref),
+            (self.submission.approval_rule_id, self.submission.approval_doc_ref),
+            (self.submission.receipt_rule_id, self.submission.receipt_doc_ref),
+        )
+        for rule_id, doc_ref in submission_references:
+            if rule_id in seen_rule_ids:
+                errors.append(f"duplicate rule id {rule_id!r}")
+            seen_rule_ids.add(rule_id)
+            errors.extend(self._validate_reference(rule_id, doc_ref))
 
         if errors:
             raise ValueError("; ".join(errors))
         return self
 
     def _validate_doc_ref(self, rule: RuleDefinition) -> list[str]:
-        if rule.doc_ref is None:
-            return []
-        if "#" not in rule.doc_ref:
-            return [f"rule {rule.id!r}: doc_ref {rule.doc_ref!r} must be '<doc_id>#<section_id>'"]
+        return self._validate_reference(rule.id, rule.doc_ref)
 
-        doc_id, section_id = rule.doc_ref.split("#", 1)
+    def _validate_reference(self, rule_id: str, doc_ref: str | None) -> list[str]:
+        if doc_ref is None:
+            return []
+        if "#" not in doc_ref:
+            return [f"rule {rule_id!r}: doc_ref {doc_ref!r} must be '<doc_id>#<section_id>'"]
+
+        doc_id, section_id = doc_ref.split("#", 1)
         document = self.documents.get(doc_id)
         if document is None:
-            return [f"rule {rule.id!r}: doc_ref points to unknown document {doc_id!r}"]
+            return [f"rule {rule_id!r}: doc_ref points to unknown document {doc_id!r}"]
         if section_id not in document.sections:
             return [
-                f"rule {rule.id!r}: doc_ref points to unresolved section "
+                f"rule {rule_id!r}: doc_ref points to unresolved section "
                 f"{section_id!r} in document {doc_id!r}"
             ]
         return []

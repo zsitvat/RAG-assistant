@@ -15,6 +15,7 @@ Intent = Literal[
 ]
 
 Decision = Literal["eligible", "partially_eligible", "not_eligible", "needs_info", "out_of_scope"]
+FindingStatus = Literal["pass", "fail", "warning", "not_applicable"]
 
 
 class ExpenseClaim(BaseModel):
@@ -32,6 +33,10 @@ class ExpenseClaim(BaseModel):
     has_receipt: bool | None = None
     approval_obtained: bool | None = None
     annual_budget_used_huf: float | None = None
+    tenure_months: int | None = None
+    is_business_related: bool | None = None
+    is_international_trip: bool | None = None
+    provided_documents: list[str] | None = None
 
     def merged_with(self, update: "ExpenseClaim") -> "ExpenseClaim":
         """New non-null fields win; fields the update leaves unset keep their prior value."""
@@ -56,6 +61,15 @@ class CalculationResult(BaseModel):
         if self.warnings:
             parts.append(f"warnings: {'; '.join(self.warnings)}")
         return ", ".join(parts)
+
+
+class Finding(BaseModel):
+    """Records the outcome of checking a claim against one configured rule."""
+
+    rule_id: str
+    status: FindingStatus
+    message: str
+    doc_ref: str | None = None
 
 
 class IntentClassification(BaseModel):

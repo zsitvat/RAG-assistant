@@ -40,6 +40,7 @@ class AgentService:
             answer=result["messages"][-1].content,
             generated_at=datetime.now(UTC),
             response_time_ms=response_time_ms,
+            decision=result.get("decision"),
             sources=self._collect_cited_sources(request_messages),
             steps=self._collect_step_labels(request_messages),
         )

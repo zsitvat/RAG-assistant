@@ -15,6 +15,8 @@ documents:
         headings: ["4. Business meals"]
       equipment-approval:
         headings: ["5. Work equipment and minor purchases"]
+      non-reimbursable-items:
+        headings: ["6. Non-reimbursable items"]
       submission-deadline:
         headings: ["7. Submission deadline and late claims"]
   "02":
@@ -26,6 +28,8 @@ documents:
         headings: ["3. Accommodation"]
       meal-per-diem:
         headings: ["4. Meals and daily allowance"]
+      travel-required-documents:
+        headings: ["7. Required documents"]
   "03":
     categories: [commuting]
     sections:
@@ -42,6 +46,8 @@ documents:
     sections:
       mileage-rate:
         headings: ["3. Mileage reimbursement"]
+      trip-log:
+        headings: ["4. Required trip-log information"]
   "05":
     categories: [benefits]
     sections:
@@ -51,9 +57,13 @@ documents:
         headings: ["3. Annual benefit allowances"]
       recreational-claim:
         headings: ["5. Claiming the recreational benefit"]
+      recreational-documents:
+        headings: ["4. Recreational and holiday benefit"]
   "06":
     categories: [general]
     sections:
+      acceptable-documents:
+        headings: ["1. Acceptable supporting documents"]
       approval-matrix:
         headings: ["3. Approval matrix"]
       lost-document:
@@ -64,6 +74,12 @@ documents:
 
 submission:
   deadline_days: 30
+  deadline_rule_id: SUBMISSION-DEADLINE
+  deadline_doc_ref: "01#submission-deadline"
+  approval_rule_id: SUBMISSION-APPROVAL
+  approval_doc_ref: "06#approval-matrix"
+  receipt_rule_id: SUBMISSION-DOCUMENTS
+  receipt_doc_ref: "06#acceptable-documents"
   approval_tiers:
     - max_huf: 50000
       approver: line_manager
@@ -76,6 +92,8 @@ categories:
   general:
     rules: []
     required_documents: [invoice]
+    required_documents_rule_id: GENERAL-REQUIRED-DOCUMENTS
+    required_documents_doc_ref: "06#acceptable-documents"
 
   meal:
     rules:
@@ -84,8 +102,13 @@ categories:
         limit_per_person_huf: 15000
       - id: R-MEAL-02
         doc_ref: "01#business-meal-limit"
-        excluded_items: [alcohol, tobacco, tips]
+        excluded_items: [alcohol, tobacco, tips, "personal consumption"]
+      - id: R-MEAL-03
+        doc_ref: "01#business-meal-limit"
+        business_use_required: true
     required_documents: [invoice, business_purpose_note, participant_list]
+    required_documents_rule_id: MEAL-REQUIRED-DOCUMENTS
+    required_documents_doc_ref: "01#business-meal-limit"
 
   equipment:
     rules:
@@ -98,7 +121,12 @@ categories:
             approver: department_head
           - max_huf: null
             approver: finance_director
+      - id: R-EQUIP-02
+        doc_ref: "01#equipment-approval"
+        business_use_required: true
     required_documents: [invoice, managerial_approval]
+    required_documents_rule_id: EQUIPMENT-REQUIRED-DOCUMENTS
+    required_documents_doc_ref: "06#acceptable-documents"
 
   travel:
     rules:
@@ -118,7 +146,13 @@ categories:
         breakfast_reduction_huf:
           domestic: 3000
           international: 5000
+      - id: R-TRAVEL-04
+        doc_ref: "01#non-reimbursable-items"
+        excluded_items: [fine, minibar]
+        business_use_required: true
     required_documents: [travel_request, ticket_or_booking_confirmation, hotel_invoice]
+    required_documents_rule_id: TRAVEL-REQUIRED-DOCUMENTS
+    required_documents_doc_ref: "02#travel-required-documents"
 
   commuting:
     rules:
@@ -138,6 +172,8 @@ categories:
         ticket_reimbursement_ratio: 0.8
         daily_cap_huf: 3000
     required_documents: [route_declaration, monthly_attendance_summary]
+    required_documents_rule_id: COMMUTING-REQUIRED-DOCUMENTS
+    required_documents_doc_ref: "03#commuting-deadline"
 
   mileage:
     rules:
@@ -145,6 +181,8 @@ categories:
         doc_ref: "04#mileage-rate"
         rate_huf_per_km: 45
     required_documents: [trip_log]
+    required_documents_rule_id: MILEAGE-REQUIRED-DOCUMENTS
+    required_documents_doc_ref: "04#trip-log"
 
   benefits:
     rules:
@@ -154,20 +192,25 @@ categories:
         annual_budget_huf: 120000
         reimbursement_ratio: 1.0
         approval_above_huf: 60000
-        eligible_after_months: 6
-        carry_over: false
+        approver: hr
       - id: R-BEN-02
         doc_ref: "05#annual-allowances"
         benefit_type: training
         annual_budget_huf: 200000
         reimbursement_ratio: 0.8
-        eligible_after_months: 6
-        carry_over: false
+        approval_required: true
+        approver: line_manager_and_hr
       - id: R-BEN-03
         doc_ref: "05#annual-allowances"
         benefit_type: sport
         annual_budget_huf: 60000
         reimbursement_ratio: 0.7
+      - id: R-BEN-TENURE
+        doc_ref: "05#benefits-eligibility"
         eligible_after_months: 6
+      - id: R-BEN-CARRY-OVER
+        doc_ref: "05#benefits-eligibility"
         carry_over: false
     required_documents: [invoice_or_booking_document]
+    required_documents_rule_id: BENEFITS-REQUIRED-DOCUMENTS
+    required_documents_doc_ref: "05#recreational-documents"

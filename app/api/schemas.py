@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.agent.model import Decision
+
 
 class HealthResponse(BaseModel):
     """Reports that the service process is alive."""
@@ -48,5 +50,6 @@ class ChatResponse(BaseModel):
     answer: str
     generated_at: datetime
     response_time_ms: int
+    decision: Decision | None
     sources: list[ChatSource]
     steps: list[str]

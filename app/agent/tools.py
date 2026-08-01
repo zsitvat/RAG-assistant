@@ -6,8 +6,8 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolRuntime
 
 from app.agent.calculator import ReimbursementCalculator
-from app.agent.model import CalculationResult, ExpenseClaim
-from app.agent.rule_checker import Finding, RuleChecker
+from app.agent.model import CalculationResult, ExpenseClaim, Finding
+from app.agent.rule_checker import RuleChecker
 from app.rag.tool import build_search_policies_tool
 
 CALCULATE_DESCRIPTION = (
@@ -42,7 +42,7 @@ def build_check_rules_tool(
     def check_rules(runtime: ToolRuntime) -> tuple[str, list[Finding]]:
         """Checks the claim held in the graph state against all applicable rules."""
         claim = ExpenseClaim.model_validate(runtime.state["claim"])
-        findings = rule_checker.check(claim, reference_date_provider())
+        findings = rule_checker.check(claim, reference_date_provider(), runtime.state.get("intent"))
         summary = "; ".join(f"{f.rule_id}:{f.status}" for f in findings) or "no applicable rules"
         return summary, findings
 

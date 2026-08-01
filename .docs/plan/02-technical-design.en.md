@@ -423,35 +423,51 @@ documents:
   "07": { categories: [general] }
 submission:
   deadline_days: 30
-  approval_threshold_huf: 100000
+  deadline_rule_id: SUBMISSION-DEADLINE
+  deadline_doc_ref: 01#submission-deadline
+  approval_rule_id: SUBMISSION-APPROVAL
+  approval_doc_ref: 06#approval-matrix
+  receipt_rule_id: SUBMISSION-DOCUMENTS
+  receipt_doc_ref: 06#acceptable-documents
+  approval_tiers:
+    - { max_huf: 50000, approver: line_manager }
+    - { max_huf: 150000, approver: department_head }
+    - { max_huf: null, approver: finance_director }
 categories:
   meal:
     rules:
       - id: R-MEAL-01
         limit_per_person_huf: 15000
         doc_ref: 01#business-meal-limit
-      - id: R-MEAL-03
-        excluded_items: [alcohol, minibar]
+      - id: R-MEAL-02
+        doc_ref: 01#business-meal-limit
+        excluded_items: [alcohol, tobacco, tips, personal consumption]
     required_documents: [invoice, business_purpose_note, participant_list]
+    required_documents_rule_id: MEAL-REQUIRED-DOCUMENTS
+    required_documents_doc_ref: 01#business-meal-limit
   commuting:
     rules:
       - id: R-COMM-01
-        min_one_way_km: 5
+        min_one_way_km: 10
       - id: R-COMM-02
         rate_huf_per_km: 30
-        monthly_cap_huf: 60000
-        hybrid_prorata: true
+        monthly_cap_huf: 40000
       - id: R-COMM-03
-        pass_reimbursement_ratio: 0.86
-    required_documents: [address_declaration, monthly_commute_log]
+        pass_reimbursement_ratio: 0.8
+    required_documents: [route_declaration, monthly_attendance_summary]
   mileage: { ... }
   equipment: { ... }
   benefits:
     rules:
       - id: R-BEN-01
-        annual_budget_huf: 300000
-        carry_over: false
+        benefit_type: recreational
+        annual_budget_huf: 120000
+      - id: R-BEN-TENURE
+        doc_ref: 05#benefits-eligibility
         eligible_after_months: 6
+      - id: R-BEN-CARRY-OVER
+        doc_ref: 05#benefits-eligibility
+        carry_over: false
 ```
 
 The FastAPI lifespan loads it once into a pydantic `RuleCatalogue` and passes that dependency to the
@@ -532,12 +548,15 @@ prompt.
 ```python
 category, expense_type, amount_huf, headcount, expense_date, distance_km,
 distance_is_one_way, commute_days_per_month, non_reimbursable_amount,
-has_receipt, approval_obtained, annual_budget_used_huf
+has_receipt, provided_documents, approval_obtained, annual_budget_used_huf,
+tenure_months, is_business_related, is_international_trip
 ```
 
 The classifier normalises accommodation, taxi and business-travel parking to category `travel`,
-while preserving the subtype in `expense_type`. This keeps retrieval filtering aligned with the
-document-level categories without losing the detail needed by tools.
+while preserving the subtype in `expense_type`. Trip scope and business eligibility remain explicit
+facts (`is_international_trip`, `is_business_related`) instead of being encoded in subtype strings.
+This keeps retrieval filtering aligned with category metadata without coupling deterministic rules
+to prompt-specific naming conventions.
 
 **A request starts at the latest `HumanMessage`.** `CurrentRequest.messages()` returns that suffix and is
 the only input used for loop counts, duplicate-call detection, tool-artifact projection and final
@@ -601,12 +620,12 @@ second copy in state, and without parsing prose. See §5.
 | --- | --- |
 | `policy_question` (any) | – |
 | `document_requirements` | `category` |
-| `expense_check` / `meal` | `amount_huf`, `headcount` |
-| `expense_check` / `travel` | `expense_type`, `amount_huf` |
-| `expense_check` / `equipment` | `amount_huf` |
+| `expense_check` / `meal` | `amount_huf`, `headcount`, `is_business_related`, `non_reimbursable_amount` |
+| `expense_check` / `travel` | `expense_type`, `amount_huf`, `is_business_related`, `is_international_trip` |
+| `expense_check` / `equipment` | `amount_huf`, `is_business_related` |
 | `calculation` / `mileage` | `distance_km`, `distance_is_one_way` |
 | `calculation` / `commuting` | `distance_km`, `distance_is_one_way`, `commute_days_per_month` |
-| `expense_check` / `benefits` | `expense_type`, `amount_huf`, `annual_budget_used_huf` |
+| `expense_check` / `benefits` | `expense_type`, `amount_huf`, `annual_budget_used_huf`, `tenure_months` |
 | `deadline_check` | `expense_date` |
 
 Ambiguity counts as missing: if `distance_is_one_way` is `None`, the assistant asks – this is the
@@ -767,9 +786,10 @@ def build_calculate_tool(calculator: ReimbursementCalculator):
 
 Required-slot routing after extraction normally guarantees that the fields required for the classified category are
 present. The calculator repeats the category-specific validation at its own interface so direct
-callers and tests get the same safety property; a missing or inconsistent value raises a typed
-`CalculationInputError`, which `ToolNode` returns as an error `ToolMessage`. It never substitutes a
-guess. Applicable rules are selected deterministically from `claim.category` / `claim.expense_type`.
+callers and tests get the same safety property; a missing claim value raises a typed
+`CalculationInputError`, which `ToolNode` returns as an error `ToolMessage`. A missing catalogue cap
+returns the submitted eligible amount with `cap_huf=None` and a lower-confidence warning instead of
+inventing a limit. Applicable rules are selected deterministically from the claim and catalogue.
 Rule identifiers and eligibility explanations belong to the separate rule-checker result.
 
 `CalculationResult` is defined in `app/agent/model.py` with the other Pydantic schemas. Its deliberately
@@ -810,10 +830,14 @@ class Finding(BaseModel):
     doc_ref: str | None
 ```
 
-Checks: category eligibility, prohibited items (alcohol, minibar, fines), per-person and monthly
-caps, approval threshold (`> 100,000 HUF` → manager approval), receipt presence and type,
-minimum-distance eligibility, annual budget exhaustion, tenure requirement for benefits, and
-delegation to the deadline tool.
+`RuleChecker` is a small coordinator over focused `DocumentChecker`, `ApprovalChecker`,
+`EligibilityChecker`, and `SubmissionDeadlineChecker` collaborators. Checks cover category
+eligibility, prohibited items, business purpose, category-specific approval tiers, receipt presence
+and type, required-document presence, minimum-distance eligibility, annual budget exhaustion,
+benefit tenure/carry-over, and deadline status. Stable rule identifiers and resolvable `doc_ref`
+values come from the validated catalogue rather than duplicated Python constants. Informational
+document questions list requirements without lowering eligibility; expense checks compare the list
+with `provided_documents`.
 
 ### 7.3 `deadline_checker`
 
@@ -864,12 +888,13 @@ of the `search_policies` `ToolMessage`, so the subgraph's output needs no unpack
 | `retrieve_documents` | invoke the LangChain Redis vector-store retriever with `k=4` and, when present, a category metadata filter containing the active category plus `general`; the integration performs embedding and RediSearch KNN |
 | `build_context` | numbered blocks `[S1] doc_title › section` up to a ~1,800-token budget, plus `Citation` objects — returned as one `RagResult` |
 
-Category is the only filter axis. When present, the query includes both the selected category and
-`general`, so common policy and receipt documents remain reachable. When the category is absent, the
-search is unfiltered. If a filtered search returns no hits, it retries once without the category.
-There is no further filter taxonomy or multi-stage filter logic.
+Category is the only filter axis. Section metadata combines document-level categories with the
+categories of every rule that references that section. This makes cross-document rules such as a
+travel prohibition in the general expense policy retrievable through the travel filter. Ingestion
+fails when a category or configured rule reference has no reachable indexed evidence. When category
+is absent, search is unfiltered; an empty filtered search retries once without the category.
 
-`build_rag_graph(retriever_factory)` constructs and compiles a LangGraph `StateGraph`; importing the
+`build_rag_graph(retriever)` constructs and compiles a LangGraph `StateGraph`; importing the
 module performs no network or Redis work. The FastAPI lifespan creates it once and injects it into `search_policies`
 while assembling `AgentService`. Tests and the eval runner call the same factory with their own
 LangChain retrievers. The subgraph remains reusable because its runtime contract is still only a
@@ -974,8 +999,8 @@ schemas live in `app/api/schemas.py`; route modules only handle transport and ca
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/chat` | one turn: `{thread_id, message}` → minimal user-facing `TurnResponse` |
-| `POST` | `/chat/stream` | same, streamed as SSE: public `step`, `source` and `token` events, then one `result` event with the complete `TurnResponse` |
+| `POST` | `/chat` | one request: `{thread_id, message}` → minimal user-facing `ChatResponse` |
+| `POST` | `/chat/stream` | same, streamed as SSE: public `step`, `source` and `token` events, then one `result` event with the complete `ChatResponse` |
 | `POST` | `/admin/eval` | run one evaluation turn and return the internal structured outputs needed by the eval harness; not used by the UI |
 | `POST` | `/admin/load-test` | synchronously run a named Langfuse dataset as a bounded-concurrency load experiment and return aggregate timings plus Langfuse run links |
 | `GET` | `/health` | liveness — process is up |
@@ -987,25 +1012,27 @@ schemas live in `app/api/schemas.py`; route modules only handle transport and ca
 The public response contains only what the chat UI renders:
 
 ```python
-class TurnSource(BaseModel):
+class ChatSource(BaseModel):
     source_id: str             # S1, S2, ...
     doc_id: str
     title: str
     section: str
 
-class TurnResponse(BaseModel):
+class ChatResponse(BaseModel):
     thread_id: str
     answer: str                 # from messages[-1]
     generated_at: datetime      # timezone-aware UTC completion timestamp
     response_time_ms: int       # server-side end-to-end turn duration
-    sources: list[TurnSource]    # deduplicated sources placed in current-turn context
+    decision: Decision | None   # deterministic outcome when rule findings exist
+    sources: list[ChatSource]    # deduplicated sources placed in current-request context
     steps: list[str]             # stable public labels, not internal reasoning
 ```
 
 The UI contract and the evaluation contract are intentionally separate. `/admin/eval` returns an
-`EvaluationTurnResponse` containing the projected state and typed tool artifacts needed for metrics:
-`decision`, `intent`, `claim`, `missing_slots`, `tool_calls`, `calculation`, `findings`, `retrieval`,
-and `degraded`. This keeps internal diagnostics out of the public chat response without
+`EvaluationResponse` containing the projected state and typed tool artifacts needed for metrics:
+`intent`, `claim`, `missing_slots`, `tool_calls`, `calculation`, `findings`, `retrieval`, and
+`degraded`. The stable decision is public because clients must not infer eligibility from prose;
+the remaining internal diagnostics stay out of the chat response without
 making the eval parse values back out of answer prose. Agent traces and per-node timings are not part
 of either response; Langfuse is their single source of truth (§11).
 
@@ -1020,9 +1047,9 @@ four SSE event types:
 | Graph event | SSE event | Content |
 | --- | --- | --- |
 | node update | `step` | one deduplicated public label after a meaningful stage completes, such as `Request understood`, `Information extracted`, `Policies searched`, `Rules checked`, `Answer prepared` |
-| `search_policies` result | `source` | one deduplicated `TurnSource` for each retrieval hit placed in the answer context |
+| `search_policies` result | `source` | one deduplicated `ChatSource` for each retrieval hit placed in the answer context |
 | generated message chunk | `token` | answer tokens, filtered to `generate_response` by LangGraph metadata |
-| graph completion | `result` | one final event containing the complete `TurnResponse`, including accumulated sources and steps |
+| graph completion | `result` | one final event containing the complete `ChatResponse`, including decision, sources and steps |
 
 The filter on `token` events matters: without it, the classifier's and extractor's structured-output
 tokens would stream into the chat window as JSON fragments. Deterministic clarification and
@@ -1302,7 +1329,7 @@ score as a percentage and lists failed case ids. A clarification case uses
 versioned Langfuse dataset `rag-assistant-functional`, and starts a named Langfuse experiment. The
 runner posts each case to the running API (`POST /admin/eval`) with the dataset item id and
 experiment name in trace metadata plus a pinned `reference_date` request field, then reads metrics
-from the internal `EvaluationTurnResponse`. It still measures the deployed graph over HTTP, but does
+from the internal `EvaluationResponse`. It still measures the deployed graph over HTTP, but does
 not force evaluation-only fields into the user-facing contract. Langfuse stores the item-to-trace
 link, run metadata and six per-case scores. One pass over the 20 cases is the official PoC
 evaluation; a suspicious failure can be rerun manually and compared through its trace. The runner
@@ -1328,7 +1355,7 @@ allows node-level evaluation) — useful because intent errors cascade.
 - **Turn isolation**: a clarification answer merges into its pending claim, while a new expense in
   the same thread replaces the old claim; loop budgets, duplicate-call detection, projected
   artifacts and decisions only inspect `CurrentRequest.messages()`.
-- **API contract**: schema snapshots of `TurnResponse`, `EvaluationTurnResponse`, `LoadTestResult` and the OpenAPI
+- **API contract**: schema snapshots of `ChatResponse`, `EvaluationResponse`, `LoadTestResult` and the OpenAPI
   document, plus an SSE test asserting deduplicated `step`/`source` events, answer-only token
   streaming and a final `result` containing the same accumulated steps and sources.
 - **Logging**: both handlers receive the same correlation fields, sensitive payload fields are
@@ -1449,7 +1476,7 @@ describe a fictional company, are not a real company's rules and are not tax or 
 | M2 | RAG subgraph | compiled LangGraph subgraph returns grounded context + citations through the LangChain Redis retriever |
 | M3 | Tools | LangChain tool wrappers for search, calculator and rule checker + direct unit tests for deterministic implementations |
 | M4 | Main graph | compiled LangGraph `StateGraph`, `ToolNode`, ReAct loop guardrails and clarification-then-resume — verified with a scripted LangChain chat model that emits fixed tool calls |
-| M5 | API + UI | FastAPI endpoints with the public `TurnResponse` and internal `EvaluationTurnResponse` contracts, LangChain `ChatOllama` wired, prompts tuned, focused Streamlit chat complete |
+| M5 | API + UI | FastAPI endpoints with the public `ChatResponse` and internal `EvaluationResponse` contracts, LangChain `ChatOllama` wired, prompts tuned, focused Streamlit chat complete |
 | M6 | Docker | `docker compose up` works from a clean clone |
 | M7 | Evaluation | repository functional dataset, Langfuse functional experiment, endpoint-triggered traced load run, local functional report in `.docs/eval/`, README written |
 

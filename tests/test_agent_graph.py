@@ -108,7 +108,11 @@ def test_clarification_answer_merges_into_the_pending_claim():
         structured_responses=iter(
             [
                 IntentClassification(intent="expense_check", category="meal"),
-                ExpenseClaim(headcount=2),
+                ExpenseClaim(
+                    headcount=2,
+                    is_business_related=True,
+                    non_reimbursable_amount=0,
+                ),
             ]
         ),
     )
@@ -118,7 +122,12 @@ def test_clarification_answer_merges_into_the_pending_claim():
 
     result = graph.invoke(
         {
-            "messages": [("human", "It was for 2 people, yes it was business-related.")],
+            "messages": [
+                (
+                    "human",
+                    "It was for 2 people at a client meeting, with no excluded items.",
+                )
+            ],
             "claim": ExpenseClaim(category="meal", amount_huf=1000),
             "decision": "needs_info",
         },

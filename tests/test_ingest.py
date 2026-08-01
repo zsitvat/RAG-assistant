@@ -6,8 +6,9 @@ from app.rag.build_info import IndexBuildInfoBuilder
 from app.rag.chunker import CHUNK_SIZE, MarkdownChunker
 from app.rag.docx_converter import DocxToMarkdownConverter
 from app.rag.errors import IngestionError
-from app.rag.ingest import PolicyCorpusIngestor
+from app.rag.ingest import CorpusIngestor
 from app.rag.rule_metadata import RuleMetadataResolver
+from app.rules.loader import load_rule_catalogue
 from app.rules.model import RuleCatalogue
 
 RULES_FIXTURE = {
@@ -150,6 +151,61 @@ def test_validate_anchors_resolve_passes_when_heading_present():
     RuleMetadataResolver(catalogue).validate_anchors_resolve([chunk])
 
 
+def test_validate_categories_reachable_passes_when_every_category_has_a_chunk():
+    catalogue = RuleCatalogue.model_validate(RULES_FIXTURE)
+    chunk = Document(
+        page_content="x",
+        metadata={"doc_id": "01", "section": "4. Business meals", "categories": ["meal"]},
+    )
+
+    resolver = RuleMetadataResolver(catalogue)
+    resolver.attach([chunk])
+    resolver.validate_categories_reachable([chunk])
+
+
+def test_validate_categories_reachable_rejects_a_category_with_no_chunk():
+    fixture = {
+        **RULES_FIXTURE,
+        "categories": {
+            **RULES_FIXTURE["categories"],
+            "equipment": {"rules": [], "required_documents": []},
+        },
+    }
+    catalogue = RuleCatalogue.model_validate(fixture)
+    chunk = Document(
+        page_content="x",
+        metadata={"doc_id": "01", "section": "4. Business meals", "categories": ["meal"]},
+    )
+    resolver = RuleMetadataResolver(catalogue)
+    resolver.attach([chunk])
+
+    with pytest.raises(IngestionError, match="equipment"):
+        resolver.validate_categories_reachable([chunk])
+
+
+def test_cross_document_rule_adds_its_own_category_to_the_referenced_section():
+    catalogue = load_rule_catalogue()
+    chunk = Document(
+        page_content="Traffic and parking fines are not reimbursable.",
+        metadata={"doc_id": "01", "section": "6. Non-reimbursable items"},
+    )
+
+    RuleMetadataResolver(catalogue).attach([chunk])
+
+    assert "travel" in chunk.metadata["categories"]
+    assert "R-TRAVEL-04" in chunk.metadata["rule_ids"]
+
+
+def test_validate_categories_reachable_rejects_missing_rule_evidence():
+    catalogue = RuleCatalogue.model_validate(RULES_FIXTURE)
+    chunk = Document(page_content="x", metadata={"doc_id": "01", "section": "Other"})
+    resolver = RuleMetadataResolver(catalogue)
+    resolver.attach([chunk])
+
+    with pytest.raises(IngestionError, match="meal:R-MEAL-01"):
+        resolver.validate_categories_reachable([chunk])
+
+
 def test_compute_corpus_hash_changes_when_a_document_changes(tmp_path):
     corpus_dir = tmp_path / "corpus"
     corpus_dir.mkdir()
@@ -189,7 +245,7 @@ def test_load_and_chunk_end_to_end(tmp_path):
     _build_docx(corpus_dir / "01_sample.docx")
     catalogue = RuleCatalogue.model_validate(RULES_FIXTURE)
 
-    sources, chunks = PolicyCorpusIngestor(corpus_dir).load_and_chunk(catalogue)
+    sources, chunks = CorpusIngestor(corpus_dir).load_and_chunk(catalogue)
 
     assert len(sources) == 1
     assert sources[0].metadata["doc_id"] == "01"

@@ -4,15 +4,26 @@ from app.rules.model import Category
 _REQUIRED_SLOTS: dict[tuple[Intent, Category | None], list[str]] = {
     ("policy_question", None): [],
     ("document_requirements", None): ["category"],
-    ("expense_check", "meal"): ["amount_huf", "headcount"],
-    ("expense_check", "travel"): ["expense_type", "amount_huf"],
-    ("expense_check", "equipment"): ["amount_huf"],
+    ("expense_check", "meal"): [
+        "amount_huf",
+        "headcount",
+        "is_business_related",
+        "non_reimbursable_amount",
+    ],
+    ("expense_check", "travel"): [
+        "expense_type",
+        "amount_huf",
+        "is_business_related",
+        "is_international_trip",
+    ],
+    ("expense_check", "equipment"): ["amount_huf", "is_business_related"],
     ("calculation", "mileage"): ["distance_km", "distance_is_one_way"],
     ("calculation", "commuting"): ["distance_km", "distance_is_one_way", "commute_days_per_month"],
     ("expense_check", "benefits"): [
         "expense_type",
         "amount_huf",
         "annual_budget_used_huf",
+        "tenure_months",
     ],
     ("deadline_check", None): ["expense_date"],
 }

@@ -50,7 +50,7 @@ Each concern is one small class in its own module:
   appears in the ingested corpus.
 - **`build_info.IndexBuildInfoBuilder`** hashes every source `.docx` plus `rules.yaml` together with
   the chunking parameters, embedding model name/revision and vector dimension.
-- **`ingest.PolicyCorpusIngestor.run()`** loads+chunks the corpus, compares the freshly computed
+- **`ingest.CorpusIngestor.run()`** loads+chunks the corpus, compares the freshly computed
   build info against the one stored in Redis, and only embeds/upserts when they differ — reporting
   `built`/`rebuilt`/`reused`. A **rebuild** calls `vector_store.index.create(overwrite=True,
   drop=True)` (the LangChain integration's own index object) before re-upserting, not a raw
@@ -80,7 +80,7 @@ automatically by the integration's `key_prefix`).
 LangChain integration doesn't own: `ping()`, `build_info:corpus` read/write (as JSON), and
 `get_index_stats()` (chunk count + per-category counts, read via `FT.INFO` + a `categories`-only
 `FT.SEARCH`). It is the one object threaded through the app for anything Redis-shaped —
-`ApplicationDependencies.redis_index`, the `/ready` check, and `PolicyCorpusIngestor.run()`. A `.client` property
+`ApplicationDependencies.redis_index`, the `/ready` check, and `CorpusIngestor.run()`. A `.client` property
 exposes the underlying `redis.Redis` for the rare case (tests) that need raw access. All chunk writes
 and similarity searches go through `RedisVectorStore`, never through `RedisIndex`.
 
@@ -126,7 +126,7 @@ TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest tests/test_redis_integrati
 | `app/rag/chunker.py` | `MarkdownChunker` |
 | `app/rag/rule_metadata.py` | `RuleMetadataResolver` |
 | `app/rag/build_info.py` | `IndexBuildInfoBuilder` |
-| `app/rag/ingest.py` | `PolicyCorpusIngestor`, `connect_and_ingest`, CLI entry point |
+| `app/rag/ingest.py` | `CorpusIngestor`, `connect_and_ingest`, CLI entry point |
 | `app/rag/index_schema.py` | Redis index name, key prefix, vector/schema constants |
 | `app/rag/store.py` | `E5Embeddings`, `RedisVectorStore` factory |
 | `app/integrations/redis.py` | `RedisIndex` — connection, build-info read/write, index stats |

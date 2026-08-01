@@ -18,6 +18,7 @@ CATALOGUE = load_rule_catalogue()
 class _ToolTestState(TypedDict, total=False):
     messages: Annotated[list[BaseMessage], add_messages]
     claim: dict
+    intent: str
 
 
 def _run_tool_via_node(tool_, claim: dict, tool_name: str, args: dict | None = None):
@@ -29,6 +30,7 @@ def _run_tool_via_node(tool_, claim: dict, tool_name: str, args: dict | None = N
 
     state = {
         "claim": claim,
+        "intent": "expense_check",
         "messages": [
             AIMessage(content="", tool_calls=[{"name": tool_name, "args": args or {}, "id": "1"}])
         ],
@@ -67,4 +69,5 @@ def test_check_rules_tool_reads_the_claim_from_state_and_returns_findings():
 
     assert message.status == "success"
     assert isinstance(message.artifact, list)
-    assert message.artifact[0].rule_id == "SUBMISSION-APPROVAL"
+    rule_ids = [finding.rule_id for finding in message.artifact]
+    assert "R-EQUIP-01" in rule_ids

@@ -16,7 +16,24 @@ def test_document_requirements_needs_category():
 def test_meal_expense_check_reports_each_missing_slot():
     missing = TABLE.missing("expense_check", "meal", ExpenseClaim(amount_huf=1000))
 
-    assert missing == ["headcount"]
+    assert missing == ["headcount", "is_business_related", "non_reimbursable_amount"]
+
+
+def test_travel_expense_check_requires_decision_facts():
+    missing = TABLE.missing("expense_check", "travel", ExpenseClaim())
+
+    assert missing == [
+        "expense_type",
+        "amount_huf",
+        "is_business_related",
+        "is_international_trip",
+    ]
+
+
+def test_equipment_expense_check_requires_business_use():
+    missing = TABLE.missing("expense_check", "equipment", ExpenseClaim())
+
+    assert missing == ["amount_huf", "is_business_related"]
 
 
 def test_mileage_requires_distance_direction():
@@ -26,7 +43,7 @@ def test_mileage_requires_distance_direction():
 
 
 def test_benefits_requires_the_benefit_type():
-    claim = ExpenseClaim(amount_huf=1000, annual_budget_used_huf=0)
+    claim = ExpenseClaim(amount_huf=1000, annual_budget_used_huf=0, tenure_months=12)
 
     missing = TABLE.missing("expense_check", "benefits", claim)
 

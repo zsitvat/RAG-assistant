@@ -8,11 +8,11 @@ NO_EVIDENCE_CONTENT = "No relevant policy information found."
 
 
 def build_search_policies_tool(rag_graph: CompiledStateGraph) -> BaseTool:
-    """Builds the tool that runs the RAG subgraph to search the policy corpus."""
+    """Builds the tool that runs the RAG subgraph to search the corpus."""
 
     @tool(response_format="content_and_artifact")
     def search_policies(question: str, category: Category | None = None) -> tuple[str, RagResult]:
-        """Searches the policy corpus and returns grounded, cited evidence."""
+        """Searches the corpus and returns grounded, cited evidence."""
         state = rag_graph.invoke({"question": question, "category": category})
         result: RagResult = state["result"]
         return result.context or NO_EVIDENCE_CONTENT, result

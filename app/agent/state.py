@@ -7,7 +7,7 @@ from app.agent.model import Decision, ExpenseClaim, Intent
 from app.rules.model import Category
 
 MAX_AGENT_STEPS = 4
-RECURSION_LIMIT = 10
+RECURSION_LIMIT = 12
 MAX_TOOL_ARG_ERRORS = 2
 
 

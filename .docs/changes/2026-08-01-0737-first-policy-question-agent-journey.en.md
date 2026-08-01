@@ -33,9 +33,9 @@
   - `graph.py`: `build_agent_graph(nodes, checkpointer=None)` compiles the seven-node graph
     (defaults to an in-memory checkpointer; a durable one is a later task's concern).
   - `service.py`: `AgentService.run_turn(thread_id, message)` — the one place graph
-    messages/artifacts become the public `TurnResponse` (deduplicated sources, stable step labels).
+    messages/artifacts become the public `ChatResponse` (decision, deduplicated sources, stable step labels).
 - Added `app/api/routes/chat.py`: blocking `POST /chat`, registered in `app/api/router.py`.
-- Added `TurnSource`, `TurnResponse`, `ChatRequest` to `app/api/schemas.py`.
+- Added `ChatSource`, `ChatResponse`, `ChatRequest` to `app/api/schemas.py`.
 - Consolidated all application wiring into `app/dependencies.py`'s `ApplicationDependencies`
   dataclass (`.build(settings)`/`.from_request(request)`), replacing the construction that used to
   live in `app/main.py`'s lifespan; `app/main.py` now only calls `ApplicationDependencies.build()`.
@@ -102,6 +102,6 @@ the task done:
 `ruff check .`, `ruff format --check .`, `bandit -c pyproject.toml -r app`,
 `pytest --cov=app --cov-report=term-missing` — all clean (127 passed, 97% coverage). Manual smoke
 test: `POST /chat` against a running app (dummy LLM backend, real local Redis) returns a well-formed
-`TurnResponse`; against a `ScriptedChatModel` simulating real tool-calling, the full
+`ChatResponse`; against a `ScriptedChatModel` simulating real tool-calling, the full
 classify→extract→check→agent_step→execute_tools→generate_response path produces a grounded, cited
 answer, and an unsupported question is refused before any tool is ever called.

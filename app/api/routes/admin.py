@@ -7,7 +7,7 @@ from starlette.concurrency import run_in_threadpool
 from app.dependencies import get_redis_index, get_rule_catalogue, get_vector_store
 from app.integrations.redis import RedisIndex
 from app.rag.index_schema import INDEX_NAME, VECTOR_DIMENSION
-from app.rag.ingest import PolicyCorpusIngestor
+from app.rag.ingest import CorpusIngestor
 from app.rag.model import IndexStats, IngestResult
 from app.rules.model import RuleCatalogue
 
@@ -23,11 +23,11 @@ async def ingest(
     vector_store: Annotated[RedisVectorStore | None, Depends(get_vector_store)],
     rule_catalogue: Annotated[RuleCatalogue, Depends(get_rule_catalogue)],
 ) -> IngestResult:
-    """Ingests the policy corpus and rule catalogue into the vector store and Redis index."""
+    """Ingests the corpus and rule catalogue into the vector store and Redis index."""
     if redis_index is None or vector_store is None:
         raise HTTPException(status_code=503, detail=REDIS_UNAVAILABLE_DETAIL)
     return await run_in_threadpool(
-        PolicyCorpusIngestor().run, redis_index, vector_store, rule_catalogue=rule_catalogue
+        CorpusIngestor().run, redis_index, vector_store, rule_catalogue=rule_catalogue
     )
 
 

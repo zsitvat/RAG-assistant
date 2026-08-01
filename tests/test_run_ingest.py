@@ -4,7 +4,7 @@ from langchain_core.documents import Document
 
 from app.integrations.redis import RedisIndex
 from app.rag.build_info import IndexBuildInfoBuilder
-from app.rag.ingest import PolicyCorpusIngestor
+from app.rag.ingest import CorpusIngestor
 from app.rag.model import IndexBuildInfo
 
 
@@ -33,7 +33,7 @@ def _fake_chunks() -> list[Document]:
 
 def _patch_corpus_and_build_info(monkeypatch) -> None:
     monkeypatch.setattr(
-        PolicyCorpusIngestor, "load_and_chunk", lambda self, rule_catalogue: ([], _fake_chunks())
+        CorpusIngestor, "load_and_chunk", lambda self, rule_catalogue: ([], _fake_chunks())
     )
     monkeypatch.setattr(IndexBuildInfoBuilder, "build", lambda self, *a, **k: _build_info())
 
@@ -49,7 +49,7 @@ def test_run_builds_when_no_build_info_exists(monkeypatch):
     redis_index = _fake_redis_index(existing_build_info=None)
     vector_store = MagicMock()
 
-    result = PolicyCorpusIngestor().run(redis_index, vector_store, rule_catalogue=MagicMock())
+    result = CorpusIngestor().run(redis_index, vector_store, rule_catalogue=MagicMock())
 
     assert result.action == "built"
     vector_store.index.create.assert_not_called()
@@ -62,7 +62,7 @@ def test_run_reuses_when_build_info_matches(monkeypatch):
     redis_index = _fake_redis_index(existing_build_info=_build_info())
     vector_store = MagicMock()
 
-    result = PolicyCorpusIngestor().run(redis_index, vector_store, rule_catalogue=MagicMock())
+    result = CorpusIngestor().run(redis_index, vector_store, rule_catalogue=MagicMock())
 
     assert result.action == "reused"
     vector_store.add_texts.assert_not_called()
@@ -74,7 +74,7 @@ def test_run_rebuilds_when_build_info_differs(monkeypatch):
     redis_index = _fake_redis_index(existing_build_info=_build_info(corpus_hash="old"))
     vector_store = MagicMock()
 
-    result = PolicyCorpusIngestor().run(redis_index, vector_store, rule_catalogue=MagicMock())
+    result = CorpusIngestor().run(redis_index, vector_store, rule_catalogue=MagicMock())
 
     assert result.action == "rebuilt"
     vector_store.index.create.assert_called_once_with(overwrite=True, drop=True)

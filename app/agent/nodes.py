@@ -14,7 +14,7 @@ from app.agent.messages import (
     NO_TOOL_ARTIFACT_MESSAGE,
     OUT_OF_SCOPE_MESSAGE,
 )
-from app.agent.model import Decision, ExpenseClaim, IntentClassification
+from app.agent.model import CalculationResult, Decision, ExpenseClaim, IntentClassification
 from app.agent.prompts import (
     AGENT_STEP_PROMPT,
     CLASSIFY_INTENT_PROMPT,
@@ -187,7 +187,14 @@ class AgentNodes:
             return None
         if any(finding.status == "fail" for finding in findings):
             return "not_eligible"
-        if any(finding.status == "warning" for finding in findings):
+        calculations = [
+            message.artifact
+            for message in tool_messages
+            if message.name == "calculate" and isinstance(message.artifact, CalculationResult)
+        ]
+        if any(finding.status == "warning" for finding in findings) or any(
+            result.excess_huf > 0 or result.warnings for result in calculations
+        ):
             return "partially_eligible"
         return "eligible"
 
