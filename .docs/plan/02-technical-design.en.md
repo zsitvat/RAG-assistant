@@ -13,9 +13,9 @@ contract is. It is the implementation reference.
 | --- | --- |
 | Real problem + justification | [01-idea-plan.en.md](01-idea-plan.en.md), README §1 |
 | LangChain/LangGraph implementation | §4–§9 – LangChain documents, splitters, embeddings, Redis retriever, chat model and tools inside compiled LangGraph workflows |
-| LangGraph agentic workflow, ≥5 nodes | §6 – focused main graph with 8 nodes |
+| LangGraph agentic workflow, ≥5 nodes | §6 – focused main graph with 7 nodes |
 | Autonomous decision making (conditional routing) | §6.3 – ReAct tool-calling loop: the LLM picks the tools and their arguments; §6.4 – `route_after_agent` |
-| Decomposition into subtasks | §6 – separate classification, extraction, request checking, tool execution and response generation |
+| Decomposition into subtasks | §6 – separate classification, extraction, deterministic routing, tool execution and response generation |
 | State management for intermediate results | §5 – `AgentState`, checkpointed per thread |
 | ≥2 tools, at least one non-retrieval | §7 – calculator, rule checker (deadline evaluation delegated internally, not a separate model-visible tool) |
 | Dedicated modular RAG subgraph (not counted in the node budget) | §8 – compiled `rag_graph` (similarity search + category tag filter), invoked by the `search_policies` tool |
@@ -55,7 +55,7 @@ below are downstream of that, and they are only defensible with it in mind:
 | 7B model at Q4 (§9) | ~5 GB resident; a 14B or 70B would not fit next to everything else, and CPU generation would leave the demo unusable |
 | 384-dim small multilingual embedder (§4.3) | ~470 MB and a fast CPU forward pass, while retaining cross-lingual retrieval for Hungarian questions over the English knowledge base |
 | Corpus of 8 short English documents (§4.1) | a few hundred chunks, which is also why a dense-only, filter-first retrieval path is enough |
-| Redis Stack as the only datastore (§4.3) | one service instead of three, and an in-memory index this size costs megabytes |
+| Redis 8 as the only datastore (§4.3) | one datastore instead of three, and an in-memory index this size costs megabytes |
 | One `uvicorn` worker, load test at concurrency 2–4 (§14) | Ollama serialises generation on one machine; higher concurrency measures queueing, not capacity |
 | LangChain-compatible `DummyLLM` backend (§9) | the graph, the API and the tests must be runnable — and CI-able — without the model loaded at all |
 | Simple RAG, no reranker (§8) | a cross-encoder pass would cost more CPU than it can earn back on this corpus |
@@ -75,20 +75,19 @@ flowchart TB
     subgraph G[Main agentic graph - LangGraph]
         direction TB
         N1[1 classify_intent] --> N2[2 extract_information]
-        N2 --> N3{3 check_request}
-        N3 -->|incomplete| N4[4 ask_clarification]
-        N3 -->|complete| N5[5 agent_step]
-        N3 -->|unsupported| N8[8 out_of_scope]
-        N5 -->|tool call| N6[6 execute_tools]
-        N6 --> N5
-        N5 -->|"no tool call / budget spent"| N7[7 generate_response]
-        N4 --> FIN[END]
+        N2 -->|incomplete| N3[3 ask_clarification]
+        N2 -->|complete| N4[4 agent_step]
+        N2 -->|unsupported| N7[7 out_of_scope]
+        N4 -->|tool call| N5[5 execute_tools]
+        N5 --> N4
+        N4 -->|"no tool call / budget spent"| N6[6 generate_response]
+        N3 --> FIN[END]
+        N6 --> FIN
         N7 --> FIN
-        N8 --> FIN
     end
-    N6 -.->|search_policies invokes rag_subgraph| R[[RAG subgraph]]
-    R -.->|"category filter + KNN"| VS[(Redis Stack<br/>RediSearch vector index)]
-    N6 -.->|calculate / check_rules| RY[(rules.yaml)]
+    N5 -.->|search_policies invokes rag_subgraph| R[[RAG subgraph]]
+    R -.->|"category filter + KNN"| VS[(Redis 8<br/>vector index)]
+    N5 -.->|calculate / check_rules| RY[(rules.yaml)]
     G -.->|LLM calls| LLM[Ollama - local model]
     G -->|answer| API
     API -->|JSON / SSE| UI
@@ -124,8 +123,8 @@ The implemented repository after the runnable-shell slice is:
 .env.example                 # committed application-setting template; .env is local and ignored
 Makefile                     # install, quality, Sonar and local run commands
 app/
-  main.py                     # FastAPI app assembly and lifespan
-  dependencies.py             # central FastAPI dependency providers
+  main.py                     # FastAPI app assembly and lifespan boundary
+  dependencies.py             # typed dependency container, runtime wiring and providers
   api/
     router.py                 # combines the route modules
     schemas.py                # current health/readiness HTTP contracts
@@ -157,9 +156,10 @@ app/
     admin.py                  # evaluation, load-test, ingest and index-stat endpoints
   agent/
     service.py                # invoke, stream and reset use cases exposed to the API
-    graph.py                  # 8 nodes, routing and graph construction
+    graph.py                  # 7 nodes, routing and graph construction
     nodes.py                  # node implementations, including classify_intent
-    model.py                  # AgentState and Pydantic domain contracts
+    state.py                  # LangGraph AgentState contract
+    model.py                  # Pydantic domain contracts
     calculator.py             # deterministic reimbursement-calculation module
     tools.py                  # LangChain tool adapters, registry and rule checks
     prompts.py                # prompt names, embedded PoC fallbacks and resolver
@@ -169,6 +169,7 @@ app/
     redis.py                  # LangChain Redis vector store + LangGraph checkpointer
   rag/
     graph.py                  # LangGraph retrieve -> context subgraph
+    state.py                  # LangGraph RagState contract
     ingest.py                 # LangChain Document loading, splitting and ingest CLI
     store.py                  # LangChain RedisVectorStore/retriever factory
     model.py                  # retrieval and ingestion Pydantic contracts
@@ -194,10 +195,10 @@ select `LLM_BACKEND=dummy`, loopback URLs and disabled Langfuse without changing
 
 All endpoint functions live under `app/api/routes/`. `app/api/router.py` only combines their
 `APIRouter` instances, and `app/main.py` only assembles the FastAPI application and owns its
-lifespan. `app/dependencies.py` exposes the application-level dependency providers used by the
-routes, including access to the lifespan-created `AgentService`, Redis connection and active
-configuration. It performs no resource creation at import time. This keeps transport code out of
-both the application entry point and the agent workflow.
+lifespan. `app/dependencies.py` owns runtime wiring through a typed `ApplicationDependencies`
+container and exposes the small FastAPI providers used by routes. The lifespan builds this container
+once and stores it as `app.state.dependencies`; imports perform no resource creation. This keeps
+transport code out of both the application entry point and the agent workflow.
 
 New application behaviour is organised around small, cohesive classes. Ad hoc module-level helper
 functions and boilerplate getters/setters are avoided; framework-required entry points are the
@@ -334,7 +335,7 @@ least one indexed chunk.
   prefixes configured once in the embedding factory). The model id and revision are pinned
   constants. Its multilingual capability supports cross-lingual Hungarian queries over the English
   corpus (see below).
-- Store: **Redis Stack** (`redis/redis-stack-server`), the single datastore of the project — the vector
+- Store: **Redis 8** (`redis:8.8.1`), the single datastore of the project — the vector
   index and LangGraph checkpoints live in it, addressed by key namespace. Redis was chosen not only
   for its vector-search capability, but also because it is a mature, proven general-purpose database
   for application state. Documents are written and queried through LangChain's Redis vector-store
@@ -486,6 +487,9 @@ Anything derivable is a function, anything only humans read is a trace event. A 
 also a serialisation contract — every extra key is another thing to migrate and another way for two
 nodes to disagree about the same fact.
 
+LangGraph state contracts live in each workflow package's dedicated `state.py` module; Pydantic
+domain and transport contracts remain in `model.py`.
+
 ```python
 class AgentState(TypedDict, total=False):
     messages: Annotated[list[BaseMessage], add_messages]  # LangChain messages: question, tool calls, results, answers
@@ -519,27 +523,33 @@ The rest of a turn's data has a home outside state:
 | Traces and timings | the Langfuse callback handler (§11) — observability does not belong in a checkpoint a later turn reloads |
 
 One consequence to respect in implementation: because the LLM sees `messages`, `ToolMessage.content` must stay
-a short summary ("eligible 75,000 HUF, cap 75,000, excess 0"). The full payload travels in `artifact`, which is
-never sent to the model — that is what keeps a growing transcript from becoming a growing prompt.
+a short summary ("reimbursable 75,000 HUF, cap 75,000, excess 0"). The compact typed result travels in
+`artifact`, which is never sent to the model — that is what keeps a growing transcript from becoming a growing
+prompt.
 
 `ExpenseClaim` (pydantic, every field optional so it can be filled incrementally):
 
 ```python
-category, expense_type, amount_huf, currency, original_amount, headcount, expense_date,
-distance_km, distance_is_one_way, commute_days_per_month, transport_mode,
-non_reimbursable_amount, has_receipt, receipt_type, approval_obtained,
-destination, is_business_related, item_name, annual_budget_used_huf
+category, expense_type, amount_huf, headcount, expense_date, distance_km,
+distance_is_one_way, commute_days_per_month, non_reimbursable_amount,
+has_receipt, approval_obtained, annual_budget_used_huf
 ```
 
 The classifier normalises accommodation, taxi and business-travel parking to category `travel`,
 while preserving the subtype in `expense_type`. This keeps retrieval filtering aligned with the
 document-level categories without losing the detail needed by tools.
 
-**A turn starts at the latest `HumanMessage`.** `current_turn_messages()` returns that suffix and is
+**A request starts at the latest `HumanMessage`.** `CurrentRequest.messages()` returns that suffix and is
 the only input used for loop counts, duplicate-call detection, tool-artifact projection and final
-decision derivation. The full transcript remains available to the classifier, extractor and answer
-prompt for conversational context, but operational decisions cannot accidentally inspect a
-previous turn's tools.
+decision derivation. The classifier, extractor, agent-step and answer prompts do not see the raw
+transcript either: `CurrentRequest.model_context()` condenses every completed previous request down
+to its `HumanMessage` and final (non-tool-calling) `AIMessage`, dropping that request's own
+`ToolMessage`s and intermediate tool-calling `AIMessage`s, while keeping the current request's
+messages in full. This keeps enough conversational context for continuity (what was asked, what was
+answered) without letting a model reuse a previous request's tool evidence as if it were current, and
+without the context growing unbounded with old tool payloads. Operational decisions cannot
+accidentally inspect a previous request's tools either way, since they read `CurrentRequest.messages()`
+(current request only), not `model_context()`.
 
 **Slot merging across turns is only for clarification.** The classifier writes the new result to
 `intent` and `category`, never into `claim`. Before extraction overwrites the previous decision, it
@@ -569,14 +579,13 @@ no parallel home-grown workflow runner, message schema or conversation-memory im
 | --- | --- | --- | --- | --- |
 | 1 | `classify_intent` | yes (structured) | dedicated intent + category classification, with confidence recorded in Langfuse; never mutates the previous claim | `intent`, `category` |
 | 2 | `extract_information` | yes (structured) | extract current request with conversation context; merge only when continuing a pending clarification, otherwise replace; clear the previous decision | `claim`, `decision=None` |
-| 3 | `check_request` | no | route unsupported and incomplete requests; otherwise enter the agent loop | – |
-| 4 | `ask_clarification` | no | render a deterministic focused question for the top missing slot | `messages`, `decision=needs_info` |
-| 5 | `agent_step` | yes (tool calling) | **the autonomous decision**: select a tool and its arguments or stop | `messages` (AI message with tool calls) |
-| 6 | `execute_tools` | no | LangGraph `ToolNode` executes the selected LangChain tool; `search_policies` invokes the RAG subgraph | `messages` (`ToolMessage` with typed artifact) |
-| 7 | `generate_response` | yes | derive the typed decision from tool artifacts, then generate the grounded employee-facing answer | `decision`, `messages` |
-| 8 | `out_of_scope` | no | canned refusal + scope explanation | `messages`, `decision=out_of_scope` |
+| 3 | `ask_clarification` | no | render a deterministic focused question for the top missing slot | `messages`, `decision=needs_info` |
+| 4 | `agent_step` | yes (tool calling) | **the autonomous decision**: select a tool and its arguments or stop | `messages` (AI message with tool calls) |
+| 5 | `execute_tools` | no | LangGraph `ToolNode` executes the selected LangChain tool; `search_policies` invokes the RAG subgraph | `messages` (`ToolMessage` with typed artifact) |
+| 6 | `generate_response` | yes | derive the typed decision from tool artifacts, then generate the grounded employee-facing answer | `decision`, `messages` |
+| 7 | `out_of_scope` | no | canned refusal + scope explanation | `messages`, `decision=out_of_scope` |
 
-Eight nodes satisfy the required five without treating input trimming, observability or response
+Seven nodes satisfy the required five without treating routing, input trimming, observability or response
 serialization as graph work. The RAG subgraph remains separate and is not counted. The Langfuse
 callback observes every node without adding diagnostics to state.
 
@@ -586,24 +595,24 @@ project's validation/error handler. It dispatches the tool selected by `agent_st
 and the typed pydantic result as its `artifact` (what the eval reads) — structured data without a
 second copy in state, and without parsing prose. See §5.
 
-### 6.2 Required-slot table (`missing_slots()`, evaluated at node 3)
+### 6.2 Required-slot table (`missing()`, evaluated after node 2)
 
 | intent / category | required slots |
 | --- | --- |
 | `policy_question` (any) | – |
 | `document_requirements` | `category` |
-| `expense_check` / `meal` | `amount_huf`, `headcount`, `is_business_related` |
-| `expense_check` / `travel` | `expense_type`, `amount_huf`, `is_business_related` |
-| `expense_check` / `equipment` | `amount_huf`, `item_name` |
-| `calculation` / `mileage` | `distance_km`, `transport_mode` |
+| `expense_check` / `meal` | `amount_huf`, `headcount` |
+| `expense_check` / `travel` | `expense_type`, `amount_huf` |
+| `expense_check` / `equipment` | `amount_huf` |
+| `calculation` / `mileage` | `distance_km`, `distance_is_one_way` |
 | `calculation` / `commuting` | `distance_km`, `distance_is_one_way`, `commute_days_per_month` |
-| `expense_check` / `benefits` | `amount_huf`, `annual_budget_used_huf` |
+| `expense_check` / `benefits` | `expense_type`, `amount_huf`, `annual_budget_used_huf` |
 | `deadline_check` | `expense_date` |
 
 Ambiguity counts as missing: if `distance_is_one_way` is `None`, the assistant asks – this is the
 canonical demo of "does not guess" behaviour.
 
-### 6.3 Tool selection is the agent's decision (node 5)
+### 6.3 Tool selection is the agent's decision (node 4)
 
 There is no static intent→tool table. `agent_step` calls a LangChain chat model with tools attached
 through `bind_tools()` and it decides,
@@ -639,9 +648,9 @@ Guardrails, all deterministic and outside the LLM:
 | --- | --- |
 | Step budget | tool-calling AI messages ≥ `MAX_AGENT_STEPS` (4) → the loop exits to `generate_response` with whatever it has, and the answer states when evidence is incomplete |
 | Invalid arguments | pydantic validation error is returned to the agent as the `ToolMessage`, so it can correct itself; the same tool may fail this way at most twice, then it is disabled for the turn |
-| Repeated identical call | same tool with the same arguments → reuse the matching `ToolMessage` artifact in `current_turn_messages()` and record a warning, instead of executing it again |
-| `calculate` with an incomplete claim | normally prevented by `check_request`; the calculator still validates its category-specific requirements and returns a typed tool error rather than guessing |
-| `unsupported` intent | never reaches the loop — node 3 routes it to `out_of_scope` |
+| Repeated identical call | same tool with the same arguments → reuse the matching `ToolMessage` artifact in `CurrentRequest.messages()` and record a warning, instead of executing it again |
+| `calculate` with an incomplete claim | normally prevented by required-slot routing after extraction; the calculator still validates its category-specific requirements and returns a typed tool error rather than guessing |
+| `unsupported` intent | never reaches the loop — the conditional edge after extraction routes it to `out_of_scope` |
 
 The expected tool sequences (`["search_policies","calculate","check_rules"]` for an expense check,
 `["check_rules"]` for a deadline question, …) still exist — but as **eval expectations**
@@ -656,7 +665,7 @@ to the PoC report.
 ### 6.4 Conditional edges (`app/agent/graph.py`)
 
 ```python
-def route_after_check(s):               # -> "ask_clarification" | "agent_step" | "out_of_scope"
+def route_after_extraction(s):          # -> "ask_clarification" | "agent_step" | "out_of_scope"
 def route_after_agent(s):               # -> "execute_tools" | "generate_response"
 ```
 
@@ -664,7 +673,7 @@ def route_after_agent(s):               # -> "execute_tools" | "generate_respons
 executor; no tool call goes to response generation. There is no plan or cursor to keep, which is why
 the slimmed state (§5) needs no `route` key.
 
-Loop safety is counted off `current_turn_messages()`, not the whole transcript or a counter key:
+Loop safety is counted off `CurrentRequest.messages()`, not the whole transcript or a counter key:
 agent steps are current-turn AI messages with tool calls (max `MAX_AGENT_STEPS`), with graph
 `recursion_limit=20` as the hard backstop. When the budget is exhausted, control moves to
 `generate_response` rather than looping.
@@ -679,7 +688,7 @@ resumable after a restart. It is also why `claim` must be the only home of the e
 merge happens in one place, on one key.
 
 **The simpler option, and why it was not taken.** All of this could have been one sentence in the prompt —
-"if something is missing, ask the user" — with no `check_request` gate, no required-slot table and no
+"if something is missing, ask the user" — with no deterministic required-slot routing and no
 `ask_clarification` node. That is genuinely less code, and a good model often does ask.
 
 The reason for the explicit version: with the prompt-only variant, "does not guess" is a hope, not a property.
@@ -708,19 +717,26 @@ eval harness without an LLM. They never call the LLM and never read the network;
 ### 7.1 `reimbursement_calculator`
 
 The calculator is deliberately a deep module: its external interface accepts the already validated
-`ExpenseClaim`, while category dispatch, required-field validation, rule selection, currency
-conversion and formulas remain inside the implementation. There is no second `CalcInput` containing
+`ExpenseClaim`, while category dispatch, required-field validation, rule selection and formulas
+remain inside the implementation. There is no second `CalcInput` containing
 every category's mostly optional fields.
+
+A sufficiently capable frontier model—for example Claude Opus, Fable or a GPT-5.6-class model—may
+calculate these amounts and submission deadlines correctly in many individual prompts. The system
+does not treat that capability as a control. Model arithmetic can vary with wording and context, is
+harder to regression-test at exact boundary values, and may use an unstated assumption or a number
+from retrieved prose. `ReimbursementCalculator` and `DeadlineChecker` instead use validated,
+version-controlled rules and explicit typed inputs. Their outputs are reproducible, auditable and
+covered by exact unit tests. The model remains responsible for intent, tool selection and natural
+language explanation, while deterministic application code remains responsible for financial and
+deadline arithmetic.
 
 ```python
 class CalculationResult(BaseModel):
-    reimbursable_amount_huf: int
-    applied_policy_cap_huf: int | None
-    amount_over_policy_cap_huf: int
-    applied_per_person_limit_huf: int | None
-    calculation_breakdown: list[BreakdownLine]  # label, formula string, amount
-    applied_rule_ids: list[str]
-    warnings: list[str]
+    amount_huf: int
+    cap_huf: int | None = None
+    excess_huf: int = 0
+    warnings: list[str] = []
 
 class ReimbursementCalculator:
     def __init__(self, rules: RuleCatalogue): ...
@@ -749,21 +765,23 @@ def build_calculate_tool(calculator: ReimbursementCalculator):
     return calculate
 ```
 
-`check_request` normally guarantees that the fields required for the classified category are
+Required-slot routing after extraction normally guarantees that the fields required for the classified category are
 present. The calculator repeats the category-specific validation at its own interface so direct
 callers and tests get the same safety property; a missing or inconsistent value raises a typed
 `CalculationInputError`, which `ToolNode` returns as an error `ToolMessage`. It never substitutes a
-guess. Applicable rules are selected deterministically from `claim.category` / `claim.expense_type`;
-the resulting ids are reported in `applied_rule_ids`.
+guess. Applicable rules are selected deterministically from `claim.category` / `claim.expense_type`.
+Rule identifiers and eligibility explanations belong to the separate rule-checker result.
 
-The result names describe policy meaning rather than implementation shorthand:
+`CalculationResult` is defined in `app/agent/model.py` with the other Pydantic schemas. Its deliberately
+small interface contains only values consumed by the agent and evaluation:
 
-- `reimbursable_amount_huf` is the amount the calculation says can be reimbursed;
-- `applied_policy_cap_huf` is the total cap used in this calculation, or `None` when no cap applies;
-- `amount_over_policy_cap_huf` is only the otherwise eligible amount above that cap; separately
-  excluded items such as alcohol appear in `calculation_breakdown`;
-- `applied_per_person_limit_huf` is the per-person policy limit used to derive a total cap, or `None`
-  for calculations where no per-person rule applies.
+- `amount_huf` is the amount the calculation says can be reimbursed;
+- `cap_huf` is the effective cap for this claim, or `None` when no cap applies;
+- `excess_huf` is the otherwise eligible amount above that cap and defaults to zero;
+- `warnings` contains only calculation-specific caveats, such as a missing subtype cap.
+
+Per-person limits, formulas and applied rule identifiers are not duplicated in the calculation artifact.
+The catalogue remains the source of formula inputs, while `check_rules` returns typed policy findings.
 
 Semantics per category:
 
@@ -772,17 +790,15 @@ Semantics per category:
 - **travel**: select the rule by `expense_type`; where that rule defines a cap,
   `reimbursable = min(amount, cap)`, otherwise calculation returns the submitted amount and leaves
   eligibility and required approval to `check_rules`.
-- **mileage**: `km = distance_km × (2 if one_way else 1)`; `amount = km × rate(transport_mode)`;
-  parking/toll added as separate breakdown lines when flagged.
+- **mileage**: `km = distance_km × (2 if one_way else 1)`; `amount = km × catalogue rate`.
 - **commuting (own car)**: `monthly_km = one_way_km × 2 × days_per_month`;
   `amount = min(monthly_km × rate, monthly_cap)`; hybrid-work pro-rata applies if `days_per_month < 20`.
 - **commuting (pass)**: `amount = round(pass_price × ratio)` capped at `monthly_cap`.
 - **equipment**: `reimbursable = amount`; approval flag is a rule-checker concern, not a calculator one.
 - **benefits**: `remaining = annual_budget − used`; `reimbursable = min(amount, remaining)`.
 
-Conventions: integer HUF, half-up rounding, FX from the fixed table with the rate recorded in the
-calculation breakdown. Every line carries its formula string so the UI and the answer can show the
-arithmetic.
+Conventions: integer HUF and half-up rounding. The final answer can explain arithmetic from the claim,
+the compact calculation result and the cited policy; the calculator does not maintain a second formula log.
 
 ### 7.2 `rule_checker`
 
@@ -828,7 +844,7 @@ flowchart LR
     B --> C([END])
 ```
 
-Own state, kept to the same rule as §5 — two inputs and one output:
+Own state in `app/rag/state.py`, kept to the same rule as §5 — two inputs and one output:
 
 ```python
 class RagState(TypedDict, total=False):
@@ -947,12 +963,12 @@ values.
 ### 10.1 HTTP API
 
 FastAPI owns the agent. `app/main.py` creates the application, registers `app/api/router.py` and
-defines an `@asynccontextmanager` lifespan annotated as `AsyncGenerator[None, None]`. In the current
-runnable shell it loads `.env`-backed settings, configures JSON logging and creates the selected
-LangChain chat model once on `app.state`. Later slices extend the same lifespan so it opens the Redis connection pool, verifies
-`idx:chunks` against `manifest:corpus`, warms the embedding model,
-builds the RAG subgraph and then compiles the main graph once — so the first user request is not the
-one paying for all of it. The HTTP
+defines an `@asynccontextmanager` lifespan annotated as `AsyncGenerator[None, None]`. The lifespan
+loads `.env`-backed settings, configures JSON logging and delegates runtime wiring to
+`ApplicationDependencies.build()`. That builder opens Redis, verifies the corpus build information,
+warms the embedding model, builds the RAG subgraph and compiles the main graph once. The resulting
+typed container is stored as `app.state.dependencies`, so the first user request does not pay setup
+cost and routes do not access loosely named state attributes. The HTTP
 schemas live in `app/api/schemas.py`; route modules only handle transport and call
 `app/agent/service.py` through the provider defined in `app/dependencies.py`. Endpoints:
 
@@ -1138,10 +1154,16 @@ so both use the same build and cannot drift apart in dependencies.
 ```yaml
 services:
   redis:
-    image: redis/redis-stack-server:latest      # RediSearch required for vector KNN
-    command: redis-stack-server --appendonly yes
-    volumes: [redis_data:/data]
+    image: redis:8.8.1                          # Search and vector indexing are built in
+    command: redis-server --appendonly yes
+    volumes: [redis8_data:/data]
     healthcheck: redis-cli ping
+  redisinsight:
+    image: redis/redisinsight:3.6.0
+    depends_on: { redis: { condition: service_healthy } }
+    environment: [RI_REDIS_HOST=redis, RI_REDIS_PORT=6379]
+    volumes: [redisinsight_data:/data]
+    ports: ["5540:5540"]
   ollama:
     image: ollama/ollama:latest
     volumes: [ollama_models:/root/.ollama]
@@ -1165,11 +1187,11 @@ services:
     volumes: ["./logs:/app/logs"]
     logging: { driver: local, options: { max-size: "10m", max-file: "3" } }
     ports: ["8501:8501"]
-volumes: { ollama_models: {}, redis_data: {} }
+volumes: { ollama_models: {}, redis8_data: {}, redisinsight_data: {} }
 ```
 
-Plain `redis:7-alpine` is **not** sufficient: the vector index needs the RediSearch module, hence
-`redis-stack-server`.
+Redis 8 replaces the former Redis Stack distribution: Search, JSON, time-series and probabilistic
+data structures are built into Redis Open Source. Redis Insight runs as a separate development UI.
 
 #### Reproducibility: everything version-pinned
 
@@ -1180,7 +1202,7 @@ way a prototype fails it. Four things get pinned, all of them things that would 
 | --- | --- |
 | Python dependencies | runtime and development `.in` files list direct dependencies; `pip-compile` produces the corresponding `.txt` lock files with `==` versions and hashes; installation uses `--require-hashes` |
 | Python runtime / base image | Python 3.12 using `python:3.12-slim`, pinned by digest rather than tag |
-| Service images | `redis/redis-stack-server:7.4.x` and `ollama/ollama:0.x.y` — explicit tags, never `latest` (the compose snippet above shows `latest` only for brevity) |
+| Service images | `redis:8.8.1`, `redis/redisinsight:3.6.0` and `ollama/ollama:0.x.y` — explicit tags, never `latest` |
 | Models | LLM tag with quantisation (`qwen2.5:7b-instruct-q4_K_M`); the embedding model with an explicit HF **revision** hash, since a repo can be updated under a stable name |
 
 The embedding revision is the one worth calling out: a silently updated model would change every vector
@@ -1267,7 +1289,7 @@ metadata.
 | Slot accuracy | share of fields in `expected_slots` whose extracted value matches exactly |
 | Retrieval hit@4 | at least one `expected_doc_ids` entry appears in the retrieved top four |
 | Tool-selection accuracy | current-turn ordered tool-name list equals `expected_tools` |
-| Outcome accuracy | `decision` matches and, when present, `reimbursable_amount_huf` equals `expected_amount_huf` |
+| Outcome accuracy | `decision` matches and, when present, calculation `amount_huf` equals `expected_amount_huf` |
 | Citation accuracy | the answer cites at least one expected document returned by retrieval |
 
 Each case therefore produces six simple Boolean/numeric Langfuse scores. The report aggregates each
@@ -1293,7 +1315,7 @@ allows node-level evaluation) — useful because intent errors cascade.
 ### 13.4 Tests
 
 - **Unit**: `ReimbursementCalculator.calculate(ExpenseClaim)` per category (incl. required-field
-  validation, rounding, FX and caps), plus a tool-adapter test proving `claim` is absent from the
+  validation, rounding and caps), plus a tool-adapter test proving `claim` is absent from the
   model-visible schema and injected by `ToolNode`; rule checker per rule, deadline
   boundaries (day 29/30/31), docx→Markdown conversion (heading levels, list styles, a table kept
   whole), chunking (table not split, short FAQ sections merged), category metadata and
@@ -1305,7 +1327,7 @@ allows node-level evaluation) — useful because intent errors cascade.
   chunk. This is what prevents a "cited but wrong number" answer and an unreachable document.
 - **Turn isolation**: a clarification answer merges into its pending claim, while a new expense in
   the same thread replaces the old claim; loop budgets, duplicate-call detection, projected
-  artifacts and decisions only inspect `current_turn_messages()`.
+  artifacts and decisions only inspect `CurrentRequest.messages()`.
 - **API contract**: schema snapshots of `TurnResponse`, `EvaluationTurnResponse`, `LoadTestResult` and the OpenAPI
   document, plus an SSE test asserting deduplicated `step`/`source` events, answer-only token
   streaming and a final `result` containing the same accumulated steps and sources.
@@ -1317,7 +1339,7 @@ allows node-level evaluation) — useful because intent errors cascade.
   both variants accept the same variables.
 - **Quality configuration**: Ruff and Bandit configuration parses successfully, their scans pass,
   coverage XML is produced, and the Sonar quality gate passes in CI.
-- **Integration**: full graph with `LLM_BACKEND=dummy` against a real Redis Stack container
+- **Integration**: full graph with `LLM_BACKEND=dummy` against a real Redis 8 container
   (testcontainers, or a `REDIS_URL` pointing at the compose service) with a `test:` key prefix and a
   flush per test — RediSearch vector search cannot be faked with `fakeredis`. Covers routing,
   clarification-then-resume across two turns, tool-loop termination and the out-of-scope path. Checkpointing in
@@ -1402,7 +1424,7 @@ load result and proposes these production optimisations without adding them to t
 | Agent never stops calling tools | `MAX_AGENT_STEPS` (4) ends the loop; the answer is generated from whatever was gathered and marked lower-confidence |
 | Agent calls a tool with invalid arguments | the pydantic error goes back as the `ToolMessage` so it can retry; twice-failed tool is disabled for the turn (§6.3) |
 | Agent answers without calling any tool | `generate_response` refuses to present a policy-dependent conclusion without a tool artifact and states that evidence is missing |
-| Empty/irrelevant retrieval | one unfiltered retry; if still empty or top-1 similarity is below threshold, the answer states that the policy does not cover it and suggests contacting finance |
+| Empty/irrelevant retrieval | one unfiltered retry; if still empty or top-1 similarity is below threshold, the answer states that it could not find enough policy evidence and suggests contacting finance without claiming the policy does not cover the topic |
 | Redis unreachable | compose healthcheck gates startup; at runtime `/ready` flips to failing and the API returns a 503 with a `detail` the UI displays (no index, no state), retry with backoff |
 | Log directory not writable | startup fails before serving traffic with the resolved `./logs` path in the error; stdout remains available to explain the configuration problem |
 | Index missing / dimension mismatch | the API lifespan verifies `idx:chunks` against the manifest `DIM` and re-ingests instead of serving empty results |
@@ -1486,9 +1508,8 @@ open, so this section is a rationale log, not a list of unresolved questions.
   implementation and operational risk compared with introducing an unfamiliar specialised vector
   database. Keeping the vector index and LangGraph checkpoints in one service also means fewer
   moving parts, one healthcheck and shared state if the UI is ever scaled out. The costs to state in
-  the README: the RediSearch module is required
-  (`redis-stack-server`, ~2× the image of `redis:alpine`), an in-memory store holds the whole index,
-  and the LangChain Redis integration still depends on RediSearch index/schema compatibility even
+  the README: Redis 8's Search capability is required, an in-memory store holds the whole index,
+  and the LangChain Redis integration still depends on Redis Search index/schema compatibility even
   though it encapsulates `FT.CREATE`, KNN query construction and vector serialisation. For a corpus
   of a few hundred chunks this is a good trade; for a much larger corpus a dedicated vector database
   would be worth evaluating behind the same LangChain vector-store/retriever interfaces.

@@ -12,7 +12,7 @@
 
 - Preserve a canonical category plus travel subtype in the claim: retrieval filters on the category, while deterministic rule selection uses the subtype.
 - Extend the existing calculator dispatch internally rather than registering separate model-facing tools for accommodation, taxi, parking, or equipment.
-- Distinguish calculation from decision: uncapped travel can return the submitted amount while the rule checker still rejects personal purpose, prohibited charges, missing documents, or absent approval.
+- Distinguish calculation from decision: uncapped travel can return the submitted amount while the rule checker still evaluates missing documents and approval.
 - Represent rule outcomes as typed findings with stable status values and resolvable `doc_ref` values so response generation and evaluation consume the same facts.
 - Reuse the existing claim extraction and missing-slot machinery; category additions must not create a second extraction schema inside tool arguments.
 - Keep approval checking based on the catalogue's strict greater-than threshold semantics, separate from whether an amount is arithmetically reimbursable.
@@ -28,5 +28,5 @@
 - [ ] Missing subtype, amount, business-purpose, or item information routes to a focused clarification or typed tool error according to the required-slot contract.
 - [ ] Unit tests cover capped and uncapped travel, taxi, parking, accommodation, prohibited charges, equipment below and above approval threshold, and absent documentation.
 - [ ] Unit tests also cover personal/non-business-purpose travel rejection distinctly from other prohibited charges, and the missing-subtype/amount/business-purpose clarification routing path.
-- [ ] End-to-end tests verify that representative travel and equipment questions produce deterministic tool artifacts, decisions, and citations through the chat endpoint, including at least one rejected case (personal purpose or prohibited charge).
+- [ ] End-to-end tests verify that representative travel and equipment questions produce deterministic tool artifacts, decisions, and citations through the chat endpoint, including at least one rejected case for missing documentation or approval.
 - [ ] A category with no reachable indexed policy chunk fails the consistency gate rather than remaining silently unusable.

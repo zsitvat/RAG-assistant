@@ -12,6 +12,7 @@ class RequestContextMiddleware:
     """ASGI middleware binding a per-request id to the logging correlation contextvar."""
 
     def __init__(self, app: ASGIApp) -> None:
+        """Stores the wrapped ASGI application."""
         self._app = app
 
     async def __call__(self, scope, receive, send) -> None:
@@ -24,6 +25,7 @@ class RequestContextMiddleware:
         token = request_id_var.set(request_id)
 
         async def send_with_header(message: dict) -> None:
+            """Forwards the message, adding the request id header to the response start."""
             if message["type"] == "http.response.start":
                 headers = message.setdefault("headers", [])
                 headers.append((REQUEST_ID_HEADER.lower().encode(), request_id.encode()))

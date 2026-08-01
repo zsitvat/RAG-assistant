@@ -15,6 +15,18 @@ uv sync --dev
 cp .env.example .env
 ```
 
+Start Redis 8 and the Redis Insight UI:
+
+```bash
+docker compose up -d redis redisinsight
+docker compose ps
+```
+
+Redis is available to host processes at `redis://127.0.0.1:6379/0`; Redis Insight is available at
+<http://127.0.0.1:5540> and is preconfigured for the Redis service. Redis and UI state are persisted
+in the `redis8_data` and `redisinsight_data` Docker volumes. Use `docker compose down` to stop the
+services without deleting their data.
+
 `Settings` loads `.env` automatically. The committed `.env.example` documents every application
 setting; the ignored local `.env` is the place for machine-specific URLs and credentials. For an
 offline shell, set `LLM_BACKEND=dummy` and `LANGFUSE_ENABLED=false`.

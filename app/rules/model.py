@@ -6,15 +6,21 @@ Category = Literal["general", "meal", "equipment", "travel", "commuting", "milea
 
 
 class ApprovalTier(BaseModel):
+    """Describes the approver required for amounts up to a threshold."""
+
     max_huf: int | None
     approver: str
 
 
 class SectionMeta(BaseModel):
+    """Lists the heading variants a rules.yaml section anchor may match in the corpus."""
+
     headings: list[str]
 
 
 class DocumentMeta(BaseModel):
+    """Describes a policy document's categories and known sections."""
+
     categories: list[Category]
     sections: dict[str, SectionMeta] = {}
 
@@ -26,6 +32,8 @@ class DocumentMeta(BaseModel):
 
 
 class RuleDefinition(BaseModel):
+    """Describes a single eligibility, cap or approval rule for an expense category."""
+
     id: str
     doc_ref: str | None = None
 
@@ -60,16 +68,22 @@ class RuleDefinition(BaseModel):
 
 
 class CategoryRules(BaseModel):
+    """Holds the rules and required documents for one expense category."""
+
     rules: list[RuleDefinition] = []
     required_documents: list[str] = []
 
 
 class SubmissionRules(BaseModel):
+    """Holds the submission deadline and approval tiers shared across categories."""
+
     deadline_days: int
     approval_tiers: list[ApprovalTier]
 
 
 class RuleCatalogue(BaseModel):
+    """Holds the full rule catalogue loaded from rules.yaml."""
+
     version: int
     currency: str
     fx_rates_fixed: dict[str, float]

@@ -1,5 +1,3 @@
-"""Header-aware, size-guarded Markdown chunker that keeps table blocks atomic."""
-
 from langchain_core.documents import Document
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 
@@ -18,6 +16,7 @@ class MarkdownChunker:
         chunk_overlap: int = CHUNK_OVERLAP,
         short_section_threshold: int = SHORT_SECTION_MERGE_THRESHOLD,
     ) -> None:
+        """Stores chunking sizes and builds the header and character splitters."""
         self._short_section_threshold = short_section_threshold
         self._header_splitter = MarkdownHeaderTextSplitter(HEADER_LEVELS, strip_headers=True)
         self._char_splitter = RecursiveCharacterTextSplitter(
@@ -25,6 +24,7 @@ class MarkdownChunker:
         )
 
     def chunk(self, doc_id: str, doc_title: str, source_path: str, markdown: str) -> list[Document]:
+        """Splits a Markdown document into header-aware, size-guarded chunks."""
         header_sections = self._header_splitter.split_text(markdown)
         raw_sections = [
             (self._heading_from_metadata(section.metadata), section.page_content)
@@ -91,6 +91,7 @@ class MarkdownChunker:
         buffer_is_table = False
 
         def flush() -> None:
+            """Appends the buffered lines as a segment and clears the buffer."""
             segment = "\n".join(buffer).strip()
             if segment:
                 segments.append((buffer_is_table, segment))

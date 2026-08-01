@@ -51,6 +51,19 @@ async def test_openapi_includes_shell_endpoints(client):
     assert "/ready" in schema["paths"]
 
 
+async def test_chat_returns_a_typed_response_even_without_a_real_llm_or_redis(client):
+    response = await client.post("/chat", json={"thread_id": "t1", "message": "hello"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["thread_id"] == "t1"
+    assert isinstance(body["answer"], str) and body["answer"]
+    assert isinstance(body["response_time_ms"], int)
+    assert body["sources"] == []
+    assert "Request understood" in body["steps"]
+    assert "Answer prepared" in body["steps"]
+
+
 async def test_unhandled_exception_returns_500_without_leaking_a_traceback(monkeypatch):
     monkeypatch.setenv("LLM_BACKEND", "dummy")
     get_settings.cache_clear()

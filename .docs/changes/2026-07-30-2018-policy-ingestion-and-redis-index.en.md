@@ -41,14 +41,14 @@
   dependencies are now pinned to exact versions (`==`) rather than lower bounds.
 - Tests: `tests/test_rules.py`, `tests/test_ingest.py`, `tests/test_run_ingest.py` (manifest
   decision branches via mocks), `tests/test_admin.py`, `tests/test_health_readiness.py`, and
-  `tests/test_redis_integration.py` (real Redis Stack, skipped automatically if unreachable) —
+  `tests/test_redis_integration.py` (real Redis 8, skipped automatically if unreachable) —
   covers full ingest, idempotent re-run, dimension-mismatch rebuild, category-filtered similarity
   search and index stats against a live index. 47 tests, 97% coverage.
 
 ## Why
 
 Executing task 2 of the ordered development plan: make the fictional policy corpus searchable in
-Redis Stack with stable citation identities, and make that index observable through the application
+Redis 8 with stable citation identities, and make that index observable through the application
 rather than only through raw Redis inspection.
 
 Two things were discovered and corrected during implementation, beyond the plan's own scope:
@@ -76,7 +76,7 @@ entry point.
 
 `ruff check .`, `ruff format --check .`, `bandit -c pyproject.toml -r app`,
 `pytest --cov=app --cov-report=term-missing` — all clean (47 passed, 97% coverage, including the
-Redis-Stack integration tests run against a real `redis/redis-stack-server:7.4.0-v6` container).
+Redis integration tests run against the pinned `redis:8.8.1` Compose service).
 Live smoke test: `uvicorn app.main:app` against that container — `/ready` reports `redis: ok`,
 `/admin/stats` reports 83 chunks across all seven categories, `/admin/ingest` correctly reports
 `reused` on a second call.

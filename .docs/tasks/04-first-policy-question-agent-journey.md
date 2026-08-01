@@ -18,16 +18,16 @@
 - Keep the model-facing tool result concise and the full Pydantic artifact outside the prompt; state and artifacts must have one authoritative home.
 
 - [ ] The agent state contains only messages, intent, category, claim, and decision, with LangChain message reduction and typed domain models.
-- [ ] `ExpenseClaim` supports the documented incremental fields for category/subtype, submitted and original amounts/currency, dates, headcount, distances/direction/days, transport, excluded amount, receipt/approval, destination/business purpose, item identity, and used annual benefit budget.
+- [ ] `ExpenseClaim` supports only fields consumed by routing or deterministic tools: category/subtype, HUF amount, date, headcount, distance/direction/days, excluded amount, receipt/approval, and used annual benefit budget.
 - [ ] The LangChain model factory supplies ChatOllama in normal operation and the scripted test model in dummy mode through the same chat-model interface.
 - [ ] Production uses `qwen2.5:7b-instruct-q4_K_M`; structured classification, extraction, and tool selection run at temperature 0, while final response generation runs at temperature 0.2.
 - [ ] Model selection and prompts permit best-effort Hungarian interaction over the English corpus while the canonical prompts, rule identifiers, enum values, and official evaluation remain English.
 - [ ] Intent classification and information extraction use structured output with typed validation, one repair attempt, and an observable degraded fallback.
-- [ ] The compiled main graph contains the eight designed nodes and conditional routes for complete, incomplete, unsupported, tool-calling, and response-generating paths.
+- [ ] The compiled main graph contains seven focused nodes and conditional routes for complete, incomplete, unsupported, tool-calling, and response-generating paths.
 - [ ] The four prompt contracts are classification, information extraction, agent step, and final response generation, all represented as composable LangChain runnables.
 - [ ] The agent step uses `bind_tools()` and autonomously selects the policy-search tool instead of following a hard-coded intent-to-tool lookup.
 - [ ] Tool execution uses LangGraph `ToolNode`, returns compact `ToolMessage` content, and retains the typed artifact for downstream response construction and evaluation.
-- [ ] A general policy question completes through classification, extraction, request checking, tool selection, retrieval, and grounded response generation.
+- [ ] A general policy question completes through classification, extraction, deterministic routing, tool selection, retrieval, and grounded response generation.
 - [ ] The blocking chat endpoint returns a typed response with answer, UTC completion time, duration, deduplicated sources, and stable public step labels.
 - [ ] A policy-dependent answer without a supporting tool artifact is refused or clearly marked as lacking evidence.
 - [ ] Unsupported requests never call policy, calculation, or rule tools and return the fictional-policy and no-legal-advice disclaimer.

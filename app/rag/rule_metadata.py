@@ -1,5 +1,3 @@
-"""Attaches rule/citation metadata to chunks and validates rules.yaml section anchors."""
-
 from langchain_core.documents import Document
 
 from app.rag.errors import IngestionError
@@ -10,6 +8,7 @@ class RuleMetadataResolver:
     """Attaches `section_id`/`rule_ids`/`categories` to chunks and validates rules.yaml anchors."""
 
     def __init__(self, rule_catalogue: RuleCatalogue) -> None:
+        """Stores the rule catalogue and indexes rule ids by document section."""
         self._catalogue = rule_catalogue
         self._rule_ids_by_section = self._index_rule_ids(rule_catalogue)
 
@@ -25,6 +24,7 @@ class RuleMetadataResolver:
         return index
 
     def attach(self, chunks: list[Document]) -> list[Document]:
+        """Attaches section_id, rule_ids and categories metadata to each chunk."""
         for chunk in chunks:
             doc_id = chunk.metadata["doc_id"]
             document = self._catalogue.documents.get(doc_id)

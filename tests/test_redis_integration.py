@@ -1,18 +1,25 @@
-"""Integration tests against a real Redis Stack instance; skipped if unreachable.
-
-Run a local instance first, e.g.:
-    docker run -d -p 6379:6379 redis/redis-stack-server:7.4.0-v6 redis-stack-server --appendonly yes
-"""
-
 import os
 
 import pytest
 import redis as redis_lib
 
 from app.integrations.redis import RedisIndex
+from app.rag.graph import build_rag_graph
+from app.rag.index_schema import MIN_CONFIDENCE_THRESHOLD
 from app.rag.ingest import PolicyCorpusIngestor
+from app.rag.retriever import PolicyRetriever
 from app.rag.store import build_embeddings, build_vector_store
 from app.rules.loader import load_rule_catalogue
+
+CATEGORY_QUESTIONS = {
+    "general": "how many days do I have to submit an expense claim",
+    "meal": "how much can I claim for a business meal per person",
+    "equipment": "what is the approval process for buying a laptop",
+    "travel": "what is the accommodation limit per night for a business trip",
+    "commuting": "how much travel pass support do I get for commuting",
+    "mileage": "what is the mileage reimbursement rate for my own car",
+    "benefits": "what is the annual recreational benefit budget",
+}
 
 TEST_REDIS_URL = os.environ.get("TEST_REDIS_URL", "redis://127.0.0.1:6379/0")
 
@@ -25,7 +32,7 @@ def _redis_available() -> bool:
     return True
 
 
-pytestmark = pytest.mark.skipif(not _redis_available(), reason="Redis Stack not reachable")
+pytestmark = pytest.mark.skipif(not _redis_available(), reason="Redis 8 not reachable")
 
 
 @pytest.fixture(scope="module")
@@ -46,10 +53,10 @@ def vector_store():
 @pytest.fixture(autouse=True)
 def _clean_index(redis_client, vector_store):
     vector_store.index.create(overwrite=True, drop=True)
-    redis_client.delete("manifest:corpus")
+    redis_client.delete("build_info:corpus")
     yield
     vector_store.index.create(overwrite=True, drop=True)
-    redis_client.delete("manifest:corpus")
+    redis_client.delete("build_info:corpus")
 
 
 def test_full_ingest_idempotent_rerun_and_dimension_mismatch_rebuild(
@@ -67,8 +74,8 @@ def test_full_ingest_idempotent_rerun_and_dimension_mismatch_rebuild(
     assert second.action == "reused"
     assert second.chunk_count == first.chunk_count
 
-    stale_manifest = redis_index.read_manifest()
-    redis_index.write_manifest(stale_manifest.model_copy(update={"dimension": 1}))
+    stale_build_info = redis_index.read_build_info()
+    redis_index.write_build_info(stale_build_info.model_copy(update={"dimension": 1}))
 
     third = ingestor.run(redis_index, vector_store, rule_catalogue=catalogue)
     assert third.action == "rebuilt"
@@ -111,3 +118,29 @@ def test_get_index_stats_reports_total_chunks_and_category_counts(redis_index, v
     assert stats["total_chunks"] > 0
     assert stats["category_counts"]["meal"] > 0
     assert sum(stats["category_counts"].values()) >= stats["total_chunks"]
+
+
+@pytest.mark.parametrize("category,question", list(CATEGORY_QUESTIONS.items()))
+def test_rag_graph_returns_grounded_evidence_for_each_category(
+    redis_index, vector_store, category, question
+):
+    PolicyCorpusIngestor().run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
+    graph = build_rag_graph(PolicyRetriever(vector_store))
+
+    result = graph.invoke({"question": question, "category": category})["result"]
+
+    assert len(result.results) > 0
+    assert result.confidence >= MIN_CONFIDENCE_THRESHOLD
+    assert result.citations
+    assert result.context.startswith("[S1]")
+
+
+def test_rag_graph_flags_low_confidence_for_an_irrelevant_question(redis_index, vector_store):
+    PolicyCorpusIngestor().run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
+    graph = build_rag_graph(PolicyRetriever(vector_store))
+
+    result = graph.invoke({"question": "what is the weather like on mars today", "category": None})[
+        "result"
+    ]
+
+    assert result.confidence < MIN_CONFIDENCE_THRESHOLD

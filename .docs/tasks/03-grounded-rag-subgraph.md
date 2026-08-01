@@ -10,7 +10,7 @@
 
 **Technical notes:**
 
-- Give the subgraph its own small `RagState` and compile it independently from the main agent; the seam is question/category in and one typed `RagResult` out.
+- Give the subgraph its own small `RagState` in `app/rag/state.py` and compile it independently from the main agent; the seam is question/category in and one typed `RagResult` out.
 - Supply a retriever factory rather than constructing Redis or embeddings inside graph nodes, allowing fake retrievers in unit tests and the Redis adapter in integration tests.
 - Keep embeddings and raw vectors outside graph state. The retriever encapsulates query embedding and KNN execution, while state carries only information consumed by another node.
 - Build citations from the exact documents admitted to the bounded context so the answer cannot cite a retrieved chunk that was dropped from the prompt.

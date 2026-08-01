@@ -32,6 +32,7 @@ thread_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 
 class _CorrelationFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
+        """Attaches the current request and thread correlation ids to the record."""
         record.request_id = request_id_var.get()
         record.thread_id = thread_id_var.get()
         return True
@@ -39,10 +40,12 @@ class _CorrelationFilter(logging.Filter):
 
 class _JsonFormatter(logging.Formatter):
     def __init__(self, service: str) -> None:
+        """Stores the service name included in every log record."""
         super().__init__()
         self._service = service
 
     def format(self, record: logging.LogRecord) -> str:
+        """Renders the log record as a single JSON line."""
         payload = {
             "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             "level": record.levelname,
@@ -58,6 +61,7 @@ class _JsonFormatter(logging.Formatter):
 
 
 def configure_logging(service: str, log_level: str, log_dir: Path = DEFAULT_LOG_DIR) -> None:
+    """Sets up JSON stdout and rotating file logging with correlation ids for the service."""
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:

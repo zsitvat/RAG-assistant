@@ -1,37 +1,41 @@
-"""Wraps the Redis connection and the lifecycle operations the LangChain integration doesn't own."""
-
 import redis
 from redis.commands.search.query import Query
 
-from app.rag.model import CorpusManifest
+from app.rag.model import IndexBuildInfo
 
-MANIFEST_KEY = "manifest:corpus"
+BUILD_INFO_KEY = "build_info:corpus"
 CHUNK_INDEX_NAME = "idx:chunks"
 
 
 class RedisIndex:
-    """The Redis connection plus manifest/index-stats operations, kept in one place."""
+    """The Redis connection plus build-info/index-stats operations, kept in one place."""
 
     def __init__(self, redis_url: str) -> None:
+        """Connects to Redis at the given URL."""
         self._client = redis.Redis.from_url(redis_url, decode_responses=True)
 
     @property
     def client(self) -> redis.Redis:
+        """Returns the underlying Redis client."""
         return self._client
 
     def ping(self) -> bool:
+        """Checks whether Redis is reachable."""
         return self._client.ping()
 
-    def read_manifest(self) -> CorpusManifest | None:
-        raw = self._client.get(MANIFEST_KEY)
+    def read_build_info(self) -> IndexBuildInfo | None:
+        """Reads the stored corpus build info, if any."""
+        raw = self._client.get(BUILD_INFO_KEY)
         if raw is None:
             return None
-        return CorpusManifest.model_validate_json(raw)
+        return IndexBuildInfo.model_validate_json(raw)
 
-    def write_manifest(self, manifest: CorpusManifest) -> None:
-        self._client.set(MANIFEST_KEY, manifest.model_dump_json())
+    def write_build_info(self, build_info: IndexBuildInfo) -> None:
+        """Persists the corpus build info."""
+        self._client.set(BUILD_INFO_KEY, build_info.model_dump_json())
 
     def get_index_stats(self) -> dict:
+        """Returns the total chunk count and per-category chunk counts from the index."""
         try:
             info = self._client.ft(CHUNK_INDEX_NAME).info()
         except redis.ResponseError:
