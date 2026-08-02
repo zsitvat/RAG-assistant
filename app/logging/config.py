@@ -23,6 +23,8 @@ _NOISY_THIRD_PARTY_LOGGERS = (
 
 
 class _JsonFormatter(logging.Formatter):
+    """Formats application log records as structured JSON lines."""
+
     def __init__(self, service: str) -> None:
         """Stores the service name included in every log record."""
         super().__init__()

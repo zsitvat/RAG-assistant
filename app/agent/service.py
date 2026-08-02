@@ -66,11 +66,12 @@ class AgentService:
                 if token is not None:
                     yield token
 
-        final_state = self._graph.get_state(config).values
+        final_state = (await self._graph.aget_state(config)).values
         yield StreamEvent(event="result", data=self._project(thread_id, final_state, start))
 
     @staticmethod
     def _input(message: str) -> dict:
+        """Builds graph input containing the current user message."""
         return {"messages": [HumanMessage(content=message)]}
 
     def _config(self, thread_id: str) -> dict:
@@ -142,6 +143,7 @@ class AgentService:
 
     @staticmethod
     def _collect_cited_sources(request_messages: list[BaseMessage]) -> list[ChatSource]:
+        """Collects deduplicated cited sources from policy-search tool messages."""
         sources: list[ChatSource] = []
         seen: set[tuple[str, str]] = set()
         for message in request_messages:
@@ -165,6 +167,7 @@ class AgentService:
 
     @staticmethod
     def _collect_step_labels(request_messages: list[BaseMessage]) -> list[str]:
+        """Collects stable public step labels from the completed request."""
         steps = list(ALWAYS_FIRST_STEPS)
         for message in request_messages:
             if not isinstance(message, ToolMessage):

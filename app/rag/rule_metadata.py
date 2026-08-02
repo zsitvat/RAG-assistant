@@ -18,10 +18,12 @@ class RuleMetadataResolver:
     def _index_section_metadata(
         rule_catalogue: RuleCatalogue,
     ) -> tuple[dict[tuple[str, str], list[str]], dict[tuple[str, str], set[str]]]:
+        """Indexes rule identifiers and categories by document section."""
         rule_ids: dict[tuple[str, str], list[str]] = {}
         categories: dict[tuple[str, str], set[str]] = {}
 
         def index(rule_id: str, doc_ref: str | None, category: str) -> None:
+            """Adds one source-linked rule to the section metadata indexes."""
             if doc_ref is None:
                 return
             doc_id, section_id = doc_ref.split("#", 1)
@@ -71,6 +73,7 @@ class RuleMetadataResolver:
         return chunks
 
     def _resolve_section_id(self, doc_id: str, heading: str | None) -> str | None:
+        """Resolves a corpus heading to its configured section identifier."""
         if heading is None:
             return None
         document = self._catalogue.documents.get(doc_id)

@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 import pytest
@@ -8,6 +9,7 @@ from app.agent.calculator import ReimbursementCalculator
 from app.agent.graph import build_agent_graph
 from app.agent.model import ExpenseClaim, IntentClassification
 from app.agent.nodes import AgentNodes
+from app.agent.service import AgentService
 from app.integrations.checkpointer import CHECKPOINT_TTL_MINUTES, build_checkpointer
 from app.rules.loader import load_rule_catalogue
 from tests.fakes import ScriptedChatModel, build_agent_tools, policy_document
@@ -41,9 +43,16 @@ def redis_client() -> redis_lib.Redis:
     return redis_lib.Redis.from_url(TEST_REDIS_URL)
 
 
-@pytest.fixture
-def checkpointer():
-    return build_checkpointer(TEST_REDIS_URL)
+async def _invoke(graph, payload: dict, config: dict) -> dict:
+    """Runs a sync graph.invoke() off-thread, mirroring FastAPI's run_in_threadpool bridging
+    back to the same persistent event loop the AsyncRedisSaver checkpointer was set up on."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, lambda: graph.invoke(payload, config=config))
+
+
+async def _get_state(graph, config: dict):
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, lambda: graph.get_state(config))
 
 
 def _clarifying_model() -> ScriptedChatModel:
@@ -72,11 +81,14 @@ def _config(thread_id: str) -> dict:
     return {"configurable": {"thread_id": thread_id}, "recursion_limit": 12}
 
 
-def test_pending_claim_survives_a_new_graph_instance_for_the_same_thread(checkpointer):
+async def test_pending_claim_survives_a_new_graph_instance_for_the_same_thread():
+    checkpointer = await build_checkpointer(TEST_REDIS_URL)
     config = _config("checkpoint-restart")
-    checkpointer.delete_thread("checkpoint-restart")
-    _graph(_clarifying_model(), checkpointer).invoke(
-        {"messages": [("human", "I drive 18 km, 10 days a month.")]}, config=config
+    await checkpointer.adelete_thread("checkpoint-restart")
+    await _invoke(
+        _graph(_clarifying_model(), checkpointer),
+        {"messages": [("human", "I drive 18 km, 10 days a month.")]},
+        config,
     )
 
     resume_model = ScriptedChatModel(
@@ -88,19 +100,22 @@ def test_pending_claim_survives_a_new_graph_instance_for_the_same_thread(checkpo
             ]
         ),
     )
-    restarted = _graph(resume_model, build_checkpointer(TEST_REDIS_URL))
+    restarted = _graph(resume_model, await build_checkpointer(TEST_REDIS_URL))
 
-    state = restarted.get_state(config)
+    state = await _get_state(restarted, config)
 
     assert ExpenseClaim.from_state(state.values["claim"]).distance_km == 18
     assert state.values["decision"] == "needs_info"
 
 
-def test_checkpoints_use_their_own_namespace_and_expire_after_24_hours(checkpointer, redis_client):
+async def test_checkpoints_use_their_own_namespace_and_expire_after_24_hours(redis_client):
+    checkpointer = await build_checkpointer(TEST_REDIS_URL)
     config = _config("checkpoint-ttl")
-    checkpointer.delete_thread("checkpoint-ttl")
-    _graph(_clarifying_model(), checkpointer).invoke(
-        {"messages": [("human", "I drive 18 km, 10 days a month.")]}, config=config
+    await checkpointer.adelete_thread("checkpoint-ttl")
+    await _invoke(
+        _graph(_clarifying_model(), checkpointer),
+        {"messages": [("human", "I drive 18 km, 10 days a month.")]},
+        config,
     )
 
     keys = [key.decode() for key in redis_client.keys("checkpoint*checkpoint-ttl*")]
@@ -110,36 +125,55 @@ def test_checkpoints_use_their_own_namespace_and_expire_after_24_hours(checkpoin
     assert {redis_client.ttl(key) for key in keys} == {CHECKPOINT_TTL_MINUTES * 60}
 
 
-def test_deleting_a_thread_makes_the_next_message_start_a_new_conversation(
-    checkpointer, redis_client
-):
+async def test_deleting_a_thread_makes_the_next_message_start_a_new_conversation(redis_client):
+    checkpointer = await build_checkpointer(TEST_REDIS_URL)
     config = _config("checkpoint-reset")
-    checkpointer.delete_thread("checkpoint-reset")
-    _graph(_clarifying_model(), checkpointer).invoke(
-        {"messages": [("human", "I drive 18 km, 10 days a month.")]}, config=config
+    await checkpointer.adelete_thread("checkpoint-reset")
+    await _invoke(
+        _graph(_clarifying_model(), checkpointer),
+        {"messages": [("human", "I drive 18 km, 10 days a month.")]},
+        config,
     )
     assert redis_client.keys("checkpoint*checkpoint-reset*")
 
-    checkpointer.delete_thread("checkpoint-reset")
+    await checkpointer.adelete_thread("checkpoint-reset")
 
     assert redis_client.keys("checkpoint*checkpoint-reset*") == []
-    assert (
-        build_agent_graph(
-            AgentNodes(_clarifying_model(), _clarifying_model(), [], CALCULATOR), checkpointer
-        )
-        .get_state(config)
-        .values
-        == {}
+    fresh_graph = build_agent_graph(
+        AgentNodes(_clarifying_model(), _clarifying_model(), [], CALCULATOR), checkpointer
     )
+    state = await _get_state(fresh_graph, config)
+    assert state.values == {}
 
 
-def test_separate_workers_share_one_thread_through_redis(checkpointer):
+async def test_separate_workers_share_one_thread_through_redis():
     config = _config("checkpoint-shared")
-    checkpointer.delete_thread("checkpoint-shared")
-    worker_one = _graph(_clarifying_model(), build_checkpointer(TEST_REDIS_URL))
-    worker_two = _graph(_clarifying_model(), build_checkpointer(TEST_REDIS_URL))
+    setup_checkpointer = await build_checkpointer(TEST_REDIS_URL)
+    await setup_checkpointer.adelete_thread("checkpoint-shared")
 
-    worker_one.invoke({"messages": [("human", "I drive 18 km, 10 days a month.")]}, config=config)
+    worker_one = _graph(_clarifying_model(), await build_checkpointer(TEST_REDIS_URL))
+    worker_two = _graph(_clarifying_model(), await build_checkpointer(TEST_REDIS_URL))
 
-    restored = ExpenseClaim.from_state(worker_two.get_state(config).values["claim"])
+    await _invoke(worker_one, {"messages": [("human", "I drive 18 km, 10 days a month.")]}, config)
+
+    state = await _get_state(worker_two, config)
+    restored = ExpenseClaim.from_state(state.values["claim"])
     assert restored.distance_km == 18
+
+
+async def test_agent_service_stream_completes_against_the_real_redis_checkpointer():
+    """Regression test: AsyncRedisSaver's sync methods raise InvalidStateError when called
+    directly on the event-loop thread. AgentService.stream() must use aget_state(), not
+    get_state(), to build its final result event — this only reproduces against a real
+    async checkpointer, never against the default in-memory one used by other graph tests."""
+    checkpointer = await build_checkpointer(TEST_REDIS_URL)
+    await checkpointer.adelete_thread("checkpoint-stream")
+    service = AgentService(_graph(_clarifying_model(), checkpointer))
+
+    events = [
+        event
+        async for event in service.stream("checkpoint-stream", "I drive 18 km, 10 days a month.")
+    ]
+
+    assert events[-1].event == "result"
+    assert events[-1].data.decision == "needs_info"

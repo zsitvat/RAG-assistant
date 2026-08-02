@@ -18,9 +18,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Configures logging and builds application dependencies for the app's lifetime."""
     settings = get_settings()
     configure_logging(service="api", log_level=settings.log_level)
-    app.state.dependencies = ApplicationDependencies.build(settings)
+    app.state.dependencies = await ApplicationDependencies.build(settings)
 
-    logger.info("API startup complete (backend=%s)", settings.llm_backend)
+    logger.info(f"API startup complete (backend={settings.llm_backend})")
     yield
 
 

@@ -7,5 +7,6 @@ sonar.tests=tests
 sonar.sourceEncoding=UTF-8
 sonar.python.version=3.12
 sonar.python.coverage.reportPaths=coverage.xml
+sonar.exclusions=app/settings.py
 sonar.coverage.exclusions=app/ui.py
 sonar.qualitygate.wait=true

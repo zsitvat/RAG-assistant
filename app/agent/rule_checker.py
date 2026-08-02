@@ -11,6 +11,7 @@ class DocumentChecker:
     """Checks receipts and category-specific supporting documents."""
 
     def __init__(self, rules: RuleCatalogue) -> None:
+        """Stores the rules containing document and receipt requirements."""
         self._rules = rules
 
     def check_requirements(self, claim: ExpenseClaim, assess_presence: bool) -> list[Finding]:
@@ -79,6 +80,7 @@ class ApprovalChecker:
     """Checks the approver required by the claim category and amount."""
 
     def __init__(self, rules: RuleCatalogue) -> None:
+        """Stores the rules containing category approval requirements."""
         self._rules = rules
 
     def check(self, claim: ExpenseClaim) -> list[Finding]:
@@ -98,6 +100,7 @@ class ApprovalChecker:
         return [self._approval_finding(rule_id, doc_ref, approver, claim.approval_obtained)]
 
     def _approval_tiers(self, category: Category) -> tuple[list[ApprovalTier], str, str | None]:
+        """Returns category-specific tiers or the default submission tiers."""
         category_rules = self._rules.categories[category]
         configured = next((rule for rule in category_rules.rules if rule.approval_tiers), None)
         if configured is not None:
@@ -107,6 +110,7 @@ class ApprovalChecker:
 
     @staticmethod
     def _required_approver(tiers: list[ApprovalTier], amount_huf: float) -> str:
+        """Returns the approver for the first tier covering the claim amount."""
         ordered = sorted(
             tiers,
             key=lambda tier: tier.max_huf if tier.max_huf is not None else float("inf"),
@@ -116,6 +120,7 @@ class ApprovalChecker:
         )
 
     def _check_travel(self, claim: ExpenseClaim) -> list[Finding]:
+        """Checks travel approval according to trip scope and amount."""
         rule = next(
             (
                 rule
@@ -146,6 +151,7 @@ class ApprovalChecker:
         return [self._approval_finding(rule.id, rule.doc_ref, approver, claim.approval_obtained)]
 
     def _check_benefit(self, claim: ExpenseClaim) -> list[Finding]:
+        """Checks whether the selected benefit requires prior approval."""
         rule = next(
             (
                 rule
@@ -174,6 +180,7 @@ class ApprovalChecker:
     def _approval_finding(
         rule_id: str, doc_ref: str | None, approver: str, obtained: bool | None
     ) -> Finding:
+        """Builds a finding for a required approver and approval status."""
         if obtained is True:
             status, message = "pass", f"required {approver} approval was obtained"
         elif obtained is False:
@@ -187,6 +194,7 @@ class EligibilityChecker:
     """Checks category-specific eligibility rules that do not perform reimbursement arithmetic."""
 
     def __init__(self, rules: RuleCatalogue) -> None:
+        """Stores the rules containing category eligibility requirements."""
         self._rules = rules
 
     def check(self, claim: ExpenseClaim) -> list[Finding]:
@@ -203,6 +211,7 @@ class EligibilityChecker:
         return []
 
     def _check_meal(self, claim: ExpenseClaim) -> list[Finding]:
+        """Checks excluded meal items and documented business use."""
         rule = next(
             (rule for rule in self._rules.categories["meal"].rules if rule.excluded_items), None
         )
@@ -223,6 +232,7 @@ class EligibilityChecker:
         ]
 
     def _check_business_expense(self, claim: ExpenseClaim) -> list[Finding]:
+        """Rejects prohibited expenses and checks their business use."""
         rules = self._rules.categories[claim.category].rules
         prohibited_rule = next(
             (
@@ -249,6 +259,7 @@ class EligibilityChecker:
         return self._check_business_use(claim)
 
     def _check_business_use(self, claim: ExpenseClaim) -> list[Finding]:
+        """Checks whether a claim satisfies its business-use requirement."""
         business_rule = next(
             (
                 rule
@@ -275,6 +286,7 @@ class EligibilityChecker:
         ]
 
     def _check_commuting(self, claim: ExpenseClaim) -> list[Finding]:
+        """Checks minimum-distance eligibility for commuting claims."""
         rule = next(
             (
                 rule
@@ -311,6 +323,7 @@ class EligibilityChecker:
         return [Finding(rule_id=rule.id, status=status, message=message, doc_ref=rule.doc_ref)]
 
     def _check_benefits(self, claim: ExpenseClaim) -> list[Finding]:
+        """Collects budget, tenure, and carry-over benefit findings."""
         return [
             *self._check_benefit_budget(claim),
             *self._check_benefit_tenure(claim),
@@ -318,6 +331,7 @@ class EligibilityChecker:
         ]
 
     def _check_benefit_budget(self, claim: ExpenseClaim) -> list[Finding]:
+        """Checks whether annual benefit budget remains available."""
         rule = self._benefit_allowance_rule(claim.expense_type)
         if rule is None or claim.annual_budget_used_huf is None:
             return []
@@ -331,6 +345,7 @@ class EligibilityChecker:
         return [Finding(rule_id=rule.id, status=status, message=message, doc_ref=rule.doc_ref)]
 
     def _check_benefit_tenure(self, claim: ExpenseClaim) -> list[Finding]:
+        """Checks employee tenure against the configured benefit threshold."""
         rule = next(
             (
                 rule
@@ -354,6 +369,7 @@ class EligibilityChecker:
         return [Finding(rule_id=rule.id, status=status, message=message, doc_ref=rule.doc_ref)]
 
     def _check_benefit_carry_over(self) -> list[Finding]:
+        """Reports whether unused benefit budget carries into the next year."""
         rule = next(
             (
                 rule
@@ -372,6 +388,7 @@ class EligibilityChecker:
         return [Finding(rule_id=rule.id, status="pass", message=message, doc_ref=rule.doc_ref)]
 
     def _benefit_allowance_rule(self, expense_type: str | None) -> RuleDefinition | None:
+        """Returns the allowance rule matching a benefit type."""
         return next(
             (
                 rule
@@ -386,6 +403,7 @@ class SubmissionDeadlineChecker:
     """Adapts the pure deadline calculation into a source-linked rule finding."""
 
     def __init__(self, rules: RuleCatalogue, deadline_checker: DeadlineChecker) -> None:
+        """Stores submission rules and the deadline calculator."""
         self._submission = rules.submission
         self._deadline_checker = deadline_checker
 
@@ -413,6 +431,7 @@ class RuleChecker:
     """Coordinates focused document, approval, eligibility, and deadline checks."""
 
     def __init__(self, rules: RuleCatalogue, deadline_checker: DeadlineChecker) -> None:
+        """Builds the focused rule checkers coordinated by this facade."""
         self._documents = DocumentChecker(rules)
         self._approvals = ApprovalChecker(rules)
         self._eligibility = EligibilityChecker(rules)
@@ -441,6 +460,7 @@ class RuleChecker:
         return [Finding(rule_id="-", status="not_applicable", message="no applicable rule facts")]
 
     def _deadline_findings(self, claim: ExpenseClaim, reference_date: date) -> list[Finding]:
+        """Returns a deadline finding when the claim has an expense date."""
         if claim.expense_date is None:
             return []
         return [self._deadline.check(claim.expense_date, reference_date)]

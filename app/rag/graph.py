@@ -39,6 +39,7 @@ class RagNodes:
 
     @staticmethod
     def _to_result(doc: Document) -> RetrievedResult:
+        """Converts a retrieved document into the typed RAG result item."""
         metadata = doc.metadata
         return RetrievedResult(
             doc_id=metadata["doc_id"],
@@ -54,6 +55,7 @@ class RagNodes:
 
     @staticmethod
     def _build_context(results: list[RetrievedResult]) -> tuple[str, list[Citation]]:
+        """Builds budgeted citation context from ranked retrieval results."""
         blocks: list[str] = []
         citations: list[Citation] = []
         seen_sections: set[tuple[str, str | None]] = set()

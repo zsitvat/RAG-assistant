@@ -76,5 +76,6 @@ intact, so the next message retries on the same thread.
 ## Related restructuring
 
 `app/core/` was split in the same change: `app/core/config.py` → `app/settings.py`,
-`app/core/logging.py` → `app/logging/config.py`, `app/core/observability.py` →
-`app/logging/middleware.py`.
+`app/core/logging.py` → `app/logging/config.py`. Request-correlation middleware
+(`app/core/observability.py`, `RequestContextMiddleware`) was removed rather than moved — see the
+logging feature doc for why.

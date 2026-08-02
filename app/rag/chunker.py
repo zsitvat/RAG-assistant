@@ -39,7 +39,7 @@ class MarkdownChunker:
             for chunk_text in self._guard_split_segments(segments):
                 chunks.append(
                     Document(
-                        page_content=chunk_text,
+                        page_content=self._with_heading(heading, chunk_text),
                         metadata={
                             "doc_id": doc_id,
                             "doc_title": doc_title,
@@ -52,7 +52,13 @@ class MarkdownChunker:
         return chunks
 
     @staticmethod
+    def _with_heading(heading: str | None, chunk_text: str) -> str:
+        """Prepends the section heading to a chunk so it is self-describing in isolation."""
+        return f"{heading}\n\n{chunk_text}" if heading else chunk_text
+
+    @staticmethod
     def _heading_from_metadata(metadata: dict) -> str | None:
+        """Returns the most specific heading stored in splitter metadata."""
         for key in ("Header 3", "Header 2", "Header 1"):
             if key in metadata:
                 return metadata[key]
@@ -61,11 +67,7 @@ class MarkdownChunker:
     def _merge_short_sections(
         self, sections: list[tuple[str | None, str]]
     ) -> list[tuple[str | None, str]]:
-        """Merges sections shorter than the threshold into the following sibling.
-
-        A trailing short section has no following sibling to merge into, so it is kept as
-        its own chunk under its own heading rather than absorbed into an earlier section.
-        """
+        """Merges short sections forward while preserving a trailing short section."""
         merged: list[tuple[str | None, str]] = []
         pending_heading: str | None = None
         pending_text = ""
@@ -82,6 +84,7 @@ class MarkdownChunker:
 
     @staticmethod
     def _is_table_line(line: str) -> bool:
+        """Returns whether a Markdown line belongs to a table block."""
         return line.strip().startswith("|")
 
     def _split_prose_and_tables(self, text: str) -> list[tuple[bool, str]]:
@@ -107,6 +110,7 @@ class MarkdownChunker:
         return segments
 
     def _guard_split_segments(self, segments: list[tuple[bool, str]]) -> list[str]:
+        """Splits prose by size while preserving complete Markdown tables."""
         chunks: list[str] = []
         for is_table, text in segments:
             chunks.append(text) if is_table else chunks.extend(self._char_splitter.split_text(text))

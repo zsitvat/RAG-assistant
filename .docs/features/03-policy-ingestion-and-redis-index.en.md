@@ -41,7 +41,9 @@ Each concern is one small class in its own module:
   shorter than 200 characters into the *following* sibling (a trailing short section — no sibling to
   merge into — keeps its own heading rather than being absorbed into an unrelated earlier section).
   Within each (possibly merged) section, table blocks are kept atomic; only prose runs are
-  size-guarded through `RecursiveCharacterTextSplitter` (800 chars, 120 overlap).
+  size-guarded through `RecursiveCharacterTextSplitter` (800 chars, 120 overlap). The section heading
+  is prepended to every resulting chunk's `page_content` (not only the first split of a section), so
+  each chunk is self-describing for embedding and retrieval even in isolation from its metadata.
 - **`rule_metadata.RuleMetadataResolver`** attaches `section_id` (resolved by matching the chunk's
   heading text against `rules.yaml`'s declared section anchors for that `doc_id`), `rule_ids` (rules
   whose `doc_ref` points at that section), and `categories` (the whole document's category list) to
@@ -88,8 +90,9 @@ and similarity searches go through `RedisVectorStore`, never through `RedisIndex
 
 - `POST /admin/ingest` and `GET /admin/stats` (`app/api/routes/admin.py`) return `503` with a clear
   `detail` when Redis is unavailable, instead of a raw 500.
-- `GET /ready` (`app/api/routes/health.py`) now pings the real Redis client; overall `ready` is
-  `false` when Redis is unreachable (previously a fixed `not_configured` placeholder from task 1).
+- `GET /ready` (`app/api/routes/health.py`, delegating to `app/integrations/readiness.py`'s
+  `ReadinessChecker`) now pings the real Redis client; overall `ready` is `false` when Redis is
+  unreachable (previously a fixed `not_configured` placeholder from task 1).
 - `ApplicationDependencies.build()` calls `connect_and_ingest()` during the FastAPI lifespan. If
   Redis is unreachable, dependency construction raises and FastAPI startup fails. This prevents the
   application from serving chat without policy retrieval or durable conversation state. `/ready`
@@ -132,7 +135,8 @@ TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest tests/test_redis_integrati
 | `app/rag/store.py` | `E5Embeddings`, `RedisVectorStore` factory |
 | `app/integrations/redis.py` | `RedisIndex` — connection, build-info read/write, index stats |
 | `app/api/routes/admin.py` | `/admin/ingest`, `/admin/stats` |
-| `app/api/routes/health.py` | real Redis check in `/ready` |
+| `app/api/routes/health.py` | `/health`, `/ready` routes (thin, delegates to `ReadinessChecker`) |
+| `app/integrations/readiness.py` | `ReadinessChecker` — Redis + LLM readiness checks |
 | `app/ui.py` | sidebar index stats |
 | `tests/test_rules.py`, `tests/test_ingest.py`, `tests/test_run_ingest.py`, `tests/test_admin.py`, `tests/test_health_readiness.py` | unit tests (no Redis required) |
 | `tests/test_redis_integration.py` | integration tests against a real Redis 8 instance |

@@ -151,7 +151,7 @@ class AgentNodes:
         if duplicate is None:
             return {"messages": [response]}
 
-        logger.warning("reusing prior result for repeated identical call to %s", call["name"])
+        logger.warning(f"reusing prior result for repeated identical call to {call['name']}")
         reused = ToolMessage(
             content=duplicate.content,
             artifact=duplicate.artifact,
@@ -163,13 +163,17 @@ class AgentNodes:
 
     @staticmethod
     def _invoke_with_retry(runnable: Runnable, messages: list) -> AIMessage | None:
+        """Invokes a model with retry handling and returns None after failure."""
         try:
             return runnable.with_retry().invoke({"messages": messages})
-        except Exception:
-            logger.warning("chat model call failed after retrying with backoff")
+        except Exception as exc:
+            logger.warning(
+                f"chat model call failed after retrying with backoff: {type(exc).__name__}: {exc}"
+            )
             return None
 
     def _bind_tools(self, available_tools: list[BaseTool]) -> BaseChatModel:
+        """Binds the available tools when the chat model supports tool calling."""
         if not available_tools:
             return self._agent_step_model
         try:
@@ -214,6 +218,7 @@ class AgentNodes:
 
     @staticmethod
     def _derive_decision(tool_messages: list[ToolMessage]) -> Decision | None:
+        """Derives claim eligibility from rule findings and calculation results."""
         findings = [
             finding
             for message in tool_messages

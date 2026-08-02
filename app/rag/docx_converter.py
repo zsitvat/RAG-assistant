@@ -30,6 +30,7 @@ class DocxToMarkdownConverter:
         return title, "\n\n".join(blocks)
 
     def _paragraph_to_markdown(self, paragraph: DocxParagraph) -> str | None:
+        """Converts one DOCX paragraph to its Markdown representation."""
         text = paragraph.text.strip()
         if not text:
             return None
@@ -46,6 +47,7 @@ class DocxToMarkdownConverter:
 
     @staticmethod
     def _table_to_markdown(table: DocxTable) -> str:
+        """Converts one DOCX table to Markdown table syntax."""
         rows = [[cell.text.strip().replace("\n", " ") for cell in row.cells] for row in table.rows]
         rows = [row for row in rows if any(row)]
         if not rows:

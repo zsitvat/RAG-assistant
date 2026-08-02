@@ -5,7 +5,7 @@ import redis as redis_lib
 
 from app.integrations.redis import RedisIndex
 from app.rag.graph import build_rag_graph
-from app.rag.index_schema import MIN_CONFIDENCE_THRESHOLD
+from app.rag.index_schema import MIN_CONFIDENCE_THRESHOLD, VECTOR_DIMENSION
 from app.rag.ingest import CorpusIngestor
 from app.rag.retriever import Retriever
 from app.rag.store import build_embeddings, build_vector_store
@@ -107,6 +107,13 @@ def test_similarity_search_respects_category_tag_filter(redis_index, vector_stor
 
     assert len(results) > 0
     assert all("meal" in result.metadata["categories"] for result in results)
+
+
+def test_indexed_vector_dimension_matches_the_configured_dimension(redis_index, vector_store):
+    ingestor = CorpusIngestor()
+    ingestor.run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
+
+    assert redis_index.indexed_vector_dimension() == VECTOR_DIMENSION
 
 
 def test_get_index_stats_reports_total_chunks_and_category_counts(redis_index, vector_store):

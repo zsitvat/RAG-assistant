@@ -30,8 +30,11 @@ class StructuredOutputRunner:
 
         try:
             return runnable.invoke({"messages": messages})
-        except Exception:
-            logger.warning("structured output for %s failed; retrying once", self._schema.__name__)
+        except Exception as exc:
+            logger.warning(
+                f"structured output for {self._schema.__name__} failed; retrying once: "
+                f"{type(exc).__name__}: {exc}"
+            )
 
         repair_messages = [
             *messages,
@@ -39,19 +42,20 @@ class StructuredOutputRunner:
         ]
         try:
             return runnable.invoke({"messages": repair_messages})
-        except Exception:
+        except Exception as exc:
             logger.warning(
-                "structured output for %s degraded to fallback after repair retry",
-                self._schema.__name__,
+                f"structured output for {self._schema.__name__} degraded to fallback after "
+                f"repair retry: {type(exc).__name__}: {exc}"
             )
             return fallback
 
     def _build_runnable(self):
+        """Builds the structured-output runnable when supported by the model."""
         try:
             return self._prompt | self._chat_model.with_structured_output(self._schema)
-        except Exception:
+        except Exception as exc:
             logger.warning(
-                "structured output unsupported for %s on this chat model; using fallback",
-                self._schema.__name__,
+                f"structured output unsupported for {self._schema.__name__} on this chat model; "
+                f"using fallback: {type(exc).__name__}: {exc}"
             )
             return None

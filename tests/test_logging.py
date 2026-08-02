@@ -42,3 +42,28 @@ def test_configure_logging_quiets_noisy_third_party_loggers(tmp_path):
 
     assert logging.getLogger("httpcore").getEffectiveLevel() == logging.WARNING
     assert logging.getLogger("sentence_transformers").getEffectiveLevel() == logging.WARNING
+
+
+def test_no_application_log_call_passes_claim_or_prompt_payload_content():
+    """Guards against a future logger.*() call leaking claim/prompt/answer text."""
+    import ast
+    from pathlib import Path
+
+    forbidden_names = {"claim", "prompt", "answer", "context", "content", "template"}
+    offenders = []
+    for path in sorted(Path("app").rglob("*.py")):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in {"info", "debug", "warning", "error", "exception"}
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "logger"
+            ):
+                for arg in node.args:
+                    names = {n.id for n in ast.walk(arg) if isinstance(n, ast.Name)}
+                    if names & forbidden_names:
+                        offenders.append(f"{path}:{node.lineno}")
+
+    assert offenders == []

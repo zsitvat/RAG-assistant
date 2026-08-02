@@ -49,6 +49,7 @@ class ChatApiClient:
                     yield event_name, json.loads(line.removeprefix("data: "))["data"]
 
     def _get(self, path: str) -> dict:
+        """Returns decoded JSON from a read-only API endpoint."""
         response = httpx2.get(f"{self._base_url}{path}", timeout=REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
         return response.json()

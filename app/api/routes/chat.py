@@ -43,5 +43,5 @@ async def reset_thread(
     checkpointer: Annotated[BaseCheckpointSaver, Depends(get_checkpointer)],
 ) -> ThreadResetResponse:
     """Deletes a conversation's stored state so the next message starts a new conversation."""
-    await run_in_threadpool(checkpointer.delete_thread, thread_id)
+    await checkpointer.adelete_thread(thread_id)
     return ThreadResetResponse(thread_id=thread_id)

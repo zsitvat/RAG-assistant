@@ -25,6 +25,8 @@ pytestmark = pytest.mark.skipif(not _redis_available(), reason="Redis 8 not reac
 async def client(monkeypatch):
     monkeypatch.setenv("LLM_BACKEND", "dummy")
     monkeypatch.setenv("REDIS_URL", TEST_REDIS_URL)
+    # Never let a full-app test boot against a developer's real .env Langfuse credentials.
+    monkeypatch.setenv("LANGFUSE_ENABLED", "false")
     get_settings.cache_clear()
     async with app.router.lifespan_context(app):
         transport = ASGITransport(app=app)

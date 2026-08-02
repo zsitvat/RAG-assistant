@@ -27,6 +27,7 @@ class DocumentMeta(BaseModel):
 
     @model_validator(mode="after")
     def _categories_not_empty(self) -> "DocumentMeta":
+        """Rejects document metadata without at least one category."""
         if not self.categories:
             raise ValueError("document categories must not be empty")
         return self
@@ -81,6 +82,7 @@ class CategoryRules(BaseModel):
 
     @model_validator(mode="after")
     def _document_requirements_are_source_linked(self) -> "CategoryRules":
+        """Requires source metadata for configured document requirements."""
         if self.required_documents and (
             self.required_documents_rule_id is None or self.required_documents_doc_ref is None
         ):
@@ -115,12 +117,14 @@ class RuleCatalogue(BaseModel):
 
     @model_validator(mode="after")
     def _validate_references(self) -> "RuleCatalogue":
+        """Rejects invalid document identifiers and rule references."""
         errors = [*self._document_id_errors(), *self._reference_errors()]
         if errors:
             raise ValueError("; ".join(errors))
         return self
 
     def _document_id_errors(self) -> list[str]:
+        """Returns validation errors for malformed document identifiers."""
         return [
             f"invalid document id {doc_id!r}: must be two digits"
             for doc_id in self.documents
@@ -142,6 +146,7 @@ class RuleCatalogue(BaseModel):
         yield self.submission.receipt_rule_id, self.submission.receipt_doc_ref
 
     def _reference_errors(self) -> list[str]:
+        """Returns errors for duplicate rule identifiers and invalid references."""
         errors: list[str] = []
         seen_rule_ids: set[str] = set()
         for rule_id, doc_ref in self._declared_references():
@@ -152,6 +157,7 @@ class RuleCatalogue(BaseModel):
         return errors
 
     def _validate_reference(self, rule_id: str, doc_ref: str | None) -> list[str]:
+        """Validates one rule reference against declared documents and sections."""
         if doc_ref is None:
             return []
         if "#" not in doc_ref:

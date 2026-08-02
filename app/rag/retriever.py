@@ -22,11 +22,13 @@ class Retriever:
 
     @staticmethod
     def _filter_expression(category: Category | None) -> str | None:
+        """Builds the Redis category filter for a retrieval query."""
         if category is None:
             return None
         return f"@categories:{{{category}|general}}"
 
     @staticmethod
     def _with_similarity(doc: Document, distance: float) -> Document:
+        """Attaches a normalized similarity score to a retrieved document."""
         doc.metadata["similarity"] = 1.0 - distance
         return doc

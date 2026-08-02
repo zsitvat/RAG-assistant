@@ -34,6 +34,18 @@ class RedisIndex:
         """Persists the corpus build info."""
         self._client.set(BUILD_INFO_KEY, build_info.model_dump_json())
 
+    def indexed_vector_dimension(self) -> int | None:
+        """Returns the embedding vector dimension configured on the index, if it exists."""
+        try:
+            info = self._client.ft(CHUNK_INDEX_NAME).info()
+        except redis.ResponseError:
+            return None
+        for attribute in info.get("attributes", []):
+            pairs = dict(zip(attribute[::2], attribute[1::2], strict=False))
+            if pairs.get("type") == "VECTOR":
+                return int(pairs["dim"])
+        return None
+
     def get_index_stats(self) -> dict:
         """Returns the total chunk count and per-category chunk counts from the index."""
         try:

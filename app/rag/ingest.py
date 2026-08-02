@@ -98,6 +98,7 @@ class CorpusIngestor:
 
     @staticmethod
     def _upsert_chunks(vector_store: RedisVectorStore, chunks: list[Document]) -> None:
+        """Writes document chunks to the vector store in bounded batches."""
         for start in range(0, len(chunks), INGEST_BATCH_SIZE):
             batch = chunks[start : start + INGEST_BATCH_SIZE]
             vector_store.add_texts(
@@ -110,6 +111,7 @@ class CorpusIngestor:
 
     @staticmethod
     def _count_categories(chunks: list[Document]) -> dict[str, int]:
+        """Counts indexed chunks for every attached policy category."""
         counts: dict[str, int] = {}
         for chunk in chunks:
             for category in chunk.metadata["categories"]:

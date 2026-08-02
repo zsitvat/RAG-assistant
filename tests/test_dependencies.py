@@ -44,8 +44,12 @@ def test_providers_read_the_typed_application_container():
     assert get_agent_service(request) is dependencies.agent_service
 
 
-def test_build_fails_when_redis_is_unreachable():
-    settings = Settings(llm_backend="dummy", redis_url="redis://127.0.0.1:1/0")
+async def test_build_fails_when_redis_is_unreachable():
+    # langfuse explicitly disabled: this test only exercises the Redis-unreachable path
+    # and must not depend on (or contact) a developer's real .env Langfuse credentials.
+    settings = Settings(
+        llm_backend="dummy", redis_url="redis://127.0.0.1:1/0", langfuse_enabled=False
+    )
 
     with pytest.raises(RuntimeError, match="Redis is required but unavailable at startup"):
-        ApplicationDependencies.build(settings)
+        await ApplicationDependencies.build(settings)

@@ -79,8 +79,9 @@ def test_table_is_kept_whole_even_when_it_exceeds_chunk_size():
 
     chunks = MarkdownChunker().chunk("01", "Doc", "source.docx", markdown)
 
-    table_chunks = [c for c in chunks if c.page_content.startswith("| a |")]
+    table_chunks = [c for c in chunks if "| a |" in c.page_content]
     assert len(table_chunks) == 1
+    assert table_chunks[0].page_content.startswith("1. Big table\n\n| a |")
     assert len(table_chunks[0].page_content) > CHUNK_SIZE
 
 
@@ -104,7 +105,9 @@ def test_long_prose_section_is_split_into_multiple_overlapping_chunks():
 
     assert len(chunks) > 1
     assert all(c.metadata["section"] == "1. Long section" for c in chunks)
-    assert all(len(c.page_content) <= CHUNK_SIZE for c in chunks)
+    assert all(c.page_content.startswith("1. Long section\n\n") for c in chunks)
+    heading_overhead = len("1. Long section\n\n")
+    assert all(len(c.page_content) <= CHUNK_SIZE + heading_overhead for c in chunks)
 
 
 def test_chunk_index_is_sequential_per_document():

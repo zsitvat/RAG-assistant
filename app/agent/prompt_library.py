@@ -72,6 +72,7 @@ class PromptLibrary:
         return self._cache[name]
 
     def _resolve(self, name: str) -> ResolvedPrompt:
+        """Resolves a remote prompt or returns its validated embedded fallback."""
         spec = PROMPT_SPECS[name]
         remote = self._resolve_remote(spec)
         if remote is not None:
@@ -81,6 +82,7 @@ class PromptLibrary:
         return ResolvedPrompt(name=name, template=template, source="embedded")
 
     def _resolve_remote(self, spec: PromptSpec) -> ResolvedPrompt | None:
+        """Returns a validated production prompt from Langfuse when available."""
         client = self._observability.client
         if client is None:
             return None
@@ -89,7 +91,7 @@ class PromptLibrary:
             template = self._to_template(prompt.get_langchain_prompt())
             self.validate(spec, template)
         except Exception:
-            logger.warning("langfuse prompt %s unavailable or invalid; using embedded", spec.name)
+            logger.warning(f"langfuse prompt {spec.name} unavailable or invalid; using embedded")
             return None
         return ResolvedPrompt(
             name=spec.name, template=template, source="langfuse", version=prompt.version
