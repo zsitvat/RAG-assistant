@@ -285,4 +285,3 @@ class AgentService:
                 if citation.doc_id not in doc_ids:
                     doc_ids.append(citation.doc_id)
         return doc_ids
-        return doc_ids

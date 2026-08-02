@@ -17,17 +17,17 @@
 - Keep commuting and mileage formulas inside the calculator module and expose only the resulting amount, effective cap, excess, and warnings in the typed result.
 - Use `RedisSaver` in the running application and `InMemorySaver` only in isolated graph tests; the checkpointer is an infrastructure adapter, not a second conversation-memory implementation.
 
-- [ ] Own-car commuting calculates monthly round-trip distance, attendance days, rate, monthly cap, and hybrid-work pro-rating from catalogue rules.
-- [ ] Public-pass commuting applies the reimbursement ratio, monthly cap, integer-HUF convention, and required-document rules.
-- [ ] Business mileage distinguishes one-way and round-trip distance and selects the transport rate deterministically.
-- [ ] Minimum-distance eligibility and transport-mode constraints produce deterministic rule findings.
-- [ ] Missing `distance_is_one_way`, commute days, or distance is treated as missing information and never inferred by the model.
-- [ ] The clarification node ends the turn with `needs_info`, a focused question, and a checkpointed partial claim.
-- [ ] Redis-backed LangGraph checkpointing restores the pending claim by thread identifier after a later request or application restart and applies the configured expiry.
-- [ ] Conversation checkpoints expire after 24 hours and use a key namespace distinct from corpus and manifest data.
-- [ ] Claim merging occurs only for a compatible clarification response; a new intent, category, or expense replaces the old claim.
-- [ ] Thread reset removes the stored conversation state and makes the next message behave as a new conversation.
-- [ ] If the user refuses to provide a required distance fact, the response presents explicit one-way and round-trip conditional outcomes instead of looping indefinitely.
-- [ ] Loop counters, duplicate-tool detection, projected artifacts, and decision derivation inspect only the current turn.
-- [ ] Unit and integration tests cover own-car, public-pass, EV/mileage, cap, minimum distance, one-way ambiguity, two-turn resume, incompatible follow-up, reset, and checkpoint expiry behaviour.
-- [ ] Several Streamlit workers can address the same Redis-backed thread without introducing process-local conversation truth.
+- [x] Own-car commuting calculates monthly round-trip distance, attendance days, rate, monthly cap, and hybrid-work pro-rating from catalogue rules.
+- [x] Public-pass commuting applies the reimbursement ratio, monthly cap, integer-HUF convention, and required-document rules.
+- [x] Business mileage distinguishes one-way and round-trip distance and selects the transport rate deterministically.
+- [x] Minimum-distance eligibility and transport-mode constraints produce deterministic rule findings.
+- [x] Missing `distance_is_one_way`, commute days, or distance is treated as missing information and never inferred by the model.
+- [x] The clarification node ends the turn with `needs_info`, a focused question, and a checkpointed partial claim.
+- [x] Redis-backed LangGraph checkpointing restores the pending claim by thread identifier after a later request or application restart and applies the configured expiry.
+- [x] Conversation checkpoints expire after 24 hours and use a key namespace distinct from corpus and manifest data.
+- [x] Claim merging occurs only for a compatible clarification response; a new intent, category, or expense replaces the old claim.
+- [x] Thread reset removes the stored conversation state and makes the next message behave as a new conversation.
+- [x] If the user refuses to provide a required distance fact, the response presents explicit one-way and round-trip conditional outcomes instead of looping indefinitely.
+- [x] Loop counters, duplicate-tool detection, projected artifacts, and decision derivation inspect only the current turn.
+- [x] Unit and integration tests cover own-car, public-pass, EV/mileage, cap, minimum distance, one-way ambiguity, two-turn resume, incompatible follow-up, reset, and checkpoint expiry behaviour.
+- [x] Several Streamlit workers can address the same Redis-backed thread without introducing process-local conversation truth.

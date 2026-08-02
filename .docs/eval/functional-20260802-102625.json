@@ -1,0 +1,307 @@
+{
+  "run_name": "functional-full-20260802-102625 - 2026-08-02T10:26:25.289156Z",
+  "model": "qwen2.5:7b-instruct-q4_K_M",
+  "dataset_run_url": "https://cloud.langfuse.com/project/cms7txjr50008ad0jxqp7myo0/datasets/cmsbnbrox02a9ad0h25lj6w0b/runs/8ae3032e-758d-407b-8990-045ea29d1e19",
+  "case_count": 20,
+  "aggregates": {
+    "classification_accuracy": {
+      "percent": 90.0,
+      "scored_cases": 20
+    },
+    "slot_accuracy": {
+      "percent": 11.8,
+      "scored_cases": 17
+    },
+    "retrieval_hit_at_4": {
+      "percent": 0.0,
+      "scored_cases": 18
+    },
+    "tool_selection_accuracy": {
+      "percent": 15.0,
+      "scored_cases": 20
+    },
+    "outcome_accuracy": {
+      "percent": 25.0,
+      "scored_cases": 20
+    },
+    "citation_accuracy": {
+      "percent": 0.0,
+      "scored_cases": 18
+    }
+  },
+  "cases": [
+    {
+      "id": "unsupported-01",
+      "trace_id": "f4cd4d324e7c18c2a6b9c94101463634",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "tool_selection_accuracy": true,
+        "outcome_accuracy": true
+      }
+    },
+    {
+      "id": "document-01",
+      "trace_id": "43d2a0aab21d72a1378cfef7fd4cb4be",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 0.4,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": false
+      }
+    },
+    {
+      "id": "deadline-02",
+      "trace_id": "ebf6a219c89bae4b0659266d410d0170",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 0.0,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": false
+      }
+    },
+    {
+      "id": "deadline-01",
+      "trace_id": "bc730326e49428137654d352792b8e58",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 1.0,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": true,
+        "citation_accuracy": false
+      }
+    },
+    {
+      "id": "benefits-02",
+      "trace_id": "1ba97c3bb5eed5cfc2e3aee2d797b1bc",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 0.5,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": false
+      }
+    },
+    {
+      "id": "benefits-01",
+      "trace_id": "4f42ef3ab50221e513cc6050d3886820",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 0.5,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": false
+      }
+    },
+    {
+      "id": "equipment-02",
+      "trace_id": "c23cef5a25db9030a12bf81589e46fe1",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 0.6666666666666666,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": false
+      }
+    },
+    {
+      "id": "equipment-01",
+      "trace_id": "93c3c86649731631e94b17fcdae229e9",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 1.0,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": false
+      }
+    },
+    {
+      "id": "mileage-01",
+      "trace_id": "9f1e81287be0b3219857844731fed3cf",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 0.0,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": false
+      }
+    },
+    {
+      "id": "commuting-03",
+      "trace_id": "56336b8f8f52c47f5091253fb6456e7b",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 0.0,
+        "tool_selection_accuracy": true,
+        "outcome_accuracy": true
+      }
+    },
+    {
+      "id": "commuting-02",
+      "trace_id": "55a314f6e573b3af54cc89773b151257",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": false,
+        "slot_accuracy": 0.0,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": false
+      }
+    },
+    {
+      "id": "commuting-01",
+      "trace_id": "f7d2e63d987585dcd77dfeba48c2f838",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 0.5,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": false
+      }
+    },
+    {
+      "id": "travel-03",
+      "trace_id": "584b751f66f6f20db1a450ed31df14d6",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 0.5,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": false
+      }
+    },
+    {
+      "id": "travel-02",
+      "trace_id": "c58380a8ad49d4f0f64d8c320d4f3f83",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": false,
+        "slot_accuracy": 0.6666666666666666,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": false
+      }
+    },
+    {
+      "id": "travel-01",
+      "trace_id": "c9635774949cb65d0fcd2464faf1775c",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 0.6666666666666666,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": false
+      }
+    },
+    {
+      "id": "meal-03",
+      "trace_id": "d120292860af340a0a779b17a3d480f5",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 0.25,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": false
+      }
+    },
+    {
+      "id": "meal-02",
+      "trace_id": "14e21ed9b493b2fec7675254870cc946",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 0.25,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": false
+      }
+    },
+    {
+      "id": "meal-01",
+      "trace_id": "8b8742ba5a52712ce227c6090c97b76c",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 0.25,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": false
+      }
+    },
+    {
+      "id": "general-02",
+      "trace_id": "bc833c8b7f141650e475df4fdc39bb23",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": true,
+        "citation_accuracy": false
+      }
+    },
+    {
+      "id": "general-01",
+      "trace_id": "a325006bb3838ad30d0d9a1379b0946d",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": true,
+        "outcome_accuracy": true,
+        "citation_accuracy": false
+      }
+    }
+  ]
+}

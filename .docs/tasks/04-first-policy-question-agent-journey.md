@@ -17,23 +17,23 @@
 - Project public responses from graph messages and typed artifacts through the agent module so HTTP routes remain transport-only.
 - Keep the model-facing tool result concise and the full Pydantic artifact outside the prompt; state and artifacts must have one authoritative home.
 
-- [ ] The agent state contains only messages, intent, category, claim, and decision, with LangChain message reduction and typed domain models.
+- [x] The agent state contains only messages, intent, category, claim, and decision, with LangChain message reduction and typed domain models.
 - [ ] `ExpenseClaim` supports only fields consumed by routing or deterministic tools: category/subtype, HUF amount, date, headcount, distance/direction/days, excluded amount, receipt/approval, and used annual benefit budget.
-- [ ] The LangChain model factory supplies ChatOllama in normal operation and the scripted test model in dummy mode through the same chat-model interface.
+- [x] The LangChain model factory supplies ChatOllama in normal operation and the scripted test model in dummy mode through the same chat-model interface.
 - [ ] Production uses `qwen2.5:7b-instruct-q4_K_M`; structured classification, extraction, and tool selection run at temperature 0, while final response generation runs at temperature 0.2.
-- [ ] Model selection and prompts permit best-effort Hungarian interaction over the English corpus while the canonical prompts, rule identifiers, enum values, and official evaluation remain English.
-- [ ] Intent classification and information extraction use structured output with typed validation, one repair attempt, and an observable degraded fallback.
-- [ ] The compiled main graph contains seven focused nodes and conditional routes for complete, incomplete, unsupported, tool-calling, and response-generating paths.
-- [ ] The four prompt contracts are classification, information extraction, agent step, and final response generation, all represented as composable LangChain runnables.
-- [ ] The agent step uses `bind_tools()` and autonomously selects the policy-search tool instead of following a hard-coded intent-to-tool lookup.
-- [ ] Tool execution uses LangGraph `ToolNode`, returns compact `ToolMessage` content, and retains the typed artifact for downstream response construction and evaluation.
-- [ ] A general policy question completes through classification, extraction, deterministic routing, tool selection, retrieval, and grounded response generation.
-- [ ] The blocking chat endpoint returns a typed response with answer, UTC completion time, duration, deduplicated sources, and stable public step labels.
-- [ ] A policy-dependent answer without a supporting tool artifact is refused or clearly marked as lacking evidence.
-- [ ] Unsupported requests never call policy, calculation, or rule tools and return the fictional-policy and no-legal-advice disclaimer.
-- [ ] Loop budgets, invalid tool arguments, and repeated identical calls terminate deterministically and never expose chain-of-thought.
+- [x] Model selection and prompts permit best-effort Hungarian interaction over the English corpus while the canonical prompts, rule identifiers, enum values, and official evaluation remain English.
+- [x] Intent classification and information extraction use structured output with typed validation, one repair attempt, and an observable degraded fallback.
+- [x] The compiled main graph contains seven focused nodes and conditional routes for complete, incomplete, unsupported, tool-calling, and response-generating paths.
+- [x] The four prompt contracts are classification, information extraction, agent step, and final response generation, all represented as composable LangChain runnables.
+- [x] The agent step uses `bind_tools()` and autonomously selects the policy-search tool instead of following a hard-coded intent-to-tool lookup.
+- [x] Tool execution uses LangGraph `ToolNode`, returns compact `ToolMessage` content, and retains the typed artifact for downstream response construction and evaluation.
+- [x] A general policy question completes through classification, extraction, deterministic routing, tool selection, retrieval, and grounded response generation.
+- [x] The blocking chat endpoint returns a typed response with answer, UTC completion time, duration, deduplicated sources, and stable public step labels.
+- [x] A policy-dependent answer without a supporting tool artifact is refused or clearly marked as lacking evidence.
+- [x] Unsupported requests never call policy, calculation, or rule tools and return the fictional-policy and no-legal-advice disclaimer.
+- [x] Loop budgets, invalid tool arguments, and repeated identical calls terminate deterministically and never expose chain-of-thought.
 - [ ] The loop permits at most four tool-calling agent steps and uses a graph recursion limit of 20 as a hard backstop.
-- [ ] The same tool may return invalid arguments at most twice before being disabled for the turn, and an identical repeated call reuses the prior artifact while recording a warning.
-- [ ] Exhausting the tool budget routes to final response generation with available evidence and explicitly states when that evidence is incomplete.
-- [ ] Ollama calls retry with bounded backoff twice and then return a clear failure rather than a fabricated answer.
+- [x] The same tool may return invalid arguments at most twice before being disabled for the turn, and an identical repeated call reuses the prior artifact while recording a warning.
+- [x] Exhausting the tool budget routes to final response generation with available evidence and explicitly states when that evidence is incomplete.
+- [x] Ollama calls retry with bounded backoff twice and then return a clear failure rather than a fabricated answer.
 - [ ] Scripted integration tests verify the expected graph path, tool sequence, source projection, unsupported path, and recursion backstop.

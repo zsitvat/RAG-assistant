@@ -7,7 +7,7 @@
     "expected_category": null,
     "expected_slots": {},
     "expected_tools": ["search_policies"],
-    "expected_doc_ids": ["00", "07"],
+    "expected_doc_ids": ["01", "06", "07"],
     "expected_amount_huf": null,
     "expected_decision": null
   },

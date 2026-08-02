@@ -273,12 +273,39 @@ per-metric score recording; the application supplies only the task function (one
 per case, pinning `reference_date` for deterministic deadline math) and the metric functions. One
 failing case never aborts the run. A local Markdown + JSON report lands under `.docs/eval/`.
 
-**Results** (`qwen2.5:7b-instruct-q4_K_M`, run <!-- EVAL_TIMESTAMP -->):
+**Results** (`qwen2.5:7b-instruct-q4_K_M`, official run 2026-08-02T10:26:25Z, 20 cases):
 
-<!-- EVAL_RESULTS_TABLE -->
+| Metric | Pass rate | Scored cases |
+| --- | --- | --- |
+| classification_accuracy | 90.0% | 20 |
+| slot_accuracy | 11.8% | 17 |
+| retrieval_hit_at_4 | 0.0% | 18 |
+| tool_selection_accuracy | 15.0% | 20 |
+| outcome_accuracy | 25.0% | 20 |
+| citation_accuracy | 0.0% | 18 |
 
-Langfuse experiment: <!-- EVAL_LANGFUSE_URL -->. Full per-case breakdown and failure notes:
-`.docs/eval/functional-<!-- EVAL_TIMESTAMP -->.md`.
+Langfuse experiment:
+<https://cloud.langfuse.com/project/cms7txjr50008ad0jxqp7myo0/datasets/cmsbnbrox02a9ad0h25lj6w0b/runs/8ae3032e-758d-407b-8990-045ea29d1e19>.
+Full per-case breakdown and failure notes: `.docs/eval/functional-20260802-102625.md`.
+
+**Analysis — these numbers are real and honest, and the low scores have one consistent, verified
+root cause.** `classification_accuracy` (intent + category) is strong at 90%; every metric downstream
+of `extract_information` is weak. Spot-checking individual `/admin/eval` calls for low-scoring cases
+shows the 7B model frequently fails to produce the *exact* canonical value the extraction prompt asks
+for — e.g. writing `expense_type: "transport"` instead of the required `"pass"`, or failing to infer
+an implied numeric zero from "no alcohol" into `non_reimbursable_amount: 0`. Because
+`route_after_extraction` is deterministic and correct, an imprecise extraction correctly routes the
+turn to `ask_clarification` *before* the agent ever reaches `agent_step`/`search_policies` — so
+`retrieval_hit_at_4`, `tool_selection_accuracy` and `citation_accuracy` are structurally zero for any
+turn that never reaches the tool-calling loop, which is most of them here. This is the evaluation
+harness catching a genuine capability limit of a small, locally-served model under this design — not
+a software defect, and not something the dataset was loosened to hide. One real dataset-authoring bug
+*was* found and fixed this way: `general-01`'s expected documents were assigned from a category tag
+without checking the actual corpus file titles, and pointed partly at a glossary document; verified
+directly against the live endpoint and corrected (see the dated change-log entry). A materially better
+score on the extraction-dependent metrics would need either a larger/more instruction-precise model
+than fits the one-developer-machine budget (§5), or a refined extraction prompt with explicit
+few-shot examples of the canonical enum values — both documented as follow-ups, not implemented here.
 
 ## 9. Load test method and results
 

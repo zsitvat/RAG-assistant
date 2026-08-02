@@ -17,17 +17,17 @@
 - Expose retrieval to the agent through a content-and-artifact LangChain tool: concise evidence for the model, complete structured hits for evaluation.
 - Keep query rewriting, LLM relevance grading, reranking, and multi-strategy escalation out of this PoC; if retrieval evaluation fails, improvements are considered in that order.
 
-- [ ] The RAG workflow is a separately compiled LangGraph `StateGraph` with distinct retrieval and context-building nodes.
-- [ ] Its public state contract accepts only a question and optional category and returns one typed RAG result.
+- [x] The RAG workflow is a separately compiled LangGraph `StateGraph` with distinct retrieval and context-building nodes.
+- [x] Its public state contract accepts only a question and optional category and returns one typed RAG result.
 - [ ] Retrieval uses the LangChain retriever interface with top-four dense search rather than direct RediSearch commands in application code.
-- [ ] Similarity is normalised from cosine distance consistently, and the confidence/low-relevance decision derives from the highest-ranked hit rather than a duplicated state field.
-- [ ] A category-filtered query includes both the active category and general policies; a query without a category searches the complete corpus.
-- [ ] An empty filtered result is retried once without the category, while an empty or low-confidence final result is represented explicitly rather than fabricated.
-- [ ] Retrieved hits preserve similarity, document identity, section identity, categories, rule identifiers, and source information.
-- [ ] Context building emits numbered source blocks within the token budget and produces citation objects that map exactly to included blocks.
-- [ ] The assembled context is limited to approximately 1,800 tokens and uses stable `[S1]`, `[S2]`, and subsequent markers with document title and section labels.
-- [ ] The policy-search LangChain tool returns a compact model-facing summary and the complete typed RAG result as its artifact.
-- [ ] Constructing or importing the subgraph performs no network or Redis work; retrievers are supplied through the graph factory.
-- [ ] Focused tests cover filtered, unfiltered, fallback, empty, ranking, token-budget, and citation-deduplication behaviour.
-- [ ] A standalone invocation against the ingested Redis index returns relevant, source-backed evidence for at least one policy question in each configured category.
+- [x] Similarity is normalised from cosine distance consistently, and the confidence/low-relevance decision derives from the highest-ranked hit rather than a duplicated state field.
+- [x] A category-filtered query includes both the active category and general policies; a query without a category searches the complete corpus.
+- [x] An empty filtered result is retried once without the category, while an empty or low-confidence final result is represented explicitly rather than fabricated.
+- [x] Retrieved hits preserve similarity, document identity, section identity, categories, rule identifiers, and source information.
+- [x] Context building emits numbered source blocks within the token budget and produces citation objects that map exactly to included blocks.
+- [x] The assembled context is limited to approximately 1,800 tokens and uses stable `[S1]`, `[S2]`, and subsequent markers with document title and section labels.
+- [x] The policy-search LangChain tool returns a compact model-facing summary and the complete typed RAG result as its artifact.
+- [x] Constructing or importing the subgraph performs no network or Redis work; retrievers are supplied through the graph factory.
+- [x] Focused tests cover filtered, unfiltered, fallback, empty, ranking, token-budget, and citation-deduplication behaviour.
+- [x] A standalone invocation against the ingested Redis index returns relevant, source-backed evidence for at least one policy question in each configured category.
 - [ ] An irrelevant top result below the configured threshold yields the documented uncovered-policy response path instead of allowing response generation to imply policy support.
