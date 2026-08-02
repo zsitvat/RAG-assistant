@@ -6,9 +6,8 @@ from starlette.concurrency import run_in_threadpool
 
 from app.dependencies import get_redis_index, get_rule_catalogue, get_vector_store
 from app.integrations.redis import RedisIndex
-from app.rag.index_schema import INDEX_NAME, VECTOR_DIMENSION
 from app.rag.ingest import CorpusIngestor
-from app.rag.model import IndexStats, IngestResult
+from app.rag.model import IngestResult
 from app.rules.model import RuleCatalogue
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -28,21 +27,4 @@ async def ingest(
         raise HTTPException(status_code=503, detail=REDIS_UNAVAILABLE_DETAIL)
     return await run_in_threadpool(
         CorpusIngestor().run, redis_index, vector_store, rule_catalogue=rule_catalogue
-    )
-
-
-@router.get("/stats", responses=REDIS_UNAVAILABLE_RESPONSE)
-async def stats(
-    redis_index: Annotated[RedisIndex | None, Depends(get_redis_index)],
-) -> IndexStats:
-    """Returns the current policy index size and per-category chunk counts."""
-    if redis_index is None:
-        raise HTTPException(status_code=503, detail=REDIS_UNAVAILABLE_DETAIL)
-
-    raw_stats = await run_in_threadpool(redis_index.get_index_stats)
-    return IndexStats(
-        index_name=INDEX_NAME,
-        dimension=VECTOR_DIMENSION,
-        total_chunks=raw_stats["total_chunks"],
-        category_counts=raw_stats["category_counts"],
     )

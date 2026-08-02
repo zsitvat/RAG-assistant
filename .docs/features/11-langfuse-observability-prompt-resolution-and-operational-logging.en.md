@@ -7,7 +7,7 @@ Implements task
 
 Attaches one Langfuse trace per chat turn (nested through every LangGraph node, tool, and model
 call automatically), resolves each of the four agent prompts from a production-labelled Langfuse
-version with a validated embedded fallback, and keeps this entirely optional — chat, the agent
+version with an embedded fallback, and keeps this entirely optional — chat, the agent
 graph, and application logs work identically whether or not Langfuse is configured.
 
 ## How it works
@@ -26,21 +26,13 @@ decision=...)` once per turn so the trace also carries the turn's classified/der
 
 ### Prompt resolution (`src/app/agent/prompt_library.py`)
 
-`PromptLibrary.get(name)` tries the `production`-labelled Langfuse prompt first, validates it, and
-falls back to the embedded `ChatPromptTemplate` (`src/app/agent/prompts.py`) on any failure — missing
-prompt, invalid content, or Langfuse unreachable — logging one warning, never the prompt text
-itself. Resolution is cached per `PromptLibrary` instance (one per process), so a disabled or
-unreachable Langfuse causes at most one resolution attempt per prompt name, not a retry per turn.
-
-**Shared validation, not duplicated per prompt.** `PromptSpec` declares what a name requires
-(`requires_no_fabrication` — every prompt; `requires_citation_markers` — `generate_response` only;
-`requires_schema` — `extract_information` only), and `PromptLibrary.validate()` checks both the
-remote and the embedded version against the same rules: must accept the `messages` placeholder,
-must forbid inventing values ("never invent"/"never fabricate"/"never guess" — the three phrasings
-already in use), and the two prompt-specific requirements. Writing this validator surfaced that
-`extract_information`'s guardrail is phrased "never guess" rather than "never invent"/"never
-fabricate" like the other three — a real wording inconsistency the check now tolerates explicitly
-rather than silently passing by accident.
+`PromptLibrary.get(name)` tries the `production`-labelled Langfuse prompt first, and falls back to
+the embedded `ChatPromptTemplate` (`src/app/agent/prompts.py`) on any failure — missing prompt or
+Langfuse unreachable — logging one warning, never the prompt text itself. Resolution is cached per
+`PromptLibrary` instance (one per process), so a disabled or unreachable Langfuse causes at most one
+resolution attempt per prompt name, not a retry per turn. There is no content validation of the
+resolved prompt (structural correctness or guardrail wording): whichever prompt Langfuse returns for
+the `production` label is trusted as-is, matching the embedded fallback's own contract.
 
 ### Structured logging (`src/app/logging/config.py`, unchanged this task)
 
@@ -52,10 +44,6 @@ of shipping.
 
 ## Deliberate deviations
 
-- **No per-request correlation id.** An earlier `RequestContextMiddleware` (binding `X-Request-ID`
-  into log lines and traces) was removed as unneeded for this project's scale — see
-  `.docs/features/09-streaming-chat-experience-and-thread-controls.en.md`. Log lines and Langfuse
-  traces correlate by `thread_id` instead.
 - **Retention and rollover testing already existed from task 1** (`TimedRotatingFileHandler`'s
   own `backupCount`); this task did not need to add separate retention-cleanup code, since the
   stdlib handler already deletes rotated files beyond the count on each rollover.

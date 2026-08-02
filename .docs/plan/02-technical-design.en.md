@@ -135,7 +135,8 @@ src/
       routes/
         health.py                  # liveness/readiness endpoints
         chat.py                    # chat, streaming and thread-reset endpoints
-        admin.py                   # ingest and index-stat endpoints
+        ingest.py                  # corpus/rule-catalogue ingest endpoint
+        stats.py                   # policy index size and per-category chunk counts
         evaluation.py              # internal single-turn evaluation endpoint used by llm_eval/run_eval.py
     agent/
       service.py                 # invoke, stream and reset use cases exposed to the API
@@ -143,7 +144,7 @@ src/
       nodes.py                   # node callbacks, including classify_intent
       state.py                   # LangGraph AgentState contract
       model.py                   # expense-claim Pydantic domain contracts
-      messages.py                # fixed non-LLM-generated user-facing strings
+      static_texts.py             # fixed non-LLM-generated user-facing strings
       current_request.py         # messages/tool-call facts scoped to the latest request
       calculator.py              # deterministic reimbursement-calculation module
       deadline.py                # submission-deadline check
@@ -190,6 +191,8 @@ src/
       test_dependencies.py        # app/dependencies.py DI container
       api/                        # full-HTTP-stack tests exercised through app.main
       journeys/                   # cross-module compiled-graph and rule/document-consistency integration tests
+  rules_config/
+    rules.yaml                  # small language-independent deterministic rule catalogue
 llm_eval/                    # standalone functional-evaluation CLI script, not a formal package (no __init__.py, no tests)
   dataset.json               # 20 functional test cases; source of truth
   model.py                   # EvalCase/EvalDataset contracts and validation errors
@@ -200,12 +203,8 @@ llm_eval/                    # standalone functional-evaluation CLI script, not 
   run_eval.py                # sync dataset + run Langfuse experiment + local reports
 load_test/                   # standalone load-test CLI script, not a formal package (no __init__.py, no tests)
   load.py                    # LoadTestRunner + LoadTestResult + CLI entry point
-config/
-  rules.yaml                # small language-independent deterministic rule catalogue
-docker/
-  entrypoint.sh
 Dockerfile
-docker-compose.yml
+docker-compose.yml         # per-service commands live here;
 pyproject.toml             # project metadata, dependencies, Ruff/Bandit/pytest/coverage configuration
 uv.lock                    # pinned, reproducible dependency lock file (committed)
 sonar-project.properties   # Sonar source, test and coverage paths
@@ -299,7 +298,7 @@ The source pack contains eight **`.docx`** files:
 The `00`–`07` prefix is the stable `doc_id`.
 
 The source folder remains unchanged. Small retrieval metadata lives beside the deterministic rules in
-root `rules.yaml`, keyed by `doc_id`:
+`src/rules_config/rules.yaml`, keyed by `doc_id`:
 
 ```yaml
 documents:
@@ -1067,7 +1066,7 @@ schemas live in `src/app/api/schemas.py`; route modules only handle transport an
 | `POST` | `/admin/eval` | run one evaluation turn and return the internal structured outputs needed by the eval harness; not used by the UI |
 | `GET` | `/health` | liveness — process is up |
 | `GET` | `/ready` | readiness — Redis reachable, index present with matching `DIM`, LLM responding |
-| `POST` | `/admin/ingest` | trigger ingest (no-op when `manifest:corpus` matches); used by the entrypoint and by tests |
+| `POST` | `/admin/ingest` | trigger ingest (no-op when `manifest:corpus` matches); the API lifespan runs the same ingest at boot, so this is for manual re-ingest and tests |
 | `GET` | `/admin/stats` | chunk count per category and index information |
 | `DELETE` | `/threads/{thread_id}` | drop a conversation's checkpoints ("reset chat") |
 
@@ -1176,7 +1175,7 @@ behaviour and model generations are not duplicated in the API response or Stream
 focused on the employee-facing answer, while developers and reviewers inspect execution details in
 Langfuse.
 
-**Application logging is independent of Langfuse.** `src/app/core/logging.py` configures the standard
+**Application logging is independent of Langfuse.** `src/app/logging/config.py` configures the standard
 Python logging hierarchy once at process startup with two handlers receiving the same structured JSON
 record:
 
@@ -1191,13 +1190,6 @@ Every record includes UTC timestamp, level, service, logger and event. Prompts, 
 chunk text, tool artifacts and credentials are never logged; those payloads would turn an
 operational log into an ungoverned copy of conversation data. One Uvicorn worker and separate
 `api.jsonl` / `ui.jsonl` files avoid concurrent rotation of the same file.
-
-> **Known gap (descoped from task 10):** `request_id`/`thread_id` correlation via context variables,
-> and capturing Uvicorn/FastAPI/Streamlit framework loggers into the same structured format, are
-> **not implemented**. `src/app/logging/config.py` only emits the fields listed above; there is no
-> request-scoped contextvar binding and framework loggers are not redirected through the JSON
-> formatter. This was cut from task 10's acceptance criteria as out of scope for the PoC rather than
-> tracked as a bug — revisit if cross-request debugging in Langfuse-disabled runs becomes painful.
 
 The seven-day policy applies to the application-owned files, kept by rotation count rather than a
 separate age-based sweep. Stdout is a delivery stream rather than the retention store; Compose uses Docker's
@@ -1235,8 +1227,10 @@ environment variable.
 
 ## 12. Containerisation
 
-`Dockerfile`, `docker-compose.yml` and `entrypoint.sh` live in the repository root — a reviewer clones
-and runs `docker compose up` without looking for them.
+`Dockerfile` and `docker-compose.yml` live in the repository root — a reviewer clones
+and runs `docker compose up` without looking for them. There is no entrypoint script: each service's
+actual command is written directly in its compose `command:` (exec form, so the process is PID 1 and
+receives signals unwrapped), with the image's `CMD` as the bare-`docker run` fallback.
 
 `Dockerfile` – Python 3.12 on `python:3.12-slim`, multi-stage; a builder stage installs requirements and
 **pre-downloads the embedding model weights into the image** (§4.3) so the first request is not
@@ -1264,10 +1258,10 @@ services:
     healthcheck: curl -f http://localhost:11434/api/tags
   api:
     build: .
-    command: ./entrypoint.sh api                # wait for deps -> pull model -> ingest -> uvicorn
-    depends_on:
-      redis:  { condition: service_healthy }
-      ollama: { condition: service_healthy }
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+    depends_on:                                  # ordering only; ingest runs in the FastAPI lifespan
+      redis:       { condition: service_healthy }
+      ollama-pull: { condition: service_completed_successfully }
     environment: [REDIS_URL=redis://redis:6379/0, OLLAMA_BASE_URL=http://ollama:11434, ...]
     volumes: ["./logs:/app/logs", "./.docs/sources:/app/.docs/sources:ro"]
     logging: { driver: local, options: { max-size: "10m", max-file: "3" } }
@@ -1343,12 +1337,14 @@ Cloud (§11): it costs an account and a token, not another container competing w
 for RAM/CPU on the one developer machine (§1.2). `SONAR_TOKEN` and the SonarCloud organisation/project
 identifiers are CI secrets, not `pydantic-settings` application fields.
 
-`entrypoint.sh api`: wait for Redis and Ollama → pull the model if absent → run `app.rag.ingest`
-(no-op when `manifest:corpus` matches) → `uvicorn app.main:app`. The UI container skips all of
-that and waits on the API's `/ready`. Result: `docker compose up` gives a chat UI on `:8501` and a
-documented API on `:8000/docs`. The repository contains an empty `logs/.gitkeep`; startup verifies
-that `/app/logs` is writable and fails with a clear message if host bind-mount permissions are wrong,
-rather than silently losing the file copy.
+Startup ordering is Compose's job, not a shell script's: `ollama-pull` is a one-shot service that
+pulls the configured model and exits, and the API waits on `redis: service_healthy` plus
+`ollama-pull: service_completed_successfully`. The API container then runs `uvicorn app.main:app`
+directly, and its FastAPI lifespan performs the corpus ingest (a no-op when the stored
+`build_info:corpus` already matches). The UI container skips all of that and waits on the API's
+`/ready` healthcheck. Result: `docker compose up` gives a chat UI on `:8501` and a documented API on
+`:8000/docs`. Startup verifies that `/app/logs` is writable and fails with a clear message if the
+volume's permissions are wrong, rather than silently losing the file copy.
 
 ---
 
@@ -1578,7 +1574,7 @@ load result and proposes these production optimisations without adding them to t
 | Index missing / dimension mismatch | the API lifespan verifies `idx:chunks` against the manifest `DIM` and re-ingests instead of serving empty results |
 | Missing slot the user refuses to give | answer presents the conditional result ("if one-way, then X; if round-trip, then Y") |
 | Cap/limit not found for a category | rule checker emits a `warning` finding, answer is marked lower-confidence |
-| Corpus not ingested at boot | entrypoint runs ingest; ingest failure exits non-zero with the reason |
+| Corpus not ingested at boot | the FastAPI lifespan runs ingest; ingest failure fails startup with the reason |
 | Langfuse disabled or unreachable when running `load_test.load` | `main()` exits with a clear message before building any dependencies; normal chat is unaffected since the script never touches the live process |
 | Out-of-scope or advice-seeking question (tax/legal) | `out_of_scope` node with an explicit disclaimer |
 | API unreachable from the UI | the UI shows a connection error and keeps the thread — conversation state is server-side, so a retry continues where it stopped |
@@ -1686,7 +1682,6 @@ rather than oversights, and so a reviewer can see that the line was drawn on pur
 | **Horizontal scale / rate limiting** | One `uvicorn` process, one Ollama, no queue, no per-client limits. State is already in Redis, so more API workers is a compose change; the LLM is the actual constraint (§14). |
 | **Prompt-injection hardening** | The corpus is trusted because we wrote it. If policies came from users or the web, the retrieved context would need treating as untrusted input — the current design has no defence there. |
 | **Localised policy corpora** | The PoC indexes one English policy corpus. A production system that requires independently maintained Hungarian source policies would add language-scoped indices and manifests, a corpus selector, per-language evaluation datasets and parity/versioning checks. The current multilingual embedding and chat models already provide best-effort Hungarian interaction over the English corpus without that additional data layer. |
-| **Cross-log request correlation** | Application logs (§11) carry timestamp, level, service, logger and event, but no `request_id`/`thread_id` propagated via context variables, and Uvicorn/FastAPI/Streamlit framework loggers are not captured into the same structured format. Tracing a single turn across `api.jsonl`, `ui.jsonl` and framework output currently means matching on timestamp rather than a shared identifier — Langfuse traces (§11) are the tool for that today. A production version would bind a `contextvars`-scoped request/thread id at the API boundary and route framework loggers through the same JSON formatter. |
 
 None of these change the graph, the tools or the retrieval path; each is an integration or an operational
 concern layered around them. That is the argument for the seams the design does keep: `ExpenseClaim` as

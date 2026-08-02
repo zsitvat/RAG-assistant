@@ -23,7 +23,7 @@ from app.rules.loader import get_rule_catalogue
 from app.rules.model import RuleCatalogue
 from app.settings import Settings, get_settings
 
-RULES_PATH = Path("config/rules.yaml")
+RULES_PATH = Path(__file__).resolve().parents[2] / "rules_config" / "rules.yaml"
 INGEST_BATCH_SIZE = 128
 
 logger = logging.getLogger(__name__)

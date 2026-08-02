@@ -2,9 +2,9 @@ from langchain_core.messages import AIMessage
 
 from app.agent.calculator import ReimbursementCalculator
 from app.agent.graph import build_agent_graph
-from app.agent.messages import CLARIFICATION_QUESTIONS
 from app.agent.model import ExpenseClaim, IntentClassification
 from app.agent.nodes import AgentNodes
+from app.agent.static_texts import CLARIFICATION_QUESTIONS
 from app.rules.loader import load_rule_catalogue
 from app.tests.fakes import ScriptedChatModel, build_agent_tools, policy_document, tool_message
 

@@ -32,14 +32,11 @@ ENV PATH=/app/.venv/bin:$PATH \
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --from=builder --chown=app:app /app/.cache /app/.cache
 COPY --chown=app:app src/app ./app
-COPY --chown=app:app config ./config
+COPY --chown=app:app src/rules_config ./rules_config
 COPY --chown=app:app .docs/sources ./.docs/sources
-COPY --chown=app:app docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh \
-    && mkdir -p /app/logs && chown app:app /app/logs
+RUN mkdir -p /app/logs && chown app:app /app/logs
 
 USER app
 EXPOSE 8000 8501
 
-ENTRYPOINT ["entrypoint.sh"]
-CMD ["api"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

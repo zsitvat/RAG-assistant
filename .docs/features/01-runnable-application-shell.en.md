@@ -5,29 +5,28 @@ Implements task [`01-runnable-application-shell.md`](../tasks/01-runnable-applic
 ## What it does
 
 Provides the FastAPI + Streamlit runtime seam the rest of the project builds on: validated
-settings, structured logging, request correlation, and a LangChain-compatible LLM backend switch
-(`ollama` / `dummy`) — all runnable without Redis, Ollama or the policy corpus.
+settings, structured logging, and a LangChain-compatible LLM backend switch (`ollama` / `dummy`) —
+all runnable without Redis, Ollama or the policy corpus.
 
 ## How it works
 
-- **Settings** (`src/app/core/config.py`): a `pydantic-settings` `Settings` model validated once at
-  startup, cached via `get_settings()`. Fields match the technical design's configuration table
+- **Settings** (`app/core/config.py` at the time this feature was built; since renamed to
+  `app/settings.py`, see feature 10's restructuring note): a `pydantic-settings` `Settings` model
+  validated once at startup, cached via `get_settings()`. Fields match the technical design's configuration table
   (`LLM_BACKEND`, `OLLAMA_BASE_URL`, `LLM_MODEL`, `API_BASE_URL`, `REDIS_URL`, `LANGFUSE_*`,
   `LOG_LEVEL`); Langfuse credentials are optional so offline/dummy development needs no secrets.
   `Settings` reads `.env`; `.env.example` is the committed Compose-oriented template, while the
   ignored local `.env` selects dummy mode, loopback service URLs and disabled Langfuse.
-- **Logging** (`src/app/logging/config.py`): `configure_logging()` attaches one JSON formatter to a
+- **Logging** (`app/logging/config.py` at the time; later `src/app/logging/config.py` once the
+  `src/` layout was adopted): `configure_logging()` attaches one JSON formatter to a
   stdout handler and a stdlib `TimedRotatingFileHandler` (UTC midnight, `backupCount=7`) writing
   under `./logs` — the handler's own count-based retention is enough for a daily-rotating file, so
   no custom retention helper was needed. Uvicorn, FastAPI and Streamlit loggers are redirected
-  through the same handlers so framework logs share the format. There is no per-request
-  correlation id — an earlier `RequestContextMiddleware` binding an `X-Request-ID` into log lines
-  was removed as unneeded for this project's scale.
+  through the same handlers so framework logs share the format.
 - **Error handling**: no custom exception handler. FastAPI/Starlette's own default error shapes
   (404s, validation errors, unhandled exceptions) are used as-is, and unhandled exceptions are
   logged by Uvicorn's default error logging. `debug=False` (FastAPI's default) already guarantees
-  no traceback reaches the client — a custom problem-details wrapper was considered and dropped as
-  unnecessary complexity for what the design actually needs (see deviation note below).
+  no traceback reaches the client.
 - **LLM backend factory** (`src/app/integrations/llm.py`): `build_chat_model(settings)` returns a
   LangChain `BaseChatModel` — `ChatOllama` for `LLM_BACKEND=ollama`, or LangChain's own
   `FakeListChatModel` (cycles canned responses, never raises) for `LLM_BACKEND=dummy`. No custom
@@ -85,8 +84,3 @@ scanner and waits for the SonarQube Cloud quality gate.
 [`02-technical-design.en.md`](../plan/02-technical-design.en.md) §3. `uv` already compiles and locks
 dependencies, so a second lock mechanism would be redundant. Runtime dependencies are pinned to
 their latest resolvable versions at the time of writing, including `langchain-core>=1.0`.
-
-The design's originally planned RFC-7807 problem-details error shape (§10.1) was dropped after
-review: FastAPI's own default error shapes and Uvicorn's default error logging already satisfy the
-only real requirement (no stack trace reaches the client), so the extra normalisation layer and its
-`ProblemDetail` schema were removed as unneeded complexity.

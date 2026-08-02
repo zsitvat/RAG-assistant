@@ -3,10 +3,10 @@ from langchain_core.tools import tool
 
 from app.agent.calculator import ReimbursementCalculator
 from app.agent.graph import build_agent_graph
-from app.agent.messages import LLM_UNAVAILABLE_MESSAGE, OUT_OF_SCOPE_MESSAGE
 from app.agent.model import ExpenseClaim, IntentClassification
 from app.agent.nodes import AgentNodes
 from app.agent.state import MAX_AGENT_STEPS
+from app.agent.static_texts import LLM_UNAVAILABLE_MESSAGE, OUT_OF_SCOPE_MESSAGE
 from app.rules.loader import load_rule_catalogue
 from app.tests.fakes import ScriptedChatModel
 

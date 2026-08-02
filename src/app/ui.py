@@ -109,58 +109,75 @@ def _consume_stream(client: ChatApiClient, thread_id: str, prompt: str) -> dict:
     return result or {}
 
 
-settings = get_settings()
-client = ChatApiClient(settings.api_base_url)
-
-st.set_page_config(page_title="RAG Assistant")
-st.title("Corporate Expense & Benefits Assistant")
-st.caption("Company policies. Not tax or legal advice.")
-
-st.session_state.setdefault("thread_id", str(uuid.uuid4()))
-st.session_state.setdefault("history", [])
-
-with st.sidebar:
-    st.subheader("Conversation")
-    st.caption(f"Thread `{st.session_state.thread_id}`")
-    if st.button("Reset conversation"):
-        try:
-            client.reset_thread(st.session_state.thread_id)
-        except httpx2.HTTPError as exc:
-            st.warning(f"Could not reset the server-side thread: {exc}")
-        st.session_state.thread_id = str(uuid.uuid4())
-        st.session_state.history = []
-        st.rerun()
-
-    st.subheader("Policy index")
+def _call_or_warn(action, error_message: str, *, level=st.warning):
+    """Runs action(), reporting an HTTP failure with the given message and returning None."""
     try:
-        stats = client.index_stats()
+        return action()
     except httpx2.HTTPError as exc:
-        st.warning(f"Index stats unavailable: {exc}")
-    else:
-        st.metric("Indexed chunks", stats["total_chunks"])
-        for category, count in sorted(stats["category_counts"].items()):
-            st.write(f"- {category}: {count}")
+        level(f"{error_message}: {exc}")
+        return None
 
-_render_history(st.session_state.history)
 
-if prompt := st.chat_input("Ask about expenses, benefits, deadlines or documents"):
-    st.session_state.history.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
-    try:
-        reply = _consume_stream(client, st.session_state.thread_id, prompt)
-    except httpx2.HTTPError as exc:
-        st.error(f"Could not reach the assistant API: {exc}")
-    else:
-        st.session_state.history.append(
-            {
-                "role": "assistant",
-                "content": reply.get("answer", ""),
-                "decision": reply.get("decision"),
-                "steps": reply.get("steps", []),
-                "sources": reply.get("sources", []),
-                "generated_at": reply.get("generated_at"),
-                "response_time_ms": reply.get("response_time_ms", 0),
-            }
+def _render_sidebar(client: ChatApiClient) -> None:
+    """Renders the conversation controls and policy index stats in the sidebar."""
+    with st.sidebar:
+        st.subheader("Conversation")
+        st.caption(f"Thread `{st.session_state.thread_id}`")
+        if st.button("Reset conversation"):
+            _call_or_warn(
+                lambda: client.reset_thread(st.session_state.thread_id),
+                "Could not reset the server-side thread",
+            )
+            st.session_state.thread_id = str(uuid.uuid4())
+            st.session_state.history = []
+            st.rerun()
+
+        st.subheader("Policy index")
+        stats = _call_or_warn(client.index_stats, "Index stats unavailable")
+        if stats is not None:
+            st.metric("Indexed chunks", stats["total_chunks"])
+            for category, count in sorted(stats["category_counts"].items()):
+                st.write(f"- {category}: {count}")
+
+
+def main() -> None:
+    """Renders the chat page and handles one turn per Streamlit rerun."""
+    settings = get_settings()
+    client = ChatApiClient(settings.api_base_url)
+
+    st.set_page_config(page_title="RAG Assistant")
+    st.title("Corporate Expense & Benefits Assistant")
+    st.caption("Company policies. Not tax or legal advice.")
+
+    st.session_state.setdefault("thread_id", str(uuid.uuid4()))
+    st.session_state.setdefault("history", [])
+
+    _render_sidebar(client)
+    _render_history(st.session_state.history)
+
+    if prompt := st.chat_input("Ask about expenses, benefits, deadlines or documents"):
+        st.session_state.history.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        reply = _call_or_warn(
+            lambda: _consume_stream(client, st.session_state.thread_id, prompt),
+            "Could not reach the assistant API",
+            level=st.error,
         )
-        st.rerun()
+        if reply is not None:
+            st.session_state.history.append(
+                {
+                    "role": "assistant",
+                    "content": reply.get("answer", ""),
+                    "decision": reply.get("decision"),
+                    "steps": reply.get("steps", []),
+                    "sources": reply.get("sources", []),
+                    "generated_at": reply.get("generated_at"),
+                    "response_time_ms": reply.get("response_time_ms", 0),
+                }
+            )
+            st.rerun()
+
+
+if __name__ == "__main__":
+    main()

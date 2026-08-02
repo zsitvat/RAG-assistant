@@ -30,7 +30,7 @@ never reaches Langfuse or the API.
 
 ### Evaluation endpoint (`POST /admin/eval`, `src/app/api/routes/evaluation.py`)
 
-Separate from `/admin/ingest`/`/admin/stats` (`src/app/api/routes/admin.py`) — evaluation is its own
+Separate from `/admin/ingest`/`/admin/stats` (`src/app/api/routes/ingest.py`/`stats.py`) — evaluation is its own
 route module. `EvaluationRequest` carries `{thread_id, message, reference_date, dataset_item_id?,
 experiment_name?}`; `reference_date` is injected into `AgentState["reference_date"]` (new field) so
 `check_rules`'s deadline math is deterministic regardless of when the eval actually runs — the tool

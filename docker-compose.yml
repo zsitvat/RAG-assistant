@@ -65,7 +65,7 @@ services:
     build:
       context: .
       target: runtime
-    command: ["api"]
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
     restart: unless-stopped
     depends_on:
       redis:
@@ -100,7 +100,7 @@ services:
     build:
       context: .
       target: runtime
-    command: ["ui"]
+    command: ["streamlit", "run", "app/ui.py", "--server.address", "0.0.0.0", "--server.port", "8501"]
     restart: unless-stopped
     depends_on:
       api:

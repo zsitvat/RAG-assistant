@@ -216,10 +216,12 @@ every setting and contains no credentials.
 docker compose up
 ```
 
-One image serves both processes (`api`, `ui` — same build, different command). This brings up Redis
-8 (+ Redis Insight at <http://127.0.0.1:5540>), Ollama (pulling the configured model on first start),
-the API (`entrypoint.sh` waits for dependencies, ingests the corpus if the manifest doesn't already
-match, then serves) and the Streamlit UI. Once `api` reports healthy:
+One image serves both processes (`api`, `ui` — same build, each with its own `command:` in
+`docker-compose.yml`). This brings up Redis 8 (+ Redis Insight at <http://127.0.0.1:5540>), Ollama
+(a one-shot `ollama-pull` service pulls the configured model before the API starts), the API and the
+Streamlit UI. Compose's `depends_on` health/completion conditions order the startup; the API's own
+FastAPI lifespan ingests the corpus on boot, skipping the work when the stored manifest already
+matches. Once `api` reports healthy:
 
 - Streamlit UI: <http://127.0.0.1:8501>
 - API + Swagger docs: <http://127.0.0.1:8000/docs>

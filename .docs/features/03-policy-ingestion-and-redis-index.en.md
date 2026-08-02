@@ -14,7 +14,7 @@ index state through the application (`/admin/ingest`, `/admin/stats`, the Stream
 
 ### The rule catalogue (`src/app/rules/`)
 
-`config/rules.yaml` is the deterministic rule catalogue: per-document category and
+`src/rules_config/rules.yaml` is the deterministic rule catalogue: per-document category and
 section-anchor declarations, and per-category rule definitions (limits, rates, approval tiers,
 deadlines). Every number in it was read directly from the source `.docx` files, not copied from the
 technical design's illustrative example — several values differ (see the deviation note below).
@@ -88,7 +88,8 @@ and similarity searches go through `RedisVectorStore`, never through `RedisIndex
 
 ### API and UI
 
-- `POST /admin/ingest` and `GET /admin/stats` (`src/app/api/routes/admin.py`) return `503` with a clear
+- `POST /admin/ingest` (`src/app/api/routes/ingest.py`) and `GET /admin/stats`
+  (`src/app/api/routes/stats.py`) return `503` with a clear
   `detail` when Redis is unavailable, instead of a raw 500.
 - `GET /ready` (`src/app/api/routes/health.py`, delegating to `src/app/integrations/readiness.py`'s
   `ReadinessChecker`) now pings the real Redis client; overall `ready` is `false` when Redis is
@@ -121,7 +122,7 @@ TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest src/app/integrations/tests
 
 | File | Responsibility |
 | --- | --- |
-| `config/rules.yaml` | deterministic rule catalogue, hand-authored from the real corpus |
+| `src/rules_config/rules.yaml` | deterministic rule catalogue, hand-authored from the real corpus |
 | `src/app/rules/model.py` | `RuleCatalogue` typed models + cross-reference validation |
 | `src/app/rules/loader.py` | `load_rule_catalogue()`, cached `get_rule_catalogue()` |
 | `src/app/rag/errors.py` | `IngestionError` |
@@ -134,11 +135,12 @@ TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest src/app/integrations/tests
 | `src/app/rag/index_schema.py` | Redis index name, key prefix, vector/schema constants |
 | `src/app/rag/store.py` | `E5Embeddings`, `RedisVectorStore` factory |
 | `src/app/integrations/redis.py` | `RedisIndex` — connection, build-info read/write, index stats |
-| `src/app/api/routes/admin.py` | `/admin/ingest`, `/admin/stats` |
+| `src/app/api/routes/ingest.py` | `/admin/ingest` |
+| `src/app/api/routes/stats.py` | `/admin/stats` |
 | `src/app/api/routes/health.py` | `/health`, `/ready` routes (thin, delegates to `ReadinessChecker`) |
 | `src/app/integrations/readiness.py` | `ReadinessChecker` — Redis + LLM readiness checks |
 | `src/app/ui.py` | sidebar index stats |
-| `src/app/rules/tests/test_rules.py`, `src/app/rag/tests/test_ingest.py`, `src/app/rag/tests/test_run_ingest.py`, `tests/api/test_admin.py`, `src/app/integrations/tests/test_health_readiness.py` | unit tests (no Redis required) |
+| `src/app/rules/tests/test_rules.py`, `src/app/rag/tests/test_ingest.py`, `src/app/rag/tests/test_run_ingest.py`, `src/app/tests/api/test_admin.py`, `src/app/integrations/tests/test_health_readiness.py` | unit tests (no Redis required) |
 | `src/app/integrations/tests/test_redis_integration.py` | integration tests against a real Redis 8 instance |
 
 ## Deliberate deviations from the technical design

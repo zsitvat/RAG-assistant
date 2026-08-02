@@ -25,7 +25,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 def create_app() -> FastAPI:
-    """Builds the FastAPI application with its middleware and routes."""
     app = FastAPI(title="RAG Assistant API", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,

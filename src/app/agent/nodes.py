@@ -7,7 +7,11 @@ from langchain_core.tools import BaseTool
 
 from app.agent.calculator import CalculationInputError, ReimbursementCalculator
 from app.agent.current_request import CurrentRequest
-from app.agent.messages import (
+from app.agent.model import CalculationResult, Decision, ExpenseClaim, IntentClassification
+from app.agent.prompt_library import PromptLibrary
+from app.agent.slots import RequiredSlotTable
+from app.agent.state import MAX_AGENT_STEPS, MAX_TOOL_ARG_ERRORS, AgentState
+from app.agent.static_texts import (
     CLARIFICATION_QUESTIONS,
     CONDITIONAL_DISTANCE_ANSWER,
     DEFAULT_CLARIFICATION_QUESTION,
@@ -16,10 +20,6 @@ from app.agent.messages import (
     NO_TOOL_ARTIFACT_MESSAGE,
     OUT_OF_SCOPE_MESSAGE,
 )
-from app.agent.model import CalculationResult, Decision, ExpenseClaim, IntentClassification
-from app.agent.prompt_library import PromptLibrary
-from app.agent.slots import RequiredSlotTable
-from app.agent.state import MAX_AGENT_STEPS, MAX_TOOL_ARG_ERRORS, AgentState
 from app.agent.structured import StructuredOutputRunner
 from app.integrations.langfuse import Observability
 

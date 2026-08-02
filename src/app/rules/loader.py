@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from app.rules.model import RuleCatalogue
 
-DEFAULT_RULES_PATH = Path("config/rules.yaml")
+DEFAULT_RULES_PATH = Path(__file__).resolve().parents[2] / "rules_config" / "rules.yaml"
 
 
 class RuleCatalogueError(RuntimeError):

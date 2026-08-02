@@ -65,7 +65,7 @@ No new API surface — this refines the existing `POST /chat` journey (task 4) f
 | --- | --- |
 | `src/app/agent/rule_checker.py` | focused `ApprovalChecker` and `EligibilityChecker` collaborators |
 | `src/app/agent/prompts.py` | `EXTRACT_INFORMATION_SYSTEM` — taxi/parking/fine/minibar/personal expense_type normalization |
-| `config/rules.yaml` | `R-TRAVEL-04`, `R-EQUIP-02`, new `01#non-reimbursable-items` section anchor |
+| `src/rules_config/rules.yaml` | `R-TRAVEL-04`, `R-EQUIP-02`, new `01#non-reimbursable-items` section anchor |
 | `src/app/rag/rule_metadata.py` | `validate_categories_reachable` |
 | `src/app/rag/ingest.py` | wires the new validation into `load_and_chunk` |
 | `src/app/agent/tests/test_calculator.py` | accommodation international, meal per-diem domestic/international, parking |

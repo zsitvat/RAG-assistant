@@ -1,6 +1,8 @@
 from app.agent.model import ExpenseClaim, Intent
 from app.rules.model import Category
 
+# Maps each (intent, category) pair to the ExpenseClaim fields the agent must have
+# before it can evaluate the rules, so the graph knows which follow-up questions to ask.
 _REQUIRED_SLOTS: dict[tuple[Intent, Category | None], list[str]] = {
     ("policy_question", None): [],
     ("document_requirements", None): ["category"],
@@ -30,6 +32,8 @@ _REQUIRED_SLOTS: dict[tuple[Intent, Category | None], list[str]] = {
     ("deadline_check", None): ["expense_date"],
 }
 
+# Commuting has no fixed slot set: the required fields depend on the declared transport
+# mode (pass/ticket vs. own vehicle), so these are added on top of _REQUIRED_SLOTS.
 _COMMUTING_MODE_SLOTS: dict[str, list[str]] = {
     "pass": ["amount_huf"],
     "ticket": ["amount_huf", "commute_days_per_month"],

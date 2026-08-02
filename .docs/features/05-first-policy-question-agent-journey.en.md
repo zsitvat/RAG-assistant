@@ -52,7 +52,7 @@ needs `amount_huf`+`headcount`; and so on). `route_after_extraction` sends
 missing slot or proceeds to `agent_step`. An unmapped (intent, category) pair has no required slots
 and falls through to the agent, matching the design's stated trade-off.
 
-`src/app/agent/messages.py` holds every clarification question, refusal, and system-state message as a
+`src/app/agent/static_texts.py` holds every clarification question, refusal, and system-state message as a
 fixed string rather than letting a node generate it. This much hardcoding is mainly a consequence of
 running a small chat model: a larger, more capable model could likely be trusted to phrase these
 reliably on its own, without the risk of inconsistent or unclear wording that motivates fixing them
@@ -181,7 +181,7 @@ curl -X POST http://127.0.0.1:8000/chat \
 | `src/app/agent/rule_checker.py` | `RuleChecker`, `Finding` |
 | `src/app/agent/tools.py` | `build_calculate_tool`, `build_check_rules_tool`, `build_tools` |
 | `src/app/agent/nodes.py` | `AgentNodes` — all custom nodes and routing functions |
-| `src/app/agent/messages.py` | fixed clarification/refusal/system-state strings, kept deterministic mainly because the current chat model is small |
+| `src/app/agent/static_texts.py` | fixed clarification/refusal/system-state strings, kept deterministic mainly because the current chat model is small |
 | `src/app/agent/graph.py` | `build_agent_graph` |
 | `src/app/agent/service.py` | `AgentService` — graph output → `ChatResponse` |
 | `src/app/api/routes/chat.py` | `POST /chat` |

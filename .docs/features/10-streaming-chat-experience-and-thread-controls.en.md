@@ -75,7 +75,6 @@ intact, so the next message retries on the same thread.
 
 ## Related restructuring
 
-`src/app/core/` was split in the same change: `src/app/core/config.py` → `src/app/settings.py`,
-`src/app/core/logging.py` → `src/app/logging/config.py`. Request-correlation middleware
-(`src/app/core/observability.py`, `RequestContextMiddleware`) was removed rather than moved — see the
-logging feature doc for why.
+`app/core/` (back when `app/` itself lived at the repo root, before the `src/` layout) was split in
+the same change: `app/core/config.py` → `app/settings.py`, `app/core/logging.py` →
+`app/logging/config.py`.
