@@ -19,7 +19,7 @@
 
 - [x] The RAG workflow is a separately compiled LangGraph `StateGraph` with distinct retrieval and context-building nodes.
 - [x] Its public state contract accepts only a question and optional category and returns one typed RAG result.
-- [ ] Retrieval uses the LangChain retriever interface with top-four dense search rather than direct RediSearch commands in application code.
+- [x] Retrieval uses the LangChain retriever interface with top-four dense search rather than direct RediSearch commands in application code.
 - [x] Similarity is normalised from cosine distance consistently, and the confidence/low-relevance decision derives from the highest-ranked hit rather than a duplicated state field.
 - [x] A category-filtered query includes both the active category and general policies; a query without a category searches the complete corpus.
 - [x] An empty filtered result is retried once without the category, while an empty or low-confidence final result is represented explicitly rather than fabricated.

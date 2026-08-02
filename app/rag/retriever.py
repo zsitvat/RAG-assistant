@@ -1,22 +1,39 @@
+from typing import Any
+
+from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
+from langchain_core.retrievers import BaseRetriever
 from langchain_redis import RedisVectorStore
 
 from app.rag.index_schema import TOP_K
 from app.rules.model import Category
 
 
-class Retriever:
-    """Wraps the policy vector store; the category filter is chosen per search call."""
+class Retriever(BaseRetriever):
+    """LangChain retriever wrapping the policy vector store; the category filter is chosen per search call."""
 
-    def __init__(self, vector_store: RedisVectorStore, k: int = TOP_K) -> None:
+    vector_store: RedisVectorStore
+    k: int = TOP_K
+    model_config = {"arbitrary_types_allowed": True}
+
+    def __init__(self, vector_store: RedisVectorStore, k: int = TOP_K, **kwargs: Any) -> None:
         """Stores the vector store and the number of results to retrieve per search."""
-        self._vector_store = vector_store
-        self._k = k
+        super().__init__(vector_store=vector_store, k=k, **kwargs)
 
     def search(self, query: str, category: Category | None) -> list[Document]:
         """Searches the vector store for the query, optionally filtered by category."""
-        results = self._vector_store.similarity_search_with_score(
-            query, k=self._k, filter=self._filter_expression(category)
+        return self.invoke(query, category=category)
+
+    def _get_relevant_documents(
+        self,
+        query: str,
+        *,
+        run_manager: CallbackManagerForRetrieverRun,
+        category: Category | None = None,
+    ) -> list[Document]:
+        """Runs the dense similarity search through the retriever interface and attaches scores."""
+        results = self.vector_store.similarity_search_with_score(
+            query, k=self.k, filter=self._filter_expression(category)
         )
         return [self._with_similarity(doc, distance) for doc, distance in results]
 

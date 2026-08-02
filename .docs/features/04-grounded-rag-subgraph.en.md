@@ -34,18 +34,23 @@ or Redis work — the retriever is only called when a node runs.
 
 ### Retrieval (`app/rag/retriever.py`)
 
-`Retriever` wraps a `RedisVectorStore` and exposes one method, `search(query, category)`. It
-calls `similarity_search_with_score(query, k=TOP_K, filter=...)` and converts the raw cosine
-**distance** each result carries into `similarity = 1 - distance`, stored in
-`Document.metadata["similarity"]`. `similarity_search_with_relevance_scores()` is not usable here —
-it raises `NotImplementedError` because this vector store has no `relevance_score_fn` configured —
-so this conversion is done directly rather than relying on that LangChain convenience method. The
-category filter, built fresh on every call, is `@categories:{<category>|general}` (RediSearch TAG
-OR-syntax) when a category is given, matching chunks tagged with either the active category or
-`general`; without a category, no filter is applied. The category is a search-time argument rather
-than construction state, so one `Retriever` instance (injected into `build_rag_graph`) serves
-every category — tests supply a fake with the same `search(query, category)` shape, and only the
-real Redis integration constructs the genuine one.
+`Retriever` is a `langchain_core.retrievers.BaseRetriever` subclass wrapping a `RedisVectorStore`,
+so retrieval goes through the LangChain retriever interface (`.invoke()`) rather than a direct
+vector-store call from application code; this also makes retrieval appear as a distinct "retriever"
+observation type in Langfuse traces. `search(query, category)` is a thin convenience wrapper calling
+`self.invoke(query, category=category)`. Its `_get_relevant_documents` implementation calls
+`similarity_search_with_score(query, k=TOP_K, filter=...)` and converts the raw cosine **distance**
+each result carries into `similarity = 1 - distance`, stored in `Document.metadata["similarity"]`.
+`similarity_search_with_relevance_scores()` (and the built-in `VectorStoreRetriever`'s
+`search_type="similarity_score_threshold"`, which relies on the same method) is not usable here — it
+raises `NotImplementedError` because `RedisVectorStore` has no `_select_relevance_score_fn`
+configured — so this conversion is done directly rather than relying on that LangChain convenience
+path. The category filter, built fresh on every call, is `@categories:{<category>|general}`
+(RediSearch TAG OR-syntax) when a category is given, matching chunks tagged with either the active
+category or `general`; without a category, no filter is applied. The category is a search-time
+argument rather than construction state, so one `Retriever` instance (injected into
+`build_rag_graph`) serves every category — tests supply a fake with the same `search(query,
+category)` shape, and only the real Redis integration constructs the genuine one.
 
 ### Result models (`app/rag/model.py`)
 
@@ -104,9 +109,3 @@ search_policies = build_search_policies_tool(graph)
 | `tests/test_rag_graph.py` | filtered/unfiltered/fallback/empty/ranking/budget/dedup node tests |
 | `tests/test_rag_tool.py` | content-and-artifact tool behaviour |
 | `tests/test_redis_integration.py` | per-category grounded-evidence and low-confidence tests against Redis 8 |
-
-## Deliberate deviations from the technical design
-
-- **`TOP_K` is 5, not the design's "top-four."** This constant was already set to 5 in
-  `app/rag/index_schema.py` before this task (task 2); it is reused as-is here rather than
-  reintroducing a second, inconsistent retrieval width.
