@@ -345,7 +345,7 @@ The PoC stays uncached deliberately, so its behaviour and latency remain easy to
 
 | Not in scope | Why, and what it would take |
 | --- | --- |
-| Authentication / authorisation | No user identity; "am *I* eligible" is answered from what the user types, not an HR record. Real version: SSO on the UI, a token on the API, tenure/budget read from HR. |
+| Authentication / authorisation | No user identity; "am *I* eligible" is answered from what the user types, not an HR record. The API host port is loopback-only, but that is a network-placement convenience, not access control. A production version should give Streamlit a service token and let an authorised Swagger user supply a separate token through Swagger's `Authorize` flow, plus SSO on the UI and tenure/budget read from HR. |
 | Multi-tenancy | One fictional company, one policy set, one `rules.yaml`. Tenant-scoped indices and catalogue would be the shape. |
 | Real financial/ERP integration | No booking, no submission, no ERP call — tells you what's claimable, doesn't file it. |
 | Live FX rates | Fixed fictional rates in `rules.yaml`. A real system needs a rate provider plus a rate-date rule. |

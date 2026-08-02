@@ -18,7 +18,7 @@
 - Keep the model-facing tool result concise and the full Pydantic artifact outside the prompt; state and artifacts must have one authoritative home.
 
 - [x] The agent state contains only messages, intent, category, claim, and decision, with LangChain message reduction and typed domain models.
-- [ ] `ExpenseClaim` supports only fields consumed by routing or deterministic tools: category/subtype, HUF amount, date, headcount, distance/direction/days, excluded amount, receipt/approval, and used annual benefit budget.
+- [x] `ExpenseClaim` supports only fields consumed by routing or deterministic tools: category/subtype, HUF amount, date, headcount, distance/direction/days, excluded amount, receipt/approval, and used annual benefit budget.
 - [x] The LangChain model factory supplies ChatOllama in normal operation and the scripted test model in dummy mode through the same chat-model interface.
 - [ ] Production uses `qwen2.5:7b-instruct-q4_K_M`; structured classification, extraction, and tool selection run at temperature 0, while final response generation runs at temperature 0.2.
 - [x] Model selection and prompts permit best-effort Hungarian interaction over the English corpus while the canonical prompts, rule identifiers, enum values, and official evaluation remain English.
@@ -36,4 +36,4 @@
 - [x] The same tool may return invalid arguments at most twice before being disabled for the turn, and an identical repeated call reuses the prior artifact while recording a warning.
 - [x] Exhausting the tool budget routes to final response generation with available evidence and explicitly states when that evidence is incomplete.
 - [x] Ollama calls retry with bounded backoff twice and then return a clear failure rather than a fabricated answer.
-- [ ] Scripted integration tests verify the expected graph path, tool sequence, source projection, unsupported path, and recursion backstop.
+- [x] Scripted integration tests verify the expected graph path, tool sequence, source projection, unsupported path, and recursion backstop.

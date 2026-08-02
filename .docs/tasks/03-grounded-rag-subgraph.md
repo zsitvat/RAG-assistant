@@ -30,4 +30,3 @@
 - [x] Constructing or importing the subgraph performs no network or Redis work; retrievers are supplied through the graph factory.
 - [x] Focused tests cover filtered, unfiltered, fallback, empty, ranking, token-budget, and citation-deduplication behaviour.
 - [x] A standalone invocation against the ingested Redis index returns relevant, source-backed evidence for at least one policy question in each configured category.
-- [ ] An irrelevant top result below the configured threshold yields the documented uncovered-policy response path instead of allowing response generation to imply policy support.

@@ -13,6 +13,15 @@ from tests.fakes import ScriptedChatModel
 CALCULATOR = ReimbursementCalculator(load_rule_catalogue())
 
 
+def _infinite_tool_calls():
+    i = 0
+    while True:
+        i += 1
+        yield AIMessage(
+            content="", tool_calls=[{"name": "search_policies", "args": {"n": i}, "id": str(i)}]
+        )
+
+
 class _AlwaysFailingChatModel(ScriptedChatModel):
     def _generate(self, *args, **kwargs):
         raise ConnectionError("Ollama is unreachable")
@@ -163,6 +172,22 @@ def test_loop_stops_after_max_agent_steps_without_calling_the_model_again():
     final_content = result["messages"][-1].content
     assert final_content.startswith("Here is what I found so far, evidence is incomplete.")
     assert "incomplete information" in final_content
+
+
+def test_recursion_limit_is_generous_enough_for_the_worst_case_step_budget():
+    from app.agent.state import RECURSION_LIMIT
+
+    tool_, calls = _make_counting_tool("search_policies")
+    model = ScriptedChatModel(
+        chat_responses=_infinite_tool_calls(),
+        structured_responses=iter([IntentClassification(intent="policy_question"), ExpenseClaim()]),
+    )
+    config = {"configurable": {"thread_id": "t-recursion"}, "recursion_limit": RECURSION_LIMIT}
+
+    result = _invoke(model, [tool_], [("human", "Tell me everything about every policy.")], config)
+
+    assert len(calls) == MAX_AGENT_STEPS
+    assert "incomplete information" in result["messages"][-1].content
 
 
 def test_duplicate_identical_tool_call_is_reused_without_re_executing():

@@ -111,6 +111,7 @@ class AgentService:
             intent=state.get("intent"),
             category=state.get("category"),
             decision=state.get("decision"),
+            degraded=state.get("degraded", False),
         )
         return ChatResponse(
             thread_id=thread_id,
