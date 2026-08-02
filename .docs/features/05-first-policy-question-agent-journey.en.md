@@ -188,9 +188,9 @@ curl -X POST http://127.0.0.1:8000/chat \
 | `app/api/schemas.py` | `ChatRequest`, `ChatResponse`, `ChatSource` (added to the existing file) |
 | `app/dependencies.py` | `ApplicationDependencies` — all application wiring |
 | `tests/fakes.py` | `ScriptedChatModel` — test double supporting `bind_tools`/`with_structured_output` |
-| `tests/test_agent_graph.py` | full-graph journeys: happy path, unsupported, clarification, loop budget, duplicate reuse, tool-error disabling, no-artifact refusal, LLM-unavailable |
-| `tests/test_calculator.py`, `tests/test_rule_checker.py`, `tests/test_deadline.py` | per-category arithmetic and rule-check unit tests |
-| `tests/test_slots.py`, `tests/test_current_request.py`, `tests/test_agent_nodes_model_context.py`, `tests/test_structured.py`, `tests/test_tools.py`, `tests/test_agent_service.py` | focused unit tests for each supporting module |
+| `app/agent/tests/test_graph.py` | full-graph journeys: happy path, unsupported, clarification, loop budget, duplicate reuse, tool-error disabling, no-artifact refusal, LLM-unavailable |
+| `app/agent/tests/test_calculator.py`, `app/agent/tests/test_rule_checker.py`, `app/agent/tests/test_deadline.py` | per-category arithmetic and rule-check unit tests |
+| `app/agent/tests/test_slots.py`, `app/agent/tests/test_current_request.py`, `app/agent/tests/test_nodes_model_context.py`, `app/agent/tests/test_structured.py`, `app/agent/tests/test_tools.py`, `app/agent/tests/test_service.py` | focused unit tests for each supporting module |
 
 ## Deliberate deviations from the technical design
 

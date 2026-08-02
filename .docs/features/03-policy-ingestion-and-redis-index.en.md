@@ -114,7 +114,7 @@ curl http://127.0.0.1:8000/admin/stats
 Run the Redis 8 integration test (skipped automatically if unreachable):
 
 ```bash
-TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest tests/test_redis_integration.py -v
+TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest app/integrations/tests/test_redis_integration.py -v
 ```
 
 ## Key files
@@ -138,8 +138,8 @@ TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest tests/test_redis_integrati
 | `app/api/routes/health.py` | `/health`, `/ready` routes (thin, delegates to `ReadinessChecker`) |
 | `app/integrations/readiness.py` | `ReadinessChecker` — Redis + LLM readiness checks |
 | `app/ui.py` | sidebar index stats |
-| `tests/test_rules.py`, `tests/test_ingest.py`, `tests/test_run_ingest.py`, `tests/test_admin.py`, `tests/test_health_readiness.py` | unit tests (no Redis required) |
-| `tests/test_redis_integration.py` | integration tests against a real Redis 8 instance |
+| `app/rules/tests/test_rules.py`, `app/rag/tests/test_ingest.py`, `app/rag/tests/test_run_ingest.py`, `tests/api/test_admin.py`, `app/integrations/tests/test_health_readiness.py` | unit tests (no Redis required) |
+| `app/integrations/tests/test_redis_integration.py` | integration tests against a real Redis 8 instance |
 
 ## Deliberate deviations from the technical design
 

@@ -69,9 +69,9 @@ of shipping.
 | `app/agent/nodes.py` | resolves each of the four prompts through `PromptLibrary` instead of the static import |
 | `app/agent/service.py` | attaches the trace config per turn, updates trace outcome attributes |
 | `app/dependencies.py` | builds `Observability` and `PromptLibrary` once at startup |
-| `tests/test_observability.py` | disabled/enabled paths, degrade-on-failure, trace config shape |
-| `tests/test_prompt_library.py` | every embedded prompt validates, remote resolution, remote-invalid and remote-unreachable fallback, caching |
-| `tests/test_logging.py` | payload-exclusion AST guard |
+| `app/integrations/tests/test_observability.py` | disabled/enabled paths, degrade-on-failure, trace config shape |
+| `app/agent/tests/test_prompt_library.py` | every embedded prompt validates, remote resolution, remote-invalid and remote-unreachable fallback, caching |
+| `app/logging/tests/test_config.py` | payload-exclusion AST guard |
 
 ## A test-isolation issue this task surfaced
 

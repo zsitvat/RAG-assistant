@@ -8,8 +8,6 @@ from app.agent.model import Decision, ExpenseClaim, Intent
 from app.rules.model import Category
 
 MAX_AGENT_STEPS = 4
-# Worst case (MAX_AGENT_STEPS tool calls before the budget stops the loop) takes 12 node
-# executions to reach generate_response; keep a safety margin above that exact minimum.
 RECURSION_LIMIT = 15
 MAX_TOOL_ARG_ERRORS = 2
 

@@ -76,7 +76,7 @@ scanner and waits for the SonarQube Cloud quality gate.
 | `app/api/routes/health.py` | `/health`, `/ready` |
 | `app/main.py` | app assembly, lifespan |
 | `app/ui.py` | Streamlit shell |
-| `tests/test_api.py`, `tests/test_llm.py`, `tests/test_logging.py` | focused tests |
+| `tests/api/test_api.py`, `app/integrations/tests/test_llm.py`, `app/logging/tests/test_config.py` | focused tests |
 
 ## Deliberate deviation from the technical design
 

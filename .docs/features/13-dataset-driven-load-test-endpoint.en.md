@@ -100,6 +100,6 @@ traces are where to confirm this against actual per-node/generation timings, not
 | `app/api/routes/evaluation.py` | `POST /admin/load-test` — 503/422 handling, threadpool bridge |
 | `app/evaluation/load.py` | `LoadTestRunner`, `LoadTestValidationError` |
 | `app/dependencies.py` | `ApplicationDependencies.observability`, `get_observability` |
-| `tests/test_load_test_runner.py` | `LoadTestRunner` unit tests against a fake Langfuse dataset |
-| `tests/test_api.py` | `/admin/load-test` 503-when-disabled HTTP test |
-| `tests/test_api_contracts.py` | `LoadTestResult` contract snapshot, distinct-OpenAPI-schema check |
+| `app/evaluation/tests/test_load.py` | `LoadTestRunner` unit tests against a fake Langfuse dataset |
+| `tests/api/test_api.py` | `/admin/load-test` 503-when-disabled HTTP test |
+| `tests/api/test_api_contracts.py` | `LoadTestResult` contract snapshot, distinct-OpenAPI-schema check |

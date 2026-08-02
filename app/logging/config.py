@@ -1,12 +1,14 @@
 import json
 import logging
 import logging.handlers
+import re
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 LOG_RETENTION_DAYS = 7
 DEFAULT_LOG_DIR = Path("logs")
+_ARCHIVE_SUFFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _CAPTURED_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi", "streamlit")
 _NOISY_THIRD_PARTY_LOGGERS = (
     "httpcore",
@@ -44,12 +46,39 @@ class _JsonFormatter(logging.Formatter):
         return json.dumps(payload, default=str)
 
 
+def cleanup_expired_archives(
+    log_dir: Path, service: str, retention_days: int = LOG_RETENTION_DAYS, today: date | None = None
+) -> list[Path]:
+    """Deletes this service's rotated log archives outside the calendar-day retention window.
+
+    Archive files are named ``{service}.jsonl.YYYY-MM-DD`` by ``TimedRotatingFileHandler``.
+    Age is judged from that date suffix, not file mtime, so retention stays correct
+    even if archives were copied or touched after rotation.
+    """
+    cutoff = (today or datetime.now(UTC).date()) - timedelta(days=retention_days)
+    removed = []
+    for path in log_dir.glob(f"{service}.jsonl.*"):
+        suffix = path.name.removeprefix(f"{service}.jsonl.")
+        if not _ARCHIVE_SUFFIX_RE.match(suffix):
+            continue
+        if date.fromisoformat(suffix) < cutoff:
+            path.unlink(missing_ok=True)
+            removed.append(path)
+    return removed
+
+
 def configure_logging(service: str, log_level: str, log_dir: Path = DEFAULT_LOG_DIR) -> None:
-    """Sets up JSON stdout and rotating file logging for the service."""
+    """Sets up JSON stdout and rotating file logging for the service.
+
+    Runs startup retention cleanup first, so archives left behind by a stopped
+    service are removed before the service starts handling requests again.
+    """
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         raise RuntimeError(f"Log directory '{log_dir.resolve()}' is not writable: {exc}") from exc
+
+    cleanup_expired_archives(log_dir, service)
 
     formatter = _JsonFormatter(service=service)
 

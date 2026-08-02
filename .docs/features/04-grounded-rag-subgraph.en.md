@@ -105,7 +105,7 @@ search_policies = build_search_policies_tool(graph)
 | `app/rag/tool.py` | `build_search_policies_tool` (`search_policies`) |
 | `app/rag/model.py` | `RetrievedResult`, `Citation`, `RagResult` |
 | `app/rag/index_schema.py` | `MIN_CONFIDENCE_THRESHOLD`, `CONTEXT_TOKEN_BUDGET` (alongside `TOP_K`) |
-| `tests/test_retriever.py` | filter/similarity-conversion unit tests (mocked vector store) |
-| `tests/test_rag_graph.py` | filtered/unfiltered/fallback/empty/ranking/budget/dedup node tests |
-| `tests/test_rag_tool.py` | content-and-artifact tool behaviour |
-| `tests/test_redis_integration.py` | per-category grounded-evidence and low-confidence tests against Redis 8 |
+| `app/rag/tests/test_retriever.py` | filter/similarity-conversion unit tests (mocked vector store) |
+| `app/rag/tests/test_graph.py` | filtered/unfiltered/fallback/empty/ranking/budget/dedup node tests |
+| `app/rag/tests/test_tool.py` | content-and-artifact tool behaviour |
+| `app/integrations/tests/test_redis_integration.py` | per-category grounded-evidence and low-confidence tests against Redis 8 |

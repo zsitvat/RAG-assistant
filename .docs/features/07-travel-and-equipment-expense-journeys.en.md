@@ -68,9 +68,9 @@ No new API surface — this refines the existing `POST /chat` journey (task 4) f
 | `config/rules.yaml` | `R-TRAVEL-04`, `R-EQUIP-02`, new `01#non-reimbursable-items` section anchor |
 | `app/rag/rule_metadata.py` | `validate_categories_reachable` |
 | `app/rag/ingest.py` | wires the new validation into `load_and_chunk` |
-| `tests/test_calculator.py` | accommodation international, meal per-diem domestic/international, parking |
-| `tests/test_rule_checker.py` | approval boundary tests, travel approval (domestic/international), prohibited expense types |
-| `tests/test_slots.py` | travel/equipment required-slot coverage |
-| `tests/test_ingest.py` | `validate_categories_reachable` pass/fail cases |
-| `tests/test_travel_and_equipment_journeys.py` | graph journeys plus a full domestic-accommodation request through `POST /chat` |
-| `tests/test_travel_equipment_rule_document_consistency.py` | every travel/equipment rule's `doc_ref` resolves, and its numeric values/excluded items appear verbatim in the referenced policy document |
+| `app/agent/tests/test_calculator.py` | accommodation international, meal per-diem domestic/international, parking |
+| `app/agent/tests/test_rule_checker.py` | approval boundary tests, travel approval (domestic/international), prohibited expense types |
+| `app/agent/tests/test_slots.py` | travel/equipment required-slot coverage |
+| `app/rag/tests/test_ingest.py` | `validate_categories_reachable` pass/fail cases |
+| `tests/journeys/test_travel_and_equipment_journeys.py` | graph journeys plus a full domestic-accommodation request through `POST /chat` |
+| `tests/journeys/test_travel_equipment_rule_document_consistency.py` | every travel/equipment rule's `doc_ref` resolves, and its numeric values/excluded items appear verbatim in the referenced policy document |

@@ -58,7 +58,7 @@ envelope on load, so `state["claim"]` is a `dict` after any resumed turn — whi
 missing, i.e. an endless clarification loop. `ExpenseClaim.from_state()` is the single coercion
 point that accepts a model, a plain dict, or the serialized envelope; every read of `state["claim"]`
 in `nodes.py` and `tools.py` goes through it. This only reproduces against real Redis, which is why
-`tests/test_checkpointer_integration.py` exists separately from the in-memory graph tests.
+`app/integrations/tests/test_checkpointer_integration.py` exists separately from the in-memory graph tests.
 
 ### Thread reset (`app/api/routes/chat.py`)
 
@@ -86,6 +86,6 @@ can still resolve it, but the turn ends with a useful amount either way.
 | `app/agent/rule_checker.py` | minimum distance reported `not_applicable` for pass/ticket claims |
 | `app/integrations/checkpointer.py` | `RedisSaver` with the 24 h TTL and `checkpoint:*` namespace |
 | `app/api/routes/chat.py` | `DELETE /threads/{thread_id}` |
-| `tests/test_commuting_and_mileage_journeys.py` | clarification, two-turn resume, category switch, refusal |
-| `tests/test_checkpointer_integration.py` | restart persistence, TTL/namespace, reset, two workers on one thread |
-| `tests/test_commuting_rule_document_consistency.py` | every commuting/mileage number traced verbatim to the corpus |
+| `tests/journeys/test_commuting_and_mileage_journeys.py` | clarification, two-turn resume, category switch, refusal |
+| `app/integrations/tests/test_checkpointer_integration.py` | restart persistence, TTL/namespace, reset, two workers on one thread |
+| `tests/journeys/test_commuting_rule_document_consistency.py` | every commuting/mileage number traced verbatim to the corpus |

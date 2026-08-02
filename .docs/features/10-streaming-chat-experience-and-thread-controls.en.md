@@ -71,7 +71,7 @@ intact, so the next message retries on the same thread.
 | `app/rag/model.py` | `RagResult.from_artifact` |
 | `app/ui.py` | `ChatApiClient` and the chat page |
 | `app/main.py`, `app/settings.py` | UI-origin CORS |
-| `tests/test_chat_stream.py` | event vocabulary, allow-listing, dedup, token filtering, blocking parity, no-token turns, SSE wire format, HTTP contract |
+| `tests/journeys/test_chat_stream.py` | event vocabulary, allow-listing, dedup, token filtering, blocking parity, no-token turns, SSE wire format, HTTP contract |
 
 ## Related restructuring
 

@@ -1,9 +1,11 @@
 import json
 import logging
+import logging.handlers
+from datetime import date
 
 import pytest
 
-from app.logging.config import configure_logging
+from app.logging.config import cleanup_expired_archives, configure_logging
 
 
 def test_configure_logging_writes_json_lines(tmp_path, capsys):
@@ -42,6 +44,70 @@ def test_configure_logging_quiets_noisy_third_party_loggers(tmp_path):
 
     assert logging.getLogger("httpcore").getEffectiveLevel() == logging.WARNING
     assert logging.getLogger("sentence_transformers").getEffectiveLevel() == logging.WARNING
+
+
+def test_cleanup_expired_archives_removes_files_outside_retention_window(tmp_path):
+    expired = tmp_path / "api.jsonl.2026-07-01"
+    expired.write_text("old")
+
+    removed = cleanup_expired_archives(
+        tmp_path, service="api", retention_days=7, today=date(2026, 7, 20)
+    )
+
+    assert removed == [expired]
+    assert not expired.exists()
+
+
+def test_cleanup_expired_archives_keeps_files_inside_retention_window(tmp_path):
+    fresh = tmp_path / "api.jsonl.2026-07-18"
+    fresh.write_text("fresh")
+
+    removed = cleanup_expired_archives(
+        tmp_path, service="api", retention_days=7, today=date(2026, 7, 20)
+    )
+
+    assert removed == []
+    assert fresh.exists()
+
+
+def test_cleanup_expired_archives_ignores_other_services_and_malformed_names(tmp_path):
+    other_service = tmp_path / "ui.jsonl.2026-01-01"
+    other_service.write_text("other")
+    malformed = tmp_path / "api.jsonl.not-a-date"
+    malformed.write_text("malformed")
+    live_file = tmp_path / "api.jsonl"
+    live_file.write_text("live")
+
+    removed = cleanup_expired_archives(
+        tmp_path, service="api", retention_days=7, today=date(2026, 7, 20)
+    )
+
+    assert removed == []
+    assert other_service.exists()
+    assert malformed.exists()
+    assert live_file.exists()
+
+
+def test_configure_logging_removes_expired_archives_at_startup(tmp_path):
+    expired = tmp_path / "test-service.jsonl.2000-01-01"
+    expired.write_text("stale from a stopped service")
+
+    configure_logging(service="test-service", log_level="INFO", log_dir=tmp_path)
+
+    assert not expired.exists()
+
+
+def test_configure_logging_rotates_daily_at_utc_midnight_with_seven_day_backup(tmp_path):
+    configure_logging(service="test-service", log_level="INFO", log_dir=tmp_path)
+
+    file_handler = next(
+        h
+        for h in logging.getLogger().handlers
+        if isinstance(h, logging.handlers.TimedRotatingFileHandler)
+    )
+    assert file_handler.when == "MIDNIGHT"
+    assert file_handler.utc is True
+    assert file_handler.backupCount == 7
 
 
 def test_no_application_log_call_passes_claim_or_prompt_payload_content():

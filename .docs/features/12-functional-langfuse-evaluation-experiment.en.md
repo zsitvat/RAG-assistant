@@ -120,4 +120,4 @@ uv run python -m eval.run_eval --node intent
 | `app/agent/service.py` | `AgentService.evaluate()` and its projection helpers |
 | `app/agent/state.py` | `AgentState["reference_date"]`, `AgentState["degraded"]` |
 | `app/agent/structured.py` | `StructuredResult` — `(value, degraded)` from `StructuredOutputRunner.run()` |
-| `tests/test_eval_dataset.py`, `tests/test_eval_metrics.py`, `tests/test_eval_langfuse_sync.py`, `tests/test_eval_report.py`, `tests/test_eval_run_eval.py`, `tests/test_agent_service_evaluate.py`, `tests/test_api_contracts.py` | unit tests (mocked Langfuse; no network) |
+| `eval/tests/test_dataset.py`, `eval/tests/test_metrics.py`, `eval/tests/test_langfuse_sync.py`, `eval/tests/test_report.py`, `eval/tests/test_run_eval.py`, `app/agent/tests/test_service_evaluate.py`, `tests/api/test_api_contracts.py` | unit tests (mocked Langfuse; no network) |

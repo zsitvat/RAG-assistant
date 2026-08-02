@@ -73,9 +73,9 @@ requirement IDs and references live in `rules.yaml`.
 | `app/agent/model.py` | tenure, provided documents, and source-linked `Finding` schema |
 | `app/agent/slots.py` | benefits now requires `tenure_months` |
 | `app/agent/rule_checker.py` | focused eligibility, document, approval, and deadline checkers |
-| `tests/test_calculator.py` | unused and exhausted benefit budget |
-| `tests/test_deadline.py` | day 29/30/31 boundary |
-| `tests/test_rule_checker.py` | tenure warning/fail/pass, carry-over surfaced |
-| `tests/test_slots.py` | benefits required-slot coverage including tenure |
-| `tests/test_benefits_deadline_document_journeys.py` | benefit, deadline-only, and document-only graph journeys |
-| `tests/test_benefits_rule_document_consistency.py` | benefit rule `doc_ref`s resolve; annual allowances, the six-month tenure rule, and the no-carry-over rule appear verbatim in the referenced policy document |
+| `app/agent/tests/test_calculator.py` | unused and exhausted benefit budget |
+| `app/agent/tests/test_deadline.py` | day 29/30/31 boundary |
+| `app/agent/tests/test_rule_checker.py` | tenure warning/fail/pass, carry-over surfaced |
+| `app/agent/tests/test_slots.py` | benefits required-slot coverage including tenure |
+| `tests/journeys/test_benefits_deadline_document_journeys.py` | benefit, deadline-only, and document-only graph journeys |
+| `tests/journeys/test_benefits_rule_document_consistency.py` | benefit rule `doc_ref`s resolve; annual allowances, the six-month tenure rule, and the no-carry-over rule appear verbatim in the referenced policy document |

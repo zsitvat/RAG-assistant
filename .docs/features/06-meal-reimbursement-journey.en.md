@@ -58,7 +58,7 @@ inside the existing `POST /chat` journey from task 4. A meal expense_check reque
 | `app/agent/calculator.py` | `_calculate_meal`, `_meal_limit_rule` |
 | `app/agent/rule_checker.py` | focused document, approval, eligibility and deadline checkers |
 | `config/rules.yaml` | `R-MEAL-02` excluded-items fix |
-| `tests/test_calculator.py` | below-cap, exactly-at-cap, excluded-item warning, half-up rounding, missing-catalogue-limit |
-| `tests/test_rule_checker.py` | required-documents finding |
-| `tests/test_meal_reimbursement_journey.py` | compiled-graph integration journey for the scripted "reference dinner" request |
-| `tests/test_meal_rule_document_consistency.py` | proves every meal rule's `doc_ref` resolves to an indexed section, and that the per-person limit and excluded items appear verbatim in the referenced policy document |
+| `app/agent/tests/test_calculator.py` | below-cap, exactly-at-cap, excluded-item warning, half-up rounding, missing-catalogue-limit |
+| `app/agent/tests/test_rule_checker.py` | required-documents finding |
+| `tests/journeys/test_meal_reimbursement_journey.py` | compiled-graph integration journey for the scripted "reference dinner" request |
+| `tests/journeys/test_meal_rule_document_consistency.py` | proves every meal rule's `doc_ref` resolves to an indexed section, and that the per-person limit and excluded items appear verbatim in the referenced policy document |

@@ -117,70 +117,111 @@ see §4.5 for why, and for what a non-PoC version would do instead (derive it fr
 
 ## 3. Repository layout
 
-The implemented repository after the runnable-shell slice is:
+The current repository is:
 
 ```
-.env.example                 # committed application-setting template; .env is local and ignored
-Makefile                     # install, quality, Sonar and local run commands
+.env.example              # committed application-setting template; .env is local and ignored
+Makefile                  # install, quality, Sonar and local run commands
 app/
-  main.py                     # FastAPI app assembly and lifespan boundary
-  dependencies.py             # typed dependency container, runtime wiring and providers
+  main.py                    # FastAPI app assembly and lifespan boundary
+  dependencies.py            # typed dependency container, runtime wiring and providers
+  settings.py                # pydantic-settings runtime configuration
+  ui.py                      # Streamlit chat client
   api/
-    router.py                 # combines the route modules
-    schemas.py                # current health/readiness HTTP contracts
+    router.py                  # combines the route modules
+    schemas.py                 # HTTP request/response contracts
     routes/
-      health.py               # liveness and readiness endpoints
-  core/
-    config.py                 # deployment-dependent settings
-    logging.py                # stdout and rotating-file application logging
-    observability.py          # X-Request-ID middleware and logging context
-  integrations/
-    llm.py                    # ChatOllama/FakeListChatModel factory
-  ui.py                       # readiness-only Streamlit HTTP client
-tests/
-  test_api.py
-  test_llm.py
-  test_logging.py
-pyproject.toml                # project metadata, dependencies, Ruff/Bandit/pytest/coverage configuration
-uv.lock                       # pinned, reproducible dependency lock file (committed)
-sonar-project.properties      # Sonar source, test and coverage paths
-README.md
-```
-
-Later slices add the following target modules without changing the shell boundaries above:
-
-```
-app/
-  api/routes/
-    chat.py                   # chat, streaming and thread reset endpoints
-    admin.py                  # evaluation, load-test, ingest and index-stat endpoints
+      health.py                  # liveness/readiness endpoints
+      chat.py                    # chat, streaming and thread-reset endpoints
+      admin.py                   # ingest, index-stat and load-test endpoints
+      evaluation.py              # internal single-turn evaluation endpoint used by eval/run_eval.py
   agent/
-    service.py                # invoke, stream and reset use cases exposed to the API
-    graph.py                  # 7 nodes, routing and graph construction
-    nodes.py                  # node implementations, including classify_intent
-    state.py                  # LangGraph AgentState contract
-    model.py                  # Pydantic domain contracts
-    calculator.py             # deterministic reimbursement-calculation module
-    tools.py                  # LangChain tool adapters, registry and rule checks
-    prompts.py                # prompt names, embedded PoC fallbacks and resolver
+    service.py                 # invoke, stream and reset use cases exposed to the API
+    graph.py                   # node/routing assembly and compilation
+    nodes.py                   # node callbacks, including classify_intent
+    state.py                   # LangGraph AgentState contract
+    model.py                   # expense-claim Pydantic domain contracts
+    messages.py                # fixed non-LLM-generated user-facing strings
+    current_request.py         # messages/tool-call facts scoped to the latest request
+    calculator.py              # deterministic reimbursement-calculation module
+    deadline.py                # submission-deadline check
+    rule_checker.py            # receipt/supporting-document rule checks
+    slots.py                   # required-slot lookup per (intent, category)
+    structured.py               # structured-output value + fallback-used flag
+    tools.py                    # LangChain tool adapters over calculator/deadline/rule_checker
+    prompts.py                  # embedded PoC prompt templates
+    prompt_library.py           # Langfuse-resolved-vs-embedded prompt resolution and validation
+    tests/                      # co-located unit tests for this package
   evaluation/
-    load.py                   # endpoint-triggered Langfuse dataset load experiment
+    load.py                    # endpoint-triggered Langfuse dataset load experiment
+    tests/                     # co-located unit tests for this package
   integrations/
-    redis.py                  # LangChain Redis vector store + LangGraph checkpointer
+    llm.py                     # ChatOllama/FakeListChatModel factory
+    redis.py                   # Redis connection, build-info and index-stat operations
+    checkpointer.py            # Redis-backed LangGraph checkpointer (sync + async)
+    ollama.py                  # Ollama reachability/model-pulled readiness check
+    readiness.py               # aggregates LLM + Redis readiness behind /ready
+    langfuse.py                # Langfuse client, trace metadata and prompt-resolution access
+    tests/                     # co-located unit tests for this package
+  logging/
+    config.py                  # stdout + UTC-midnight rotating-file JSON logging, retention cleanup
+    tests/                     # co-located unit tests for this package
   rag/
-    graph.py                  # LangGraph retrieve -> context subgraph
-    state.py                  # LangGraph RagState contract
-    ingest.py                 # LangChain Document loading, splitting and ingest CLI
-    store.py                  # LangChain RedisVectorStore/retriever factory
-    model.py                  # retrieval and ingestion Pydantic contracts
+    graph.py                    # retrieve -> context subgraph
+    state.py                    # LangGraph RagState contract
+    model.py                    # retrieval/ingestion Pydantic contracts
+    retriever.py                # vector-store retriever with per-call category filter
+    store.py                    # query:/passage: prefixing for the embedding model
+    tool.py                     # search_policies tool wrapping the RAG subgraph
+    ingest.py                   # load, chunk, validate and upsert the corpus into Redis
+    chunker.py                  # header-aware, table-preserving Markdown chunker
+    docx_loader.py              # LangChain loader for the .docx corpus
+    docx_converter.py           # .docx -> Markdown conversion
+    rule_metadata.py            # attaches section_id/rule_ids/categories, validates rules.yaml anchors
+    build_info.py               # corpus build info used to decide whether ingestion can be skipped
+    index_schema.py             # Redis index field/vector-dimension schema
+    errors.py                   # corpus conversion/chunking/cross-check exceptions
+    tests/                      # co-located unit tests for this package
+  rules/
+    loader.py                   # rules.yaml loading and validation
+    model.py                    # rule-catalogue Pydantic contracts
+    tests/                      # co-located unit tests for this package
 eval/
-  dataset.json                # 20 functional test cases; source of truth
-  run_eval.py                 # sync dataset + run Langfuse experiment + local reports
-rules.yaml                    # small language-independent deterministic rule catalogue
+  dataset.json               # 20 functional test cases; source of truth
+  model.py                   # EvalCase/EvalDataset contracts and validation errors
+  metrics.py                 # per-case/aggregate evaluation metrics
+  report.py                  # Markdown/JSON local report generation
+  langfuse_sync.py           # syncs dataset.json to the Langfuse dataset
+  run_eval.py                # sync dataset + run Langfuse experiment + local reports
+  tests/                     # co-located unit tests for this package
+tests/
+  fakes.py                   # shared test doubles (ScriptedChatModel, tool/document builders)
+  test_dependencies.py       # app/dependencies.py DI container
+  api/                       # full-HTTP-stack tests exercised through app.main
+  journeys/                  # cross-module compiled-graph and rule/document-consistency integration tests
+rules.yaml                # small language-independent deterministic rule catalogue
 Dockerfile
 docker-compose.yml
 entrypoint.sh
+pyproject.toml             # project metadata, dependencies, Ruff/Bandit/pytest/coverage configuration
+uv.lock                    # pinned, reproducible dependency lock file (committed)
+sonar-project.properties   # Sonar source, test and coverage paths
+README.md
 ```
+
+Unit tests are co-located with the package they cover, under a `tests/` subfolder inside that
+package (`app/agent/tests/test_calculator.py` covers `app/agent/calculator.py`; the top-level
+`eval/` package gets `eval/tests/` the same way). A test's location names the module it exercises
+without a separate mirrored tree to keep in sync. Two kinds of tests don't belong to a single
+package and stay under the root `tests/`: `tests/journeys/` holds full compiled-graph journeys and
+rule/document-consistency checks that exercise `agent`, `rag` and `rules` together, and `tests/api/`
+holds tests that exercise the HTTP surface end-to-end through `app.main` rather than importing
+`app.api.routes.*` directly. `tests/fakes.py` holds test doubles shared across all of these
+locations, imported everywhere as `from tests.fakes import ...` — which is also why the root
+`tests/` package and every package-local `tests/` subfolder carry an `__init__.py`. `pytest`
+discovers all of them via `testpaths = ["tests", "app", "eval"]`; coverage and Sonar configuration
+explicitly excise the co-located `tests/` subfolders from source-code accounting so they are
+measured as tests, not counted as application code.
 
 Dependency management uses `uv` directly: runtime dependencies live in `[project.dependencies]` and
 development/quality-tool dependencies in `[dependency-groups.dev]`, both inside `pyproject.toml`;
@@ -1126,13 +1167,17 @@ record:
   age-based retention helper — the stdlib's own count-based retention already gives ~7 days for a
   service that rotates daily, without extra code to maintain.
 
-Every record includes UTC timestamp, level, service, logger, event, `request_id` and, when available,
-`thread_id` and exception metadata. The request middleware binds correlation fields with
-`contextvars`, and the logging configuration also captures Uvicorn/FastAPI and Streamlit loggers so
-framework errors follow the same format. Prompts, answers, retrieved chunk text, tool artifacts and
-credentials are never logged; those payloads would turn an operational log into an ungoverned copy
-of conversation data. One Uvicorn worker and separate `api.jsonl` / `ui.jsonl` files avoid concurrent
-rotation of the same file.
+Every record includes UTC timestamp, level, service, logger and event. Prompts, answers, retrieved
+chunk text, tool artifacts and credentials are never logged; those payloads would turn an
+operational log into an ungoverned copy of conversation data. One Uvicorn worker and separate
+`api.jsonl` / `ui.jsonl` files avoid concurrent rotation of the same file.
+
+> **Known gap (descoped from task 10):** `request_id`/`thread_id` correlation via context variables,
+> and capturing Uvicorn/FastAPI/Streamlit framework loggers into the same structured format, are
+> **not implemented**. `app/logging/config.py` only emits the fields listed above; there is no
+> request-scoped contextvar binding and framework loggers are not redirected through the JSON
+> formatter. This was cut from task 10's acceptance criteria as out of scope for the PoC rather than
+> tracked as a bug — revisit if cross-request debugging in Langfuse-disabled runs becomes painful.
 
 The seven-day policy applies to the application-owned files, kept by rotation count rather than a
 separate age-based sweep. Stdout is a delivery stream rather than the retention store; Compose uses Docker's
@@ -1573,6 +1618,7 @@ rather than oversights, and so a reviewer can see that the line was drawn on pur
 | **Horizontal scale / rate limiting** | One `uvicorn` process, one Ollama, no queue, no per-client limits. State is already in Redis, so more API workers is a compose change; the LLM is the actual constraint (§14). |
 | **Prompt-injection hardening** | The corpus is trusted because we wrote it. If policies came from users or the web, the retrieved context would need treating as untrusted input — the current design has no defence there. |
 | **Localised policy corpora** | The PoC indexes one English policy corpus. A production system that requires independently maintained Hungarian source policies would add language-scoped indices and manifests, a corpus selector, per-language evaluation datasets and parity/versioning checks. The current multilingual embedding and chat models already provide best-effort Hungarian interaction over the English corpus without that additional data layer. |
+| **Cross-log request correlation** | Application logs (§11) carry timestamp, level, service, logger and event, but no `request_id`/`thread_id` propagated via context variables, and Uvicorn/FastAPI/Streamlit framework loggers are not captured into the same structured format. Tracing a single turn across `api.jsonl`, `ui.jsonl` and framework output currently means matching on timestamp rather than a shared identifier — Langfuse traces (§11) are the tool for that today. A production version would bind a `contextvars`-scoped request/thread id at the API boundary and route framework loggers through the same JSON formatter. |
 
 None of these change the graph, the tools or the retrieval path; each is an integration or an operational
 concern layered around them. That is the argument for the seams the design does keep: `ExpenseClaim` as
