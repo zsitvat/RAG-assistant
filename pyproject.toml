@@ -69,6 +69,7 @@ omit = [
     "src/app/ui.py",
     "src/app/agent/tests/*",
     "src/app/rag/tests/*",
+    "src/app/rag/ingest/tests/*",
     "src/app/rules/tests/*",
     "src/app/integrations/tests/*",
     "src/app/logging/tests/*",
