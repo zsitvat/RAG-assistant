@@ -45,7 +45,7 @@ their own typed claim fields.
 Already generic since task 5's `_check_required_documents` reads `required_documents` for whichever
 category is on the claim — travel and equipment needed no rule-checker change to get this.
 
-### Category-coverage consistency gate (`src/app/rag/rule_metadata.py::RuleMetadataResolver`)
+### Category-coverage consistency gate (`src/app/rag/ingest/rule_metadata.py::RuleMetadataResolver`)
 
 `validate_categories_reachable(chunks)` — called from
 `CorpusIngestor.load_and_chunk` right after the existing `validate_anchors_resolve` — raises
@@ -66,11 +66,11 @@ No new API surface — this refines the existing `POST /chat` journey (task 4) f
 | `src/app/agent/rule_checker.py` | focused `ApprovalChecker` and `EligibilityChecker` collaborators |
 | `src/app/agent/prompts.py` | `EXTRACT_INFORMATION_SYSTEM` — taxi/parking/fine/minibar/personal expense_type normalization |
 | `src/rules_config/rules.yaml` | `R-TRAVEL-04`, `R-EQUIP-02`, new `01#non-reimbursable-items` section anchor |
-| `src/app/rag/rule_metadata.py` | `validate_categories_reachable` |
-| `src/app/rag/ingest.py` | wires the new validation into `load_and_chunk` |
+| `src/app/rag/ingest/rule_metadata.py` | `validate_categories_reachable` |
+| `src/app/rag/ingest/pipeline.py` | wires the new validation into `load_and_chunk` |
 | `src/app/agent/tests/test_calculator.py` | accommodation international, meal per-diem domestic/international, parking |
 | `src/app/agent/tests/test_rule_checker.py` | approval boundary tests, travel approval (domestic/international), prohibited expense types |
 | `src/app/agent/tests/test_slots.py` | travel/equipment required-slot coverage |
-| `src/app/rag/tests/test_ingest.py` | `validate_categories_reachable` pass/fail cases |
+| `src/app/rag/ingest/tests/test_ingest.py` | `validate_categories_reachable` pass/fail cases |
 | `tests/journeys/test_travel_and_equipment_journeys.py` | graph journeys plus a full domestic-accommodation request through `POST /chat` |
 | `tests/journeys/test_travel_equipment_rule_document_consistency.py` | every travel/equipment rule's `doc_ref` resolves, and its numeric values/excluded items appear verbatim in the referenced policy document |

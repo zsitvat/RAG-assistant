@@ -125,13 +125,13 @@ TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest src/app/integrations/tests
 | `src/rules_config/rules.yaml` | deterministic rule catalogue, hand-authored from the real corpus |
 | `src/app/rules/model.py` | `RuleCatalogue` typed models + cross-reference validation |
 | `src/app/rules/loader.py` | `load_rule_catalogue()`, cached `get_rule_catalogue()` |
-| `src/app/rag/errors.py` | `IngestionError` |
-| `src/app/rag/docx_converter.py` | `DocxToMarkdownConverter` |
-| `src/app/rag/docx_loader.py` | `DocxMarkdownLoader` (LangChain `BaseLoader`) |
-| `src/app/rag/chunker.py` | `MarkdownChunker` |
-| `src/app/rag/rule_metadata.py` | `RuleMetadataResolver` |
-| `src/app/rag/build_info.py` | `IndexBuildInfoBuilder` |
-| `src/app/rag/ingest.py` | `CorpusIngestor`, `connect_and_ingest`, CLI entry point |
+| `src/app/rag/ingest/errors.py` | `IngestionError` |
+| `src/app/rag/ingest/docx_converter.py` | `DocxToMarkdownConverter` |
+| `src/app/rag/ingest/docx_loader.py` | `DocxMarkdownLoader` (LangChain `BaseLoader`) |
+| `src/app/rag/ingest/chunker.py` | `MarkdownChunker` |
+| `src/app/rag/ingest/rule_metadata.py` | `RuleMetadataResolver` |
+| `src/app/rag/ingest/build_info.py` | `IndexBuildInfoBuilder` |
+| `src/app/rag/ingest/pipeline.py` | `CorpusIngestor`, `connect_and_ingest`, CLI entry point |
 | `src/app/rag/index_schema.py` | Redis index name, key prefix, vector/schema constants |
 | `src/app/rag/store.py` | `E5Embeddings`, `RedisVectorStore` factory |
 | `src/app/integrations/redis.py` | `RedisIndex` — connection, build-info read/write, index stats |
@@ -140,7 +140,7 @@ TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest src/app/integrations/tests
 | `src/app/api/routes/health.py` | `/health`, `/ready` routes (thin, delegates to `ReadinessChecker`) |
 | `src/app/integrations/readiness.py` | `ReadinessChecker` — Redis + LLM readiness checks |
 | `src/app/ui.py` | sidebar index stats |
-| `src/app/rules/tests/test_rules.py`, `src/app/rag/tests/test_ingest.py`, `src/app/rag/tests/test_run_ingest.py`, `src/app/tests/api/test_admin.py`, `src/app/integrations/tests/test_health_readiness.py` | unit tests (no Redis required) |
+| `src/app/rules/tests/test_rules.py`, `src/app/rag/ingest/tests/test_ingest.py`, `src/app/rag/ingest/tests/test_run_ingest.py`, `src/app/tests/api/test_admin.py`, `src/app/integrations/tests/test_health_readiness.py` | unit tests (no Redis required) |
 | `src/app/integrations/tests/test_redis_integration.py` | integration tests against a real Redis 8 instance |
 
 ## Deliberate deviations from the technical design

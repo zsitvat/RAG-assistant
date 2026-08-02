@@ -175,15 +175,17 @@ src/
       retriever.py                # vector-store retriever with per-call category filter
       store.py                    # query:/passage: prefixing for the embedding model
       tool.py                     # search_policies tool wrapping the RAG subgraph
-      ingest.py                   # load, chunk, validate and upsert the corpus into Redis
-      chunker.py                  # header-aware, table-preserving Markdown chunker
-      docx_loader.py              # LangChain loader for the .docx corpus
-      docx_converter.py           # .docx -> Markdown conversion
-      rule_metadata.py            # attaches section_id/rule_ids/categories, validates rules.yaml anchors
-      build_info.py               # corpus build info used to decide whether ingestion can be skipped
       index_schema.py             # Redis index field/vector-dimension schema
-      errors.py                   # corpus conversion/chunking/cross-check exceptions
       tests/                      # co-located unit tests for this package
+      ingest/                     # corpus/rule-catalogue ingestion, not the retrieval path
+        pipeline.py                 # load, chunk, validate and upsert the corpus into Redis
+        chunker.py                  # header-aware, table-preserving Markdown chunker
+        docx_loader.py              # LangChain loader for the .docx corpus
+        docx_converter.py           # .docx -> Markdown conversion
+        rule_metadata.py            # attaches section_id/rule_ids/categories, validates rules.yaml anchors
+        build_info.py               # corpus build info used to decide whether ingestion can be skipped
+        errors.py                   # corpus conversion/chunking/cross-check exceptions
+        tests/                      # co-located unit tests for this package
     rules/
       loader.py                   # rules.yaml loading and validation
       model.py                    # rule-catalogue Pydantic contracts
@@ -326,8 +328,8 @@ paragraphs — after that a `MarkdownHeaderTextSplitter` has nothing to split on
 fixed-size chunks, which destroys the "one chunk = one rule section" property the citations and the
 `rule_ids` metadata depend on.
 
-So `src/app/rag/ingest.py` uses a small `python-docx` normaliser behind LangChain's `BaseLoader`
-interface.
+So `src/app/rag/ingest/docx_loader.py` uses a small `python-docx` normaliser behind LangChain's
+`BaseLoader` interface.
 It emits LangChain `Document` objects whose `page_content` is Markdown and whose `metadata` contains
 the source identity. This adapter exists only because the generic Word loaders discard the heading
 information required by this corpus; all subsequent document processing uses LangChain:
@@ -1099,10 +1101,12 @@ the remaining internal diagnostics stay out of the chat response without
 making the eval parse values back out of answer prose. Agent traces and per-node timings are not part
 of either response; Langfuse is their single source of truth (§11).
 
-Everything is async: `async def` endpoints, `redis.asyncio`, `graph.ainvoke` / `graph.astream`, so a
-slow LLM call parks on the event loop instead of blocking a worker. The tools stay synchronous (pure
-functions, microseconds). Deployment is a single `uvicorn` process — LangGraph state lives in Redis,
-so scaling to several workers needs no code change, but is not part of the prototype.
+Everything is async: `async def` endpoints, `graph.ainvoke` / `graph.astream`, so a slow LLM call
+parks on the event loop instead of blocking a worker. `calculate` and `check_rules` stay synchronous
+(pure functions, microseconds); `search_policies` is the exception — it awaits the async RAG subgraph
+since it performs a real Redis vector search, not a microsecond-scale computation. Deployment is a
+single `uvicorn` process — LangGraph state lives in Redis, so scaling to several workers needs no
+code change, but is not part of the prototype.
 
 **What exactly streams.** `/chat/stream` consumes graph message and update events and maps them to
 four SSE event types:
@@ -1682,7 +1686,7 @@ rather than oversights, and so a reviewer can see that the line was drawn on pur
 | **Audit trail** | Langfuse traces and the seven-day operational logs are for debugging, not audit: they have no tamper resistance or per-user attribution, and Langfuse lives in a third-party service. |
 | **Personal data handling and content safety** | Conversations sit in Redis with a 24 h TTL and no encryption, redaction or export/delete flow. Fine for fictional policies and made-up amounts; not fine for real employee data. A production system should add a PII detection and redaction layer before prompts, persistence and observability, with controlled re-identification only where the business flow requires it. A self-hosted deployment could use Microsoft Presidio; an Azure deployment could use Azure-native PII detection together with Azure AI Content Safety or the selected model endpoint's content filters. The same policy should inspect uploaded documents, user input and generated output, with blocked/redacted events recorded in an audit trail without storing the sensitive value itself. |
 | **Horizontal scale / rate limiting** | One `uvicorn` process, one Ollama, no queue, no per-client limits. State is already in Redis, so more API workers is a compose change; the LLM is the actual constraint (§14). |
-| **Ingestion runs inside the API process** | `CorpusIngestor`/`connect_and_ingest` (`src/app/rag/ingest.py`) run inline: once at startup via the FastAPI lifespan, and again on demand through `POST /admin/ingest` on the same process serving `/chat`. A production system would more likely run ingestion as its own pipeline or service — triggered by a content change or a schedule, with its own retries and monitoring — so a slow embedding run or a bad corpus change cannot block or crash the request-serving API, for the same reason the load test (§14) was pulled out into a standalone script rather than an in-process endpoint. |
+| **Ingestion runs inside the API process** | `CorpusIngestor`/`connect_and_ingest` (`src/app/rag/ingest/pipeline.py`) run inline: once at startup via the FastAPI lifespan, and again on demand through `POST /admin/ingest` on the same process serving `/chat`. A production system would more likely run ingestion as its own pipeline or service — triggered by a content change or a schedule, with its own retries and monitoring — so a slow embedding run or a bad corpus change cannot block or crash the request-serving API, for the same reason the load test (§14) was pulled out into a standalone script rather than an in-process endpoint. |
 | **Prompt-injection hardening** | The corpus is trusted because we wrote it. If policies came from users or the web, the retrieved context would need treating as untrusted input — the current design has no defence there. |
 | **Localised policy corpora** | The PoC indexes one English policy corpus. A production system that requires independently maintained Hungarian source policies would add language-scoped indices and manifests, a corpus selector, per-language evaluation datasets and parity/versioning checks. The current multilingual embedding and chat models already provide best-effort Hungarian interaction over the English corpus without that additional data layer. |
 
