@@ -67,7 +67,7 @@ in `nodes.py` and `tools.py` goes through it. This only reproduces against real 
 
 ### Refusing to disambiguate a distance (`src/app/agent/nodes.py`)
 
-`CurrentRequest.was_already_asked(question)` looks for the same fixed clarification string earlier in
+`MessageHistory.was_already_asked(question)` looks for the same fixed clarification string earlier in
 the thread. When `ask_clarification` is about to repeat itself and `distance_is_one_way` is the only
 remaining gap, `_conditional_distance_answer` calls
 `ReimbursementCalculator.calculate_both_directions()` and answers with both readings
@@ -81,7 +81,7 @@ can still resolve it, but the turn ends with a useful amount either way.
 | `src/app/agent/calculator.py` | commuting mode dispatch, pass/ticket/vehicle formulas, `calculate_both_directions` |
 | `src/app/agent/slots.py` | mode-aware commuting slot resolution |
 | `src/app/agent/model.py` | `ExpenseClaim.from_state` checkpoint coercion |
-| `src/app/agent/current_request.py` | `was_already_asked` |
+| `src/app/agent/message_history.py` | `was_already_asked` |
 | `src/app/agent/nodes.py` | conditional-outcome path, claim coercion at every state read |
 | `src/app/agent/rule_checker.py` | minimum distance reported `not_applicable` for pass/ticket claims |
 | `src/app/integrations/checkpointer.py` | `RedisSaver` with the 24 h TTL and `checkpoint:*` namespace |

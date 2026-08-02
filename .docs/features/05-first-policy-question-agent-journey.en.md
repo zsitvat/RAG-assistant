@@ -58,9 +58,9 @@ running a small chat model: a larger, more capable model could likely be trusted
 reliably on its own, without the risk of inconsistent or unclear wording that motivates fixing them
 here today.
 
-### The autonomous loop and its guardrails (`src/app/agent/current_request.py`, `src/app/agent/nodes.py`)
+### The autonomous loop and its guardrails (`src/app/agent/message_history.py`, `src/app/agent/nodes.py`)
 
-`CurrentRequest` slices `messages` to the suffix starting at the latest `HumanMessage` and derives
+`MessageHistory` slices `messages` to the suffix starting at the latest `HumanMessage` and derives
 every loop guardrail from that slice alone:
 
 - **Step budget** — `agent_step` refuses to call the model once `agent_step_count() >=
@@ -90,14 +90,14 @@ backend has no tool-calling support) by falling back to the plain model — so d
 completes every turn, just without ever calling a tool.
 
 **Model input is filtered, not just guardrail counting.** `classify_intent`, `extract_information`,
-`agent_step` and `generate_response` all send the model `CurrentRequest.model_context()` rather than
+`agent_step` and `generate_response` all send the model `MessageHistory.model_context()` rather than
 the raw `state["messages"]`. For every completed previous request it keeps only that request's
 `HumanMessage` and final (non-tool-calling) `AIMessage`, dropping the `ToolMessage`s and intermediate
 tool-calling `AIMessage`s it produced; the current request (from the latest `HumanMessage` onward) is
 kept in full, since the active tool loop needs every message in it. This keeps enough conversational
 context to resolve references to earlier turns without letting the model treat a previous request's
 tool evidence as current, and without the prompt growing with old tool payloads forever.
-`CurrentRequest.messages()` (unfiltered current-request slice) remains the input for guardrails,
+`MessageHistory.messages()` (unfiltered current-request slice) remains the input for guardrails,
 duplicate-call detection, source collection and decision derivation — only the model-facing calls use
 `model_context()`.
 
@@ -172,7 +172,7 @@ curl -X POST http://127.0.0.1:8000/chat \
 | --- | --- |
 | `src/app/agent/model.py` | `Intent`, `Decision`, `ExpenseClaim`, `CalculationResult`, `IntentClassification` |
 | `src/app/agent/state.py` | `AgentState`, loop-budget constants |
-| `src/app/agent/current_request.py` | `CurrentRequest` — latest-request messages, guardrail derivations, and `model_context()` for filtered model input |
+| `src/app/agent/message_history.py` | `MessageHistory` — latest-request messages, guardrail derivations, and `model_context()` for filtered model input |
 | `src/app/agent/slots.py` | `RequiredSlotTable` |
 | `src/app/agent/structured.py` | `StructuredOutputRunner` |
 | `src/app/agent/prompts.py` | the four embedded prompt templates |
@@ -190,7 +190,7 @@ curl -X POST http://127.0.0.1:8000/chat \
 | `tests/fakes.py` | `ScriptedChatModel` — test double supporting `bind_tools`/`with_structured_output` |
 | `src/app/agent/tests/test_graph.py` | full-graph journeys: happy path, unsupported, clarification, loop budget, duplicate reuse, tool-error disabling, no-artifact refusal, LLM-unavailable |
 | `src/app/agent/tests/test_calculator.py`, `src/app/agent/tests/test_rule_checker.py`, `src/app/agent/tests/test_deadline.py` | per-category arithmetic and rule-check unit tests |
-| `src/app/agent/tests/test_slots.py`, `src/app/agent/tests/test_current_request.py`, `src/app/agent/tests/test_nodes_model_context.py`, `src/app/agent/tests/test_structured.py`, `src/app/agent/tests/test_tools.py`, `src/app/agent/tests/test_service.py` | focused unit tests for each supporting module |
+| `src/app/agent/tests/test_slots.py`, `src/app/agent/tests/test_message_history.py`, `src/app/agent/tests/test_nodes_model_context.py`, `src/app/agent/tests/test_structured.py`, `src/app/agent/tests/test_tools.py`, `src/app/agent/tests/test_service.py` | focused unit tests for each supporting module |
 
 ## Deliberate deviations from the technical design
 

@@ -136,16 +136,16 @@ class AgentNodes:
 
     def agent_step(self, state: AgentState) -> AgentState:
         """Invokes the tool-calling model for one reasoning step, reusing duplicate calls."""
-        request = MessageHistory(state["messages"])
-        if request.agent_step_count() >= MAX_AGENT_STEPS:
+        history = MessageHistory(state["messages"])
+        if history.agent_step_count() >= MAX_AGENT_STEPS:
             return {"messages": [AIMessage(content="")]}
 
         available_tools = [
-            t for t in self._tools if request.tool_error_count(t.name) < MAX_TOOL_ARG_ERRORS
+            t for t in self._tools if history.tool_error_count(t.name) < MAX_TOOL_ARG_ERRORS
         ]
         model = self._bind_tools(available_tools)
         response = self._invoke_with_retry(
-            self._prompt("agent_step") | model, request.model_context()
+            self._prompt("agent_step") | model, history.model_context()
         )
         if response is None:
             return {"messages": [AIMessage(content=LLM_UNAVAILABLE_MESSAGE)]}
@@ -154,7 +154,7 @@ class AgentNodes:
             return {"messages": [response]}
 
         call = response.tool_calls[0]
-        duplicate = request.find_duplicate_call(call["name"], call["args"])
+        duplicate = history.find_duplicate_call(call["name"], call["args"])
         if duplicate is None:
             return {"messages": [response]}
 
@@ -203,8 +203,8 @@ class AgentNodes:
         if isinstance(last_message, AIMessage) and last_message.content == LLM_UNAVAILABLE_MESSAGE:
             return {"decision": None, "degraded": True}
 
-        request = MessageHistory(state["messages"])
-        request_messages = request.messages()
+        history = MessageHistory(state["messages"])
+        request_messages = history.messages()
         tool_messages = [m for m in request_messages if isinstance(m, ToolMessage)]
 
         if not tool_messages:
@@ -216,7 +216,7 @@ class AgentNodes:
 
         decision = self._derive_decision(tool_messages)
         answer = self._invoke_with_retry(
-            self._prompt("generate_response") | self._response_model, request.model_context()
+            self._prompt("generate_response") | self._response_model, history.model_context()
         )
         if answer is None:
             return {
@@ -225,7 +225,7 @@ class AgentNodes:
                 "degraded": True,
             }
 
-        if request.agent_step_count() >= MAX_AGENT_STEPS:
+        if history.agent_step_count() >= MAX_AGENT_STEPS:
             answer = answer.model_copy(
                 update={"content": answer.content + INCOMPLETE_EVIDENCE_NOTE}
             )

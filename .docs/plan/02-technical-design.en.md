@@ -145,7 +145,7 @@ src/
       state.py                   # LangGraph AgentState contract
       model.py                   # expense-claim Pydantic domain contracts
       static_texts.py             # fixed non-LLM-generated user-facing strings
-      current_request.py         # messages/tool-call facts scoped to the latest request
+      message_history.py         # messages/tool-call facts scoped to the latest request
       calculator.py              # deterministic reimbursement-calculation module
       deadline.py                # submission-deadline check
       rule_checker.py            # receipt/supporting-document rule checks
@@ -619,16 +619,16 @@ facts (`is_international_trip`, `is_business_related`) instead of being encoded 
 This keeps retrieval filtering aligned with category metadata without coupling deterministic rules
 to prompt-specific naming conventions.
 
-**A request starts at the latest `HumanMessage`.** `CurrentRequest.messages()` returns that suffix and is
+**A request starts at the latest `HumanMessage`.** `MessageHistory.messages()` returns that suffix and is
 the only input used for loop counts, duplicate-call detection, tool-artifact projection and final
 decision derivation. The classifier, extractor, agent-step and answer prompts do not see the raw
-transcript either: `CurrentRequest.model_context()` condenses every completed previous request down
+transcript either: `MessageHistory.model_context()` condenses every completed previous request down
 to its `HumanMessage` and final (non-tool-calling) `AIMessage`, dropping that request's own
 `ToolMessage`s and intermediate tool-calling `AIMessage`s, while keeping the current request's
 messages in full. This keeps enough conversational context for continuity (what was asked, what was
 answered) without letting a model reuse a previous request's tool evidence as if it were current, and
 without the context growing unbounded with old tool payloads. Operational decisions cannot
-accidentally inspect a previous request's tools either way, since they read `CurrentRequest.messages()`
+accidentally inspect a previous request's tools either way, since they read `MessageHistory.messages()`
 (current request only), not `model_context()`.
 
 **Slot merging across turns is only for clarification.** The classifier writes the new result to
@@ -729,7 +729,7 @@ Guardrails, all deterministic and outside the LLM:
 | --- | --- |
 | Step budget | tool-calling AI messages ≥ `MAX_AGENT_STEPS` (4) → the loop exits to `generate_response` with whatever it has, and the answer states when evidence is incomplete |
 | Invalid arguments | pydantic validation error is returned to the agent as the `ToolMessage`, so it can correct itself; the same tool may fail this way at most twice, then it is disabled for the turn |
-| Repeated identical call | same tool with the same arguments → reuse the matching `ToolMessage` artifact in `CurrentRequest.messages()` and record a warning, instead of executing it again |
+| Repeated identical call | same tool with the same arguments → reuse the matching `ToolMessage` artifact in `MessageHistory.messages()` and record a warning, instead of executing it again |
 | `calculate` with an incomplete claim | normally prevented by required-slot routing after extraction; the calculator still validates its category-specific requirements and returns a typed tool error rather than guessing |
 | `unsupported` intent | never reaches the loop — the conditional edge after extraction routes it to `out_of_scope` |
 
@@ -754,7 +754,7 @@ def route_after_agent(s):               # -> "execute_tools" | "generate_respons
 executor; no tool call goes to response generation. There is no plan or cursor to keep, which is why
 the slimmed state (§5) needs no `route` key.
 
-Loop safety is counted off `CurrentRequest.messages()`, not the whole transcript or a counter key:
+Loop safety is counted off `MessageHistory.messages()`, not the whole transcript or a counter key:
 agent steps are current-turn AI messages with tool calls (max `MAX_AGENT_STEPS`), with graph
 `recursion_limit=20` as the hard backstop. When the budget is exhausted, control moves to
 `generate_response` rather than looping.
@@ -1459,7 +1459,7 @@ parameter threaded through `EvaluationRunner`, which is future work rather than 
   chunk. This is what prevents a "cited but wrong number" answer and an unreachable document.
 - **Turn isolation**: a clarification answer merges into its pending claim, while a new expense in
   the same thread replaces the old claim; loop budgets, duplicate-call detection, projected
-  artifacts and decisions only inspect `CurrentRequest.messages()`.
+  artifacts and decisions only inspect `MessageHistory.messages()`.
 - **API contract**: schema snapshots of `ChatResponse`, `EvaluationResponse` and the OpenAPI
   document, plus an SSE test asserting deduplicated `step`/`source` events, answer-only token
   streaming and a final `result` containing the same accumulated steps and sources.
