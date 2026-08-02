@@ -18,7 +18,7 @@ from app.integrations.langfuse import Observability
 from app.integrations.llm import build_chat_model
 from app.integrations.redis import RedisIndex
 from app.rag.graph import build_rag_graph
-from app.rag.ingest import connect_and_ingest
+from app.rag.ingest.pipeline import connect_and_ingest
 from app.rag.retriever import Retriever
 from app.rules.loader import get_rule_catalogue as load_rule_catalogue
 from app.rules.model import RuleCatalogue

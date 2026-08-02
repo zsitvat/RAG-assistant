@@ -1,7 +1,7 @@
 import hashlib
 from pathlib import Path
 
-from app.rag.chunker import CHUNK_OVERLAP, CHUNK_SIZE, SHORT_SECTION_MERGE_THRESHOLD
+from app.rag.ingest.chunker import CHUNK_OVERLAP, CHUNK_SIZE, SHORT_SECTION_MERGE_THRESHOLD
 from app.rag.model import IndexBuildInfo
 
 

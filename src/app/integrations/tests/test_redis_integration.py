@@ -6,7 +6,7 @@ import redis as redis_lib
 from app.integrations.redis import RedisIndex
 from app.rag.graph import build_rag_graph
 from app.rag.index_schema import MIN_CONFIDENCE_THRESHOLD, VECTOR_DIMENSION
-from app.rag.ingest import CorpusIngestor
+from app.rag.ingest.pipeline import CorpusIngestor
 from app.rag.retriever import Retriever
 from app.rag.store import build_embeddings, build_vector_store
 from app.rules.loader import load_rule_catalogue
@@ -128,13 +128,13 @@ def test_get_index_stats_reports_total_chunks_and_category_counts(redis_index, v
 
 
 @pytest.mark.parametrize("category,question", list(CATEGORY_QUESTIONS.items()))
-def test_rag_graph_returns_grounded_evidence_for_each_category(
+async def test_rag_graph_returns_grounded_evidence_for_each_category(
     redis_index, vector_store, category, question
 ):
     CorpusIngestor().run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
     graph = build_rag_graph(Retriever(vector_store))
 
-    result = graph.invoke({"question": question, "category": category})["result"]
+    result = (await graph.ainvoke({"question": question, "category": category}))["result"]
 
     assert len(result.results) > 0
     assert result.confidence >= MIN_CONFIDENCE_THRESHOLD
@@ -142,12 +142,14 @@ def test_rag_graph_returns_grounded_evidence_for_each_category(
     assert result.context.startswith("[S1]")
 
 
-def test_rag_graph_flags_low_confidence_for_an_irrelevant_question(redis_index, vector_store):
+async def test_rag_graph_flags_low_confidence_for_an_irrelevant_question(redis_index, vector_store):
     CorpusIngestor().run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
     graph = build_rag_graph(Retriever(vector_store))
 
-    result = graph.invoke({"question": "what is the weather like on mars today", "category": None})[
-        "result"
-    ]
+    result = (
+        await graph.ainvoke(
+            {"question": "what is the weather like on mars today", "category": None}
+        )
+    )["result"]
 
     assert result.confidence < MIN_CONFIDENCE_THRESHOLD

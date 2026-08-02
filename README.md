@@ -63,8 +63,8 @@ guesses.**
   pinned or current reference date.
 - **Unsupported / out-of-scope** — tax/legal advice or unrelated requests get an explicit
   out-of-scope response with a disclaimer, never a fabricated policy answer.
-- **Streamed steps and sources** — the Streamlit UI shows step-by-step progress (`Request understood`
-  → `Information extracted` → `Policies searched` → `Rules checked` → `Answer prepared`) and the cited
+- **Streamed steps and sources** — the Streamlit UI shows step-by-step progress (`Intent classified`
+  → `Details extracted` → `Policies searched` → `Rules checked` → `Answer generated`) and the cited
   sources live, then collapses them under the answer once the turn completes.
 
 ## 3. Architecture
@@ -329,6 +329,7 @@ PoC stays uncached deliberately, so its behaviour and latency remain easy to exp
 | Audit trail | Langfuse traces and 7-day operational logs are for debugging, not audit — no tamper resistance or per-user attribution. |
 | Personal-data handling & content safety | Conversations sit in Redis with a 24h TTL, no encryption/redaction/export-delete flow. See §11 below. |
 | Horizontal scale / rate limiting | One `uvicorn` process, one Ollama, no queue, no per-client limits — state is already in Redis so more API workers is a compose change; the LLM is the actual constraint. |
+| Ingestion runs inside the API process | Corpus/rule-catalogue ingestion (`src/app/rag/ingest.py`) runs inline: once at startup, and again on demand through `POST /admin/ingest` on the same process serving `/chat`. A production system would more likely run it as its own pipeline or service, triggered by a content change or a schedule, so a slow embedding run or a bad corpus change can't block or crash the request-serving API — the same reason the load test (§9) is a standalone script rather than an in-process endpoint. |
 | Prompt-injection hardening | The corpus is trusted because we wrote it; retrieved context isn't treated as untrusted input. |
 | Localised (non-English) policy corpora | One English corpus; Hungarian conversation is a model capability, not a second indexed language. |
 

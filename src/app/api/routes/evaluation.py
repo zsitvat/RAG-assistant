@@ -1,7 +1,6 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from starlette.concurrency import run_in_threadpool
 
 from app.agent.service import AgentService
 from app.api.schemas import EvaluationRequest, EvaluationResponse
@@ -16,8 +15,7 @@ async def evaluate(
     agent_service: Annotated[AgentService, Depends(get_agent_service)],
 ) -> EvaluationResponse:
     """Runs one evaluation turn and returns the internal typed outputs the eval harness needs."""
-    return await run_in_threadpool(
-        agent_service.evaluate,
+    return await agent_service.evaluate(
         request.thread_id,
         request.message,
         request.reference_date,

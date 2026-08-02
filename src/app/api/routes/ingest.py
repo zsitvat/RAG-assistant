@@ -6,7 +6,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.dependencies import get_redis_index, get_rule_catalogue, get_vector_store
 from app.integrations.redis import RedisIndex
-from app.rag.ingest import CorpusIngestor
+from app.rag.ingest.pipeline import CorpusIngestor
 from app.rag.model import IngestResult
 from app.rules.model import RuleCatalogue
 

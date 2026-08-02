@@ -4,7 +4,6 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from starlette.concurrency import run_in_threadpool
 
 from app.agent.service import AgentService
 from app.api.schemas import ChatRequest, ChatResponse, ThreadResetResponse
@@ -19,7 +18,7 @@ async def chat(
     agent_service: Annotated[AgentService, Depends(get_agent_service)],
 ) -> ChatResponse:
     """Runs a chat message through the agent and returns the resulting reply."""
-    return await run_in_threadpool(agent_service.invoke_graph, request.thread_id, request.message)
+    return await agent_service.ainvoke_graph(request.thread_id, request.message)
 
 
 @router.post("/chat/stream")
@@ -31,7 +30,7 @@ async def chat_stream(
 
     async def events() -> AsyncIterator[str]:
         """Renders each public stream event in the server-sent events wire format."""
-        async for event in agent_service.stream(request.thread_id, request.message):
+        async for event in agent_service.astream(request.thread_id, request.message):
             yield event.to_sse()
 
     return StreamingResponse(events(), media_type="text/event-stream")

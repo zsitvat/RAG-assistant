@@ -4,7 +4,7 @@ from pathlib import Path
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
 
-from app.rag.docx_converter import DocxToMarkdownConverter
+from app.rag.ingest.docx_converter import DocxToMarkdownConverter
 
 CORPUS_DIR = Path(".docs/sources/en")
 

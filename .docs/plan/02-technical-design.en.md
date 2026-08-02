@@ -140,7 +140,7 @@ src/
         evaluation.py              # internal single-turn evaluation endpoint used by llm_eval/run_eval.py
     agent/
       service.py                 # invoke, stream and reset use cases exposed to the API
-      projection.py               # graph state -> ChatResponse/EvaluationResponse
+      responses.py                # graph state -> ChatResponse/EvaluationResponse
       streaming.py                # graph node updates -> public SSE step/source/token events
       graph.py                   # node/routing assembly and compilation
       nodes.py                   # node callbacks, including classify_intent
@@ -1109,7 +1109,7 @@ four SSE event types:
 
 | Graph event | SSE event | Content |
 | --- | --- | --- |
-| node update | `step` | one deduplicated public label after a meaningful stage completes, such as `Request understood`, `Information extracted`, `Policies searched`, `Rules checked`, `Answer prepared` |
+| node update | `step` | one deduplicated public label after a meaningful stage completes, such as `Intent classified`, `Details extracted`, `Policies searched`, `Rules checked`, `Answer generated` |
 | `search_policies` result | `source` | one deduplicated `ChatSource` for each retrieval hit placed in the answer context |
 | generated message chunk | `token` | answer tokens, filtered to `generate_response` by LangGraph metadata |
 | graph completion | `result` | one final event containing the complete `ChatResponse`, including decision, sources and steps |
@@ -1682,6 +1682,7 @@ rather than oversights, and so a reviewer can see that the line was drawn on pur
 | **Audit trail** | Langfuse traces and the seven-day operational logs are for debugging, not audit: they have no tamper resistance or per-user attribution, and Langfuse lives in a third-party service. |
 | **Personal data handling and content safety** | Conversations sit in Redis with a 24 h TTL and no encryption, redaction or export/delete flow. Fine for fictional policies and made-up amounts; not fine for real employee data. A production system should add a PII detection and redaction layer before prompts, persistence and observability, with controlled re-identification only where the business flow requires it. A self-hosted deployment could use Microsoft Presidio; an Azure deployment could use Azure-native PII detection together with Azure AI Content Safety or the selected model endpoint's content filters. The same policy should inspect uploaded documents, user input and generated output, with blocked/redacted events recorded in an audit trail without storing the sensitive value itself. |
 | **Horizontal scale / rate limiting** | One `uvicorn` process, one Ollama, no queue, no per-client limits. State is already in Redis, so more API workers is a compose change; the LLM is the actual constraint (§14). |
+| **Ingestion runs inside the API process** | `CorpusIngestor`/`connect_and_ingest` (`src/app/rag/ingest.py`) run inline: once at startup via the FastAPI lifespan, and again on demand through `POST /admin/ingest` on the same process serving `/chat`. A production system would more likely run ingestion as its own pipeline or service — triggered by a content change or a schedule, with its own retries and monitoring — so a slow embedding run or a bad corpus change cannot block or crash the request-serving API, for the same reason the load test (§14) was pulled out into a standalone script rather than an in-process endpoint. |
 | **Prompt-injection hardening** | The corpus is trusted because we wrote it. If policies came from users or the web, the retrieved context would need treating as untrusted input — the current design has no defence there. |
 | **Localised policy corpora** | The PoC indexes one English policy corpus. A production system that requires independently maintained Hungarian source policies would add language-scoped indices and manifests, a corpus selector, per-language evaluation datasets and parity/versioning checks. The current multilingual embedding and chat models already provide best-effort Hungarian interaction over the English corpus without that additional data layer. |
 

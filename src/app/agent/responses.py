@@ -9,15 +9,42 @@ from app.agent.slots import RequiredSlotTable
 from app.api.schemas import ChatResponse, ChatSource, EvaluationResponse
 from app.rag.model import RagResult
 
+CLASSIFY_INTENT_STEP = "Intent classified"
+EXTRACT_INFORMATION_STEP = "Details extracted"
+GENERATE_RESPONSE_STEP = "Answer generated"
+ASK_CLARIFICATION_STEP = "Clarification asked"
+OUT_OF_SCOPE_STEP = "Marked out of scope"
+ALWAYS_FIRST_STEPS = [CLASSIFY_INTENT_STEP, EXTRACT_INFORMATION_STEP]
+
 STEP_LABELS = {
+    # tool names, keyed by the ToolMessage produced when execute_tools finishes
     "search_policies": "Policies searched",
     "check_rules": "Rules checked",
     "calculate": "Amount calculated",
+    # graph node names, keyed by the node itself for nodes that emit no ToolMessage
+    "classify_intent": CLASSIFY_INTENT_STEP,
+    "extract_information": EXTRACT_INFORMATION_STEP,
+    "generate_response": GENERATE_RESPONSE_STEP,
+    "ask_clarification": ASK_CLARIFICATION_STEP,
+    "out_of_scope": OUT_OF_SCOPE_STEP,
 }
-UNDERSTOOD_STEP = "Request understood"
-EXTRACTED_STEP = "Information extracted"
-FINAL_STEP = "Answer prepared"
-ALWAYS_FIRST_STEPS = [UNDERSTOOD_STEP, EXTRACTED_STEP]
+
+# The decision alone tells us, from message history, which terminal node produced the last
+# AIMessage (extract_information always resets it, so only one terminal node can have set it).
+DECISION_FINAL_STEPS = {
+    "needs_info": ASK_CLARIFICATION_STEP,
+    "out_of_scope": OUT_OF_SCOPE_STEP,
+}
+
+
+def step_label(tool_name: str) -> str:
+    """Returns the curated public label for a tool, or a derived one for an unlisted tool."""
+    return STEP_LABELS.get(tool_name, tool_name.replace("_", " ").capitalize())
+
+
+def _final_step_label(decision: str | None) -> str:
+    """Returns the public label for the terminal node, inferred from the turn's decision."""
+    return DECISION_FINAL_STEPS.get(decision, GENERATE_RESPONSE_STEP)
 
 
 def collect_cited_sources(request_messages: list[BaseMessage]) -> list[ChatSource]:
@@ -44,27 +71,28 @@ def collect_cited_sources(request_messages: list[BaseMessage]) -> list[ChatSourc
     return sources
 
 
-class TurnProjector:
+class ResponseBuilder:
     """Builds the public chat and evaluation contracts from a finished graph turn."""
 
     def __init__(self) -> None:
         """Creates the slot table used to derive missing slots for the evaluation contract."""
         self._slots = RequiredSlotTable()
 
-    def project_chat(self, thread_id: str, state: dict, start: float) -> ChatResponse:
+    def build_chat(self, thread_id: str, state: dict, start: float) -> ChatResponse:
         """Builds the public reply from final graph state, shared by both chat endpoints."""
         request_messages = MessageHistory(state["messages"]).messages()
+        decision = state.get("decision")
         return ChatResponse(
             thread_id=thread_id,
             answer=state["messages"][-1].content,
             generated_at=datetime.now(UTC),
             response_time_ms=round((time.monotonic() - start) * 1000),
-            decision=state.get("decision"),
+            decision=decision,
             sources=collect_cited_sources(request_messages),
-            steps=self._collect_step_labels(request_messages),
+            steps=self._collect_step_labels(request_messages, decision),
         )
 
-    def project_evaluation(self, thread_id: str, state: dict) -> EvaluationResponse:
+    def build_evaluation(self, thread_id: str, state: dict) -> EvaluationResponse:
         """Builds the internal evaluation contract from final graph state."""
         request_messages = MessageHistory(state["messages"]).messages()
         claim = ExpenseClaim.from_state(state.get("claim"))
@@ -87,17 +115,19 @@ class TurnProjector:
         )
 
     @staticmethod
-    def _collect_step_labels(request_messages: list[BaseMessage]) -> list[str]:
+    def _collect_step_labels(
+        request_messages: list[BaseMessage], decision: str | None
+    ) -> list[str]:
         """Collects stable public step labels from the completed request."""
         steps = list(ALWAYS_FIRST_STEPS)
         for message in request_messages:
             if not isinstance(message, ToolMessage):
                 continue
-            label = STEP_LABELS.get(message.name)
-            if label and label not in steps:
+            label = step_label(message.name)
+            if label not in steps:
                 steps.append(label)
         if isinstance(request_messages[-1], AIMessage):
-            steps.append(FINAL_STEP)
+            steps.append(_final_step_label(decision))
         return steps
 
     @staticmethod

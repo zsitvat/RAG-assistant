@@ -53,7 +53,7 @@ def _grounded_model() -> ScriptedChatModel:
 
 
 async def _collect(service: AgentService, thread_id: str, message: str) -> list:
-    return [event async for event in service.stream(thread_id, message)]
+    return [event async for event in service.astream(thread_id, message)]
 
 
 async def test_stream_emits_only_the_documented_event_types_and_ends_with_one_result():
@@ -71,10 +71,10 @@ async def test_step_events_are_allow_listed_and_deduplicated():
 
     assert steps == list(dict.fromkeys(steps))
     assert steps == [
-        "Request understood",
-        "Information extracted",
+        "Intent classified",
+        "Details extracted",
         "Policies searched",
-        "Answer prepared",
+        "Answer generated",
     ]
 
 
@@ -111,7 +111,7 @@ async def test_step_and_source_events_arrive_before_the_final_result():
 async def test_streamed_result_matches_the_blocking_endpoint():
     streamed_events = await _collect(_service(_grounded_model()), "parity-a", "meal limit?")
     streamed = streamed_events[-1].data
-    blocking = _service(_grounded_model()).invoke_graph("parity-b", "meal limit?")
+    blocking = await _service(_grounded_model()).ainvoke_graph("parity-b", "meal limit?")
 
     assert streamed.answer == blocking.answer
     assert streamed.steps == blocking.steps

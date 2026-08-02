@@ -9,7 +9,7 @@ class _RecordingRetriever:
         self._doc_lists = list(doc_lists)
         self.calls: list[str | None] = []
 
-    def search(self, query: str, category: str | None) -> list[Document]:
+    async def asearch(self, query: str, category: str | None) -> list[Document]:
         self.calls.append(category)
         return self._doc_lists.pop(0) if self._doc_lists else []
 
@@ -29,40 +29,40 @@ def _doc(doc_id: str, section: str, similarity: float, content: str = "content",
     return Document(page_content=content, metadata=metadata)
 
 
-def test_filtered_query_requests_the_active_category():
+async def test_filtered_query_requests_the_active_category():
     retriever = _RecordingRetriever([_doc("01", "4. Business meals", 0.9)])
     graph = build_rag_graph(retriever)
 
-    graph.invoke({"question": "meal limit?", "category": "meal"})
+    await graph.ainvoke({"question": "meal limit?", "category": "meal"})
 
     assert retriever.calls == ["meal"]
 
 
-def test_unfiltered_query_when_no_category_given():
+async def test_unfiltered_query_when_no_category_given():
     retriever = _RecordingRetriever([_doc("01", "4. Business meals", 0.9)])
     graph = build_rag_graph(retriever)
 
-    graph.invoke({"question": "meal limit?", "category": None})
+    await graph.ainvoke({"question": "meal limit?", "category": None})
 
     assert retriever.calls == [None]
 
 
-def test_empty_filtered_result_retries_once_without_category():
+async def test_empty_filtered_result_retries_once_without_category():
     retriever = _RecordingRetriever([], [_doc("07", "2. Business meals", 0.85)])
     graph = build_rag_graph(retriever)
 
-    result = graph.invoke({"question": "meal limit?", "category": "meal"})["result"]
+    result = (await graph.ainvoke({"question": "meal limit?", "category": "meal"}))["result"]
 
     assert retriever.calls == ["meal", None]
     assert result.category is None
     assert len(result.results) == 1
 
 
-def test_empty_result_stays_empty_when_fallback_also_empty():
+async def test_empty_result_stays_empty_when_fallback_also_empty():
     retriever = _RecordingRetriever([], [])
     graph = build_rag_graph(retriever)
 
-    result = graph.invoke({"question": "meal limit?", "category": "meal"})["result"]
+    result = (await graph.ainvoke({"question": "meal limit?", "category": "meal"}))["result"]
 
     assert result.results == []
     assert result.context == ""
@@ -70,19 +70,19 @@ def test_empty_result_stays_empty_when_fallback_also_empty():
     assert result.confidence == 0.0
 
 
-def test_results_are_ranked_by_similarity_descending():
+async def test_results_are_ranked_by_similarity_descending():
     retriever = _RecordingRetriever(
         [_doc("01", "A", 0.7), _doc("02", "B", 0.95), _doc("03", "C", 0.8)]
     )
     graph = build_rag_graph(retriever)
 
-    rag_result = graph.invoke({"question": "q", "category": None})["result"]
+    rag_result = (await graph.ainvoke({"question": "q", "category": None}))["result"]
 
     assert [item.similarity for item in rag_result.results] == [0.95, 0.8, 0.7]
     assert rag_result.confidence == 0.95
 
 
-def test_citations_are_deduplicated_by_document_and_section():
+async def test_citations_are_deduplicated_by_document_and_section():
     retriever = _RecordingRetriever(
         [
             _doc("01", "4. Business meals", 0.9, content="first half"),
@@ -92,7 +92,7 @@ def test_citations_are_deduplicated_by_document_and_section():
     )
     graph = build_rag_graph(retriever)
 
-    result = graph.invoke({"question": "q", "category": None})["result"]
+    result = (await graph.ainvoke({"question": "q", "category": None}))["result"]
 
     assert len(result.citations) == 2
     assert [c.marker for c in result.citations] == ["S1", "S2"]
@@ -100,13 +100,13 @@ def test_citations_are_deduplicated_by_document_and_section():
     assert "second half" not in result.context
 
 
-def test_context_uses_numbered_markers_with_title_and_section():
+async def test_context_uses_numbered_markers_with_title_and_section():
     retriever = _RecordingRetriever(
         [_doc("01", "4. Business meals", 0.9, content="Capped at 15000.")]
     )
     graph = build_rag_graph(retriever)
 
-    result = graph.invoke({"question": "q", "category": None})["result"]
+    result = (await graph.ainvoke({"question": "q", "category": None}))["result"]
 
     assert result.context == "[S1] Doc 01 › 4. Business meals\nCapped at 15000."
     assert result.citations[0].marker == "S1"
@@ -114,7 +114,7 @@ def test_context_uses_numbered_markers_with_title_and_section():
     assert result.citations[0].section == "4. Business meals"
 
 
-def test_context_stays_within_the_token_budget():
+async def test_context_stays_within_the_token_budget():
     long_content = "x" * (CONTEXT_TOKEN_BUDGET * 4)
     retriever = _RecordingRetriever(
         [
@@ -124,7 +124,7 @@ def test_context_stays_within_the_token_budget():
     )
     graph = build_rag_graph(retriever)
 
-    result = graph.invoke({"question": "q", "category": None})["result"]
+    result = (await graph.ainvoke({"question": "q", "category": None}))["result"]
 
     assert len(result.citations) == 1
     assert result.citations[0].doc_id == "01"

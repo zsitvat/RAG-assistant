@@ -3,8 +3,8 @@ from unittest.mock import MagicMock
 from langchain_core.documents import Document
 
 from app.integrations.redis import RedisIndex
-from app.rag.build_info import IndexBuildInfoBuilder
-from app.rag.ingest import CorpusIngestor
+from app.rag.ingest.build_info import IndexBuildInfoBuilder
+from app.rag.ingest.pipeline import CorpusIngestor
 from app.rag.model import IndexBuildInfo
 
 

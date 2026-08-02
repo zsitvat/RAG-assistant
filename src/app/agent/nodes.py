@@ -60,10 +60,10 @@ class AgentNodes:
         """Returns the tools available to the agent step."""
         return self._tools
 
-    def classify_intent(self, state: AgentState) -> AgentState:
+    async def classify_intent(self, state: AgentState) -> AgentState:
         """Classifies the user's intent and, if applicable, the expense category."""
         context = MessageHistory(state["messages"]).model_context()
-        result = self._classify_runner.run(
+        result = await self._classify_runner.run(
             context, fallback=IntentClassification(intent="policy_question")
         )
         return {
@@ -72,14 +72,14 @@ class AgentNodes:
             "degraded": result.degraded,
         }
 
-    def extract_information(self, state: AgentState) -> AgentState:
+    async def extract_information(self, state: AgentState) -> AgentState:
         """Extracts and merges expense claim fields from the conversation so far."""
         previous_claim = ExpenseClaim.from_state(state.get("claim"))
         previous_decision = state.get("decision")
         category = state.get("category")
 
         context = MessageHistory(state["messages"]).model_context()
-        result = self._extract_runner.run(context, fallback=ExpenseClaim())
+        result = await self._extract_runner.run(context, fallback=ExpenseClaim())
         extracted = result.value
         if category is not None:
             extracted = extracted.model_copy(update={"category": category})
@@ -134,7 +134,7 @@ class AgentNodes:
         )
         return {"messages": [AIMessage(content=answer)], "decision": "needs_info"}
 
-    def agent_step(self, state: AgentState) -> AgentState:
+    async def agent_step(self, state: AgentState) -> AgentState:
         """Invokes the tool-calling model for one reasoning step, reusing duplicate calls."""
         history = MessageHistory(state["messages"])
         if history.agent_step_count() >= MAX_AGENT_STEPS:
@@ -144,7 +144,7 @@ class AgentNodes:
             t for t in self._tools if history.tool_error_count(t.name) < MAX_TOOL_ARG_ERRORS
         ]
         model = self._bind_tools(available_tools)
-        response = self._invoke_with_retry(
+        response = await self._invoke_with_retry(
             self._prompt("agent_step") | model, history.model_context()
         )
         if response is None:
@@ -169,10 +169,10 @@ class AgentNodes:
         return {"messages": [response, reused]}
 
     @staticmethod
-    def _invoke_with_retry(runnable: Runnable, messages: list) -> AIMessage | None:
+    async def _invoke_with_retry(runnable: Runnable, messages: list) -> AIMessage | None:
         """Invokes a model with retry handling and returns None after failure."""
         try:
-            return runnable.with_retry().invoke({"messages": messages})
+            return await runnable.with_retry().ainvoke({"messages": messages})
         except Exception as exc:
             logger.warning(
                 f"chat model call failed after retrying with backoff: {type(exc).__name__}: {exc}"
@@ -197,7 +197,7 @@ class AgentNodes:
             return "execute_tools"
         return "generate_response"
 
-    def generate_response(self, state: AgentState) -> AgentState:
+    async def generate_response(self, state: AgentState) -> AgentState:
         """Generates the final answer from the gathered tool evidence and derives the decision."""
         last_message = state["messages"][-1]
         if isinstance(last_message, AIMessage) and last_message.content == LLM_UNAVAILABLE_MESSAGE:
@@ -215,7 +215,7 @@ class AgentNodes:
             }
 
         decision = self._derive_decision(tool_messages)
-        answer = self._invoke_with_retry(
+        answer = await self._invoke_with_retry(
             self._prompt("generate_response") | self._response_model, history.model_context()
         )
         if answer is None:

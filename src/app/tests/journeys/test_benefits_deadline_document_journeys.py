@@ -19,7 +19,7 @@ CATALOGUE = load_rule_catalogue()
 CALCULATOR = ReimbursementCalculator(CATALOGUE)
 
 
-def test_recreational_benefit_claim_produces_the_expected_reimbursement_and_decision():
+async def test_recreational_benefit_claim_produces_the_expected_reimbursement_and_decision():
     document = policy_document(
         "05",
         "3. Annual benefit allowances",
@@ -74,7 +74,7 @@ def test_recreational_benefit_claim_produces_the_expected_reimbursement_and_deci
     nodes = AgentNodes(model, model, tools, CALCULATOR)
     graph = build_agent_graph(nodes)
 
-    result = graph.invoke(
+    result = await graph.ainvoke(
         {
             "messages": [
                 (
@@ -101,7 +101,7 @@ def test_recreational_benefit_claim_produces_the_expected_reimbursement_and_deci
     assert "[S1]" in result["messages"][-1].content
 
 
-def test_deadline_question_uses_only_search_and_check_rules_no_calculation():
+async def test_deadline_question_uses_only_search_and_check_rules_no_calculation():
     document = policy_document(
         "01",
         "7. Submission deadline and late claims",
@@ -143,7 +143,7 @@ def test_deadline_question_uses_only_search_and_check_rules_no_calculation():
     nodes = AgentNodes(model, model, tools, CALCULATOR)
     graph = build_agent_graph(nodes)
 
-    result = graph.invoke(
+    result = await graph.ainvoke(
         {"messages": [("human", "Can I still submit a meal receipt from 2026-06-01?")]},
         config={"configurable": {"thread_id": "deadline-1"}, "recursion_limit": 20},
     )
@@ -160,7 +160,7 @@ def test_deadline_question_uses_only_search_and_check_rules_no_calculation():
     assert "[S1]" in result["messages"][-1].content
 
 
-def test_document_question_uses_only_search_and_check_rules():
+async def test_document_question_uses_only_search_and_check_rules():
     document = policy_document(
         "02",
         "7. Required documents",
@@ -201,7 +201,7 @@ def test_document_question_uses_only_search_and_check_rules():
     )
     graph = build_agent_graph(AgentNodes(model, model, tools, CALCULATOR))
 
-    result = graph.invoke(
+    result = await graph.ainvoke(
         {"messages": [("human", "Which documents do I need for a travel claim?")]},
         config={"configurable": {"thread_id": "documents-1"}, "recursion_limit": 20},
     )

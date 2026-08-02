@@ -139,13 +139,15 @@ rule findings, `decision=None` because a pure policy question has no eligibility
 
 ### HTTP surface (`src/app/agent/service.py`, `src/app/api/routes/chat.py`, `src/app/api/schemas.py`)
 
-`AgentService.invoke_graph(thread_id, message)` invokes the compiled graph (`recursion_limit=20`),
-times the call, and projects the result into `ChatResponse` (`answer` = `messages[-1]`,
-`generated_at` UTC, `response_time_ms`, the deterministic `decision`, deduplicated `sources` built from every current-request
-`search_policies` `ToolMessage`'s `RagResult.citations`, and stable `steps` labels — "Request
-understood", "Information extracted", then any of "Policies searched"/"Rules checked"/"Amount
-calculated" that actually ran, then "Answer prepared"). `POST /chat` (`src/app/api/routes/chat.py`) is a
-thin transport wrapper, running the synchronous call via `run_in_threadpool`.
+`AgentService.ainvoke_graph(thread_id, message)` invokes the compiled graph (`recursion_limit=20`)
+via `graph.ainvoke`, times the call, and builds the result into `ChatResponse` (`answer` =
+`messages[-1]`, `generated_at` UTC, `response_time_ms`, the deterministic `decision`, deduplicated
+`sources` built from every current-request `search_policies` `ToolMessage`'s `RagResult.citations`,
+and stable `steps` labels — "Intent classified", "Details extracted", then any of "Policies
+searched"/"Rules checked"/"Amount calculated" that actually ran, then whichever terminal label
+matches the turn's `decision` ("Answer generated", "Clarification asked", or "Marked out of
+scope")). `POST /chat` (`src/app/api/routes/chat.py`) is a thin transport wrapper that awaits it
+directly.
 
 ### Wiring (`src/app/dependencies.py`)
 
@@ -184,7 +186,7 @@ curl -X POST http://127.0.0.1:8000/chat \
 | `src/app/agent/static_texts.py` | fixed clarification/refusal/system-state strings, kept deterministic mainly because the current chat model is small |
 | `src/app/agent/graph.py` | `build_agent_graph` |
 | `src/app/agent/service.py` | `AgentService` — orchestrates a turn, delegates projection |
-| `src/app/agent/projection.py` | `TurnProjector` — graph output → `ChatResponse`/`EvaluationResponse` |
+| `src/app/agent/responses.py` | `ResponseBuilder` — graph output → `ChatResponse`/`EvaluationResponse` |
 | `src/app/api/routes/chat.py` | `POST /chat` |
 | `src/app/api/schemas.py` | `ChatRequest`, `ChatResponse`, `ChatSource` (added to the existing file) |
 | `src/app/dependencies.py` | `ApplicationDependencies` — all application wiring |
@@ -195,9 +197,6 @@ curl -X POST http://127.0.0.1:8000/chat \
 
 ## Deliberate deviations from the technical design
 
-- **`/chat` runs the graph synchronously inside `run_in_threadpool`**, not `graph.ainvoke`. The
-  nodes and tools are plain synchronous Python; a full async conversion is deferred to task 9, which
-  needs `graph.astream` regardless.
 - **`calculate` and `check_rules` take no model-facing arguments** — both read `claim` from
   `ToolRuntime.state`, avoiding a second extraction-by-tool-call for either.
 - **Travel expense sub-types are selected via `expense_type` string values**

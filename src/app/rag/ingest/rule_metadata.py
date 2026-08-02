@@ -1,6 +1,6 @@
 from langchain_core.documents import Document
 
-from app.rag.errors import IngestionError
+from app.rag.ingest.errors import IngestionError
 from app.rules.model import RuleCatalogue
 
 

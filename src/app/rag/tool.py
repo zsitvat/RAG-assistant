@@ -11,9 +11,11 @@ def build_search_policies_tool(rag_graph: CompiledStateGraph) -> BaseTool:
     """Builds the tool that runs the RAG subgraph to search the corpus."""
 
     @tool(response_format="content_and_artifact")
-    def search_policies(question: str, category: Category | None = None) -> tuple[str, RagResult]:
+    async def search_policies(
+        question: str, category: Category | None = None
+    ) -> tuple[str, RagResult]:
         """Searches the corpus and returns grounded, cited evidence."""
-        state = rag_graph.invoke({"question": question, "category": category})
+        state = await rag_graph.ainvoke({"question": question, "category": category})
         result: RagResult = state["result"]
         return result.context or NO_EVIDENCE_CONTENT, result
 

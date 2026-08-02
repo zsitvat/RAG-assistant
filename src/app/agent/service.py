@@ -5,7 +5,7 @@ from datetime import date
 from langchain_core.messages import HumanMessage
 from langgraph.graph.state import CompiledStateGraph
 
-from app.agent.projection import TurnProjector
+from app.agent.responses import ResponseBuilder
 from app.agent.state import RECURSION_LIMIT
 from app.agent.streaming import StreamEventMapper
 from app.api.schemas import ChatResponse, EvaluationResponse, StreamEvent
@@ -21,16 +21,16 @@ class AgentService:
         """Stores the compiled agent graph and the observability adapter used to trace turns."""
         self._graph = graph
         self._observability = observability or Observability(None)
-        self._projector = TurnProjector()
+        self._responses = ResponseBuilder()
         self._streaming = StreamEventMapper()
 
-    def invoke_graph(self, thread_id: str, message: str) -> ChatResponse:
-        """Runs the user's message through the agent graph and projects the result into a reply."""
+    async def ainvoke_graph(self, thread_id: str, message: str) -> ChatResponse:
+        """Runs the user's message through the agent graph and builds the resulting reply."""
         start = time.monotonic()
-        result = self._graph.invoke(self._input(message), config=self._config(thread_id))
-        return self._project(thread_id, result, start)
+        result = await self._graph.ainvoke(self._input(message), config=self._config(thread_id))
+        return self._build_response(thread_id, result, start)
 
-    async def stream(self, thread_id: str, message: str) -> AsyncIterator[StreamEvent]:
+    async def astream(self, thread_id: str, message: str) -> AsyncIterator[StreamEvent]:
         """Streams public step, source and answer-token events, then the complete reply."""
         start = time.monotonic()
         config = self._config(thread_id)
@@ -53,9 +53,9 @@ class AgentService:
                     yield token
 
         final_state = (await self._graph.aget_state(config)).values
-        yield StreamEvent(event="result", data=self._project(thread_id, final_state, start))
+        yield StreamEvent(event="result", data=self._build_response(thread_id, final_state, start))
 
-    def evaluate(
+    async def evaluate(
         self,
         thread_id: str,
         message: str,
@@ -63,15 +63,15 @@ class AgentService:
         dataset_item_id: str | None = None,
         experiment_name: str | None = None,
     ) -> EvaluationResponse:
-        """Runs one evaluation turn and projects the graph state into the internal eval contract."""
+        """Runs one evaluation turn and builds the internal eval contract from the graph state."""
         config = self._config(
             thread_id,
             tags=("eval",),
             dataset_item_id=dataset_item_id,
             experiment_name=experiment_name,
         )
-        result = self._graph.invoke(self._input(message, reference_date), config=config)
-        return self._projector.project_evaluation(thread_id, result)
+        result = await self._graph.ainvoke(self._input(message, reference_date), config=config)
+        return self._responses.build_evaluation(thread_id, result)
 
     @staticmethod
     def _input(message: str, reference_date: date | None = None) -> dict:
@@ -86,8 +86,8 @@ class AgentService:
         config = {"configurable": {"thread_id": thread_id}, "recursion_limit": RECURSION_LIMIT}
         return config | self._observability.trace_config(thread_id, **trace_kwargs)
 
-    def _project(self, thread_id: str, state: dict, start: float) -> ChatResponse:
-        """Updates the trace with this turn's outcome and projects the final reply."""
+    def _build_response(self, thread_id: str, state: dict, start: float) -> ChatResponse:
+        """Updates the trace with this turn's outcome and builds the final reply."""
         self._observability.update_trace(
             thread_id=thread_id,
             intent=state.get("intent"),
@@ -95,4 +95,4 @@ class AgentService:
             decision=state.get("decision"),
             degraded=state.get("degraded", False),
         )
-        return self._projector.project_chat(thread_id, state, start)
+        return self._responses.build_chat(thread_id, state, start)

@@ -48,16 +48,16 @@ def _make_failing_tool(name: str = "failing_tool"):
     return failing_tool
 
 
-def _invoke(model, tools, messages, config=None):
+async def _invoke(model, tools, messages, config=None):
     nodes = AgentNodes(model, model, tools, CALCULATOR)
     graph = build_agent_graph(nodes)
-    return graph.invoke(
+    return await graph.ainvoke(
         {"messages": messages},
         config=config or {"configurable": {"thread_id": "t1"}, "recursion_limit": 20},
     )
 
 
-def test_general_policy_question_completes_with_a_grounded_answer():
+async def test_general_policy_question_completes_with_a_grounded_answer():
     tool_, calls = _make_counting_tool("search_policies")
     model = ScriptedChatModel(
         chat_responses=iter(
@@ -75,7 +75,7 @@ def test_general_policy_question_completes_with_a_grounded_answer():
         ),
     )
 
-    result = _invoke(model, [tool_], [("human", "What is the business meal limit?")])
+    result = await _invoke(model, [tool_], [("human", "What is the business meal limit?")])
 
     assert calls == [{"n": 1}]
     assert (
@@ -84,21 +84,21 @@ def test_general_policy_question_completes_with_a_grounded_answer():
     assert result["intent"] == "policy_question"
 
 
-def test_unsupported_request_never_calls_a_tool_and_is_refused():
+async def test_unsupported_request_never_calls_a_tool_and_is_refused():
     tool_, calls = _make_counting_tool()
     model = ScriptedChatModel(
         chat_responses=iter([]),
         structured_responses=iter([IntentClassification(intent="unsupported"), ExpenseClaim()]),
     )
 
-    result = _invoke(model, [tool_], [("human", "What tax rate applies to my salary?")])
+    result = await _invoke(model, [tool_], [("human", "What tax rate applies to my salary?")])
 
     assert calls == []
     assert result["decision"] == "out_of_scope"
     assert result["messages"][-1].content == OUT_OF_SCOPE_MESSAGE
 
 
-def test_missing_required_slot_triggers_clarification():
+async def test_missing_required_slot_triggers_clarification():
     model = ScriptedChatModel(
         chat_responses=iter([]),
         structured_responses=iter(
@@ -109,13 +109,13 @@ def test_missing_required_slot_triggers_clarification():
         ),
     )
 
-    result = _invoke(model, [], [("human", "I spent 1000 HUF on a business meal.")])
+    result = await _invoke(model, [], [("human", "I spent 1000 HUF on a business meal.")])
 
     assert result["decision"] == "needs_info"
     assert "how many people" in result["messages"][-1].content.lower()
 
 
-def test_clarification_answer_merges_into_the_pending_claim():
+async def test_clarification_answer_merges_into_the_pending_claim():
     model = ScriptedChatModel(
         chat_responses=iter([AIMessage(content="")]),
         structured_responses=iter(
@@ -133,7 +133,7 @@ def test_clarification_answer_merges_into_the_pending_claim():
     graph = build_agent_graph(nodes)
     config = {"configurable": {"thread_id": "t2"}, "recursion_limit": 20}
 
-    result = graph.invoke(
+    result = await graph.ainvoke(
         {
             "messages": [
                 (
@@ -152,7 +152,7 @@ def test_clarification_answer_merges_into_the_pending_claim():
     assert result["decision"] != "needs_info"
 
 
-def test_loop_stops_after_max_agent_steps_without_calling_the_model_again():
+async def test_loop_stops_after_max_agent_steps_without_calling_the_model_again():
     tool_, calls = _make_counting_tool("search_policies")
     responses = [
         AIMessage(
@@ -166,7 +166,7 @@ def test_loop_stops_after_max_agent_steps_without_calling_the_model_again():
         structured_responses=iter([IntentClassification(intent="policy_question"), ExpenseClaim()]),
     )
 
-    result = _invoke(model, [tool_], [("human", "Tell me everything about every policy.")])
+    result = await _invoke(model, [tool_], [("human", "Tell me everything about every policy.")])
 
     assert len(calls) == MAX_AGENT_STEPS
     final_content = result["messages"][-1].content
@@ -174,7 +174,7 @@ def test_loop_stops_after_max_agent_steps_without_calling_the_model_again():
     assert "incomplete information" in final_content
 
 
-def test_recursion_limit_is_generous_enough_for_the_worst_case_step_budget():
+async def test_recursion_limit_is_generous_enough_for_the_worst_case_step_budget():
     from app.agent.state import RECURSION_LIMIT
 
     tool_, calls = _make_counting_tool("search_policies")
@@ -184,13 +184,15 @@ def test_recursion_limit_is_generous_enough_for_the_worst_case_step_budget():
     )
     config = {"configurable": {"thread_id": "t-recursion"}, "recursion_limit": RECURSION_LIMIT}
 
-    result = _invoke(model, [tool_], [("human", "Tell me everything about every policy.")], config)
+    result = await _invoke(
+        model, [tool_], [("human", "Tell me everything about every policy.")], config
+    )
 
     assert len(calls) == MAX_AGENT_STEPS
     assert "incomplete information" in result["messages"][-1].content
 
 
-def test_duplicate_identical_tool_call_is_reused_without_re_executing():
+async def test_duplicate_identical_tool_call_is_reused_without_re_executing():
     tool_, calls = _make_counting_tool("search_policies")
     model = ScriptedChatModel(
         chat_responses=iter(
@@ -210,13 +212,13 @@ def test_duplicate_identical_tool_call_is_reused_without_re_executing():
         structured_responses=iter([IntentClassification(intent="policy_question"), ExpenseClaim()]),
     )
 
-    result = _invoke(model, [tool_], [("human", "Ask the same thing twice.")])
+    result = await _invoke(model, [tool_], [("human", "Ask the same thing twice.")])
 
     assert len(calls) == 1
     assert result["messages"][-1].content == "Final answer."
 
 
-def test_tool_disabled_after_repeated_invalid_arguments():
+async def test_tool_disabled_after_repeated_invalid_arguments():
     failing = _make_failing_tool("failing_tool")
     model = ScriptedChatModel(
         chat_responses=iter(
@@ -230,26 +232,26 @@ def test_tool_disabled_after_repeated_invalid_arguments():
         structured_responses=iter([IntentClassification(intent="policy_question"), ExpenseClaim()]),
     )
 
-    result = _invoke(model, [failing], [("human", "Trigger a failing tool twice.")])
+    result = await _invoke(model, [failing], [("human", "Trigger a failing tool twice.")])
 
     assert result["messages"][-1].content == "Evidence was incomplete after repeated tool failures."
 
 
-def test_generate_response_refuses_without_a_supporting_tool_artifact():
+async def test_generate_response_refuses_without_a_supporting_tool_artifact():
     model = ScriptedChatModel(
         chat_responses=iter([AIMessage(content="")]),
         structured_responses=iter([IntentClassification(intent="policy_question"), ExpenseClaim()]),
     )
 
-    result = _invoke(model, [], [("human", "What is the policy on X?")])
+    result = await _invoke(model, [], [("human", "What is the policy on X?")])
 
     assert result["decision"] is None
     assert "do not have enough verified evidence" in result["messages"][-1].content
 
 
-def test_llm_unavailable_after_retries_returns_a_clear_failure_not_a_fabricated_answer():
+async def test_llm_unavailable_after_retries_returns_a_clear_failure_not_a_fabricated_answer():
     model = _AlwaysFailingChatModel(chat_responses=iter([]), structured_responses=iter([]))
 
-    result = _invoke(model, [], [("human", "What is the policy on X?")])
+    result = await _invoke(model, [], [("human", "What is the policy on X?")])
 
     assert result["messages"][-1].content == LLM_UNAVAILABLE_MESSAGE

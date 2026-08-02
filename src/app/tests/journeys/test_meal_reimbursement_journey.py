@@ -11,7 +11,7 @@ CATALOGUE = load_rule_catalogue()
 CALCULATOR = ReimbursementCalculator(CATALOGUE)
 
 
-def test_reference_dinner_example_produces_the_expected_reimbursement_and_citations():
+async def test_reference_dinner_example_produces_the_expected_reimbursement_and_citations():
     document = policy_document(
         "01",
         "4. Business meals",
@@ -64,7 +64,7 @@ def test_reference_dinner_example_produces_the_expected_reimbursement_and_citati
     nodes = AgentNodes(model, model, tools, CALCULATOR)
     graph = build_agent_graph(nodes)
 
-    result = graph.invoke(
+    result = await graph.ainvoke(
         {
             "messages": [
                 (

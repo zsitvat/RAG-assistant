@@ -74,8 +74,8 @@ async def test_chat_returns_a_typed_response_even_without_a_real_llm(client):
     assert isinstance(body["response_time_ms"], int)
     assert body["decision"] is None
     assert body["sources"] == []
-    assert "Request understood" in body["steps"]
-    assert "Answer prepared" in body["steps"]
+    assert "Intent classified" in body["steps"]
+    assert "Answer generated" in body["steps"]
 
 
 async def test_admin_eval_returns_the_typed_evaluation_projection(client):

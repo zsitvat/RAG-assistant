@@ -1,6 +1,9 @@
 from typing import Any
 
-from langchain_core.callbacks import CallbackManagerForRetrieverRun
+from langchain_core.callbacks import (
+    AsyncCallbackManagerForRetrieverRun,
+    CallbackManagerForRetrieverRun,
+)
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from langchain_redis import RedisVectorStore
@@ -20,9 +23,9 @@ class Retriever(BaseRetriever):
         """Stores the vector store and the number of results to retrieve per search."""
         super().__init__(vector_store=vector_store, k=k, **kwargs)
 
-    def search(self, query: str, category: Category | None) -> list[Document]:
+    async def asearch(self, query: str, category: Category | None) -> list[Document]:
         """Searches the vector store for the query, optionally filtered by category."""
-        return self.invoke(query, category=category)
+        return await self.ainvoke(query, category=category)
 
     def _get_relevant_documents(
         self,
@@ -33,6 +36,19 @@ class Retriever(BaseRetriever):
     ) -> list[Document]:
         """Runs the dense similarity search through the retriever interface and attaches scores."""
         results = self.vector_store.similarity_search_with_score(
+            query, k=self.k, filter=self._filter_expression(category)
+        )
+        return [self._with_similarity(doc, distance) for doc, distance in results]
+
+    async def _aget_relevant_documents(
+        self,
+        query: str,
+        *,
+        run_manager: AsyncCallbackManagerForRetrieverRun,
+        category: Category | None = None,
+    ) -> list[Document]:
+        """Runs the dense similarity search natively async, attaching scores to each hit."""
+        results = await self.vector_store.asimilarity_search_with_score(
             query, k=self.k, filter=self._filter_expression(category)
         )
         return [self._with_similarity(doc, distance) for doc, distance in results]

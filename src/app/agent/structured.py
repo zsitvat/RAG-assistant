@@ -27,14 +27,16 @@ class StructuredOutputRunner[SchemaT: BaseModel]:
         self._prompt = prompt
         self._schema = schema
 
-    def run(self, messages: list[BaseMessage], fallback: SchemaT) -> StructuredResult[SchemaT]:
+    async def run(
+        self, messages: list[BaseMessage], fallback: SchemaT
+    ) -> StructuredResult[SchemaT]:
         """Runs the prompt against the chat model, retrying once before falling back."""
         runnable = self._build_runnable()
         if runnable is None:
             return StructuredResult(fallback, degraded=True)
 
         try:
-            return StructuredResult(runnable.invoke({"messages": messages}), degraded=False)
+            return StructuredResult(await runnable.ainvoke({"messages": messages}), degraded=False)
         except Exception as exc:
             logger.warning(
                 f"structured output for {self._schema.__name__} failed; retrying once: "
@@ -46,7 +48,8 @@ class StructuredOutputRunner[SchemaT: BaseModel]:
             HumanMessage(content="Your previous output was invalid or unparsable. Try again."),
         ]
         try:
-            return StructuredResult(runnable.invoke({"messages": repair_messages}), degraded=False)
+            result = await runnable.ainvoke({"messages": repair_messages})
+            return StructuredResult(result, degraded=False)
         except Exception as exc:
             logger.warning(
                 f"structured output for {self._schema.__name__} degraded to fallback after "

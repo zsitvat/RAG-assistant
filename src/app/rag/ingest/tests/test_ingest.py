@@ -2,12 +2,12 @@ import docx
 import pytest
 from langchain_core.documents import Document
 
-from app.rag.build_info import IndexBuildInfoBuilder
-from app.rag.chunker import CHUNK_SIZE, MarkdownChunker
-from app.rag.docx_converter import DocxToMarkdownConverter
-from app.rag.errors import IngestionError
-from app.rag.ingest import CorpusIngestor
-from app.rag.rule_metadata import RuleMetadataResolver
+from app.rag.ingest.build_info import IndexBuildInfoBuilder
+from app.rag.ingest.chunker import CHUNK_SIZE, MarkdownChunker
+from app.rag.ingest.docx_converter import DocxToMarkdownConverter
+from app.rag.ingest.errors import IngestionError
+from app.rag.ingest.pipeline import CorpusIngestor
+from app.rag.ingest.rule_metadata import RuleMetadataResolver
 from app.rules.loader import load_rule_catalogue
 from app.rules.model import RuleCatalogue
 

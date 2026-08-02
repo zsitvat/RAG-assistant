@@ -23,7 +23,7 @@ class FixedRetriever:
     def __init__(self, documents: list[Document]) -> None:
         self._documents = documents
 
-    def search(self, query: str, category: str | None) -> list[Document]:
+    async def asearch(self, query: str, category: str | None) -> list[Document]:
         """Returns the configured documents regardless of query or category."""
 
         return self._documents

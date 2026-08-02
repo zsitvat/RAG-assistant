@@ -8,7 +8,7 @@ class _FakeGraph:
     def __init__(self, messages: list) -> None:
         self._messages = messages
 
-    def invoke(self, state, config=None):
+    async def ainvoke(self, state, config=None):
         return {"messages": [*state["messages"], *self._messages]}
 
 
@@ -16,7 +16,7 @@ def _rag_result(*citations: Citation) -> RagResult:
     return RagResult(citations=list(citations))
 
 
-def test_respond_projects_answer_sources_and_steps():
+async def test_respond_projects_answer_sources_and_steps():
     tool_message = ToolMessage(
         content="[S1] Doc",
         artifact=_rag_result(
@@ -28,7 +28,7 @@ def test_respond_projects_answer_sources_and_steps():
     graph = _FakeGraph([tool_message, AIMessage(content="The limit is 15,000 HUF [S1].")])
     service = AgentService(graph)
 
-    response = service.invoke_graph("t1", "What is the meal limit?")
+    response = await service.ainvoke_graph("t1", "What is the meal limit?")
 
     assert response.thread_id == "t1"
     assert response.answer == "The limit is 15,000 HUF [S1]."
@@ -38,15 +38,15 @@ def test_respond_projects_answer_sources_and_steps():
     assert response.sources[0].title == "Doc 01"
     assert response.sources[0].section == "4. Meals"
     assert response.steps == [
-        "Request understood",
-        "Information extracted",
+        "Intent classified",
+        "Details extracted",
         "Policies searched",
-        "Answer prepared",
+        "Answer generated",
     ]
     assert response.response_time_ms >= 0
 
 
-def test_respond_deduplicates_sources_across_multiple_search_calls():
+async def test_respond_deduplicates_sources_across_multiple_search_calls():
     citation = Citation(marker="S1", doc_id="01", doc_title="Doc 01", section="4. Meals")
     graph = _FakeGraph(
         [
@@ -67,12 +67,12 @@ def test_respond_deduplicates_sources_across_multiple_search_calls():
     )
     service = AgentService(graph)
 
-    response = service.invoke_graph("t1", "question")
+    response = await service.ainvoke_graph("t1", "question")
 
     assert len(response.sources) == 1
 
 
-def test_respond_only_considers_messages_from_the_current_request():
+async def test_respond_only_considers_messages_from_the_current_request():
     old_human = HumanMessage(content="previous request question")
     old_tool = ToolMessage(
         content="old",
@@ -86,10 +86,10 @@ def test_respond_only_considers_messages_from_the_current_request():
     )
     service = AgentService(graph)
 
-    response = service.invoke_graph("t1", "new question")
+    response = await service.ainvoke_graph("t1", "new question")
 
     assert response.sources == []
-    assert response.steps == ["Request understood", "Information extracted", "Answer prepared"]
+    assert response.steps == ["Intent classified", "Details extracted", "Answer generated"]
 
 
 class _StatefulFakeGraph:
@@ -97,5 +97,5 @@ class _StatefulFakeGraph:
         self._prior_messages = prior_messages
         self._new_messages = new_messages
 
-    def invoke(self, state, config=None):
+    async def ainvoke(self, state, config=None):
         return {"messages": [*self._prior_messages, *state["messages"], *self._new_messages]}

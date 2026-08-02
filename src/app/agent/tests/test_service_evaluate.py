@@ -65,10 +65,10 @@ def _meal_turn_model() -> ScriptedChatModel:
     )
 
 
-def test_evaluate_projects_tool_calls_calculation_findings_and_citations():
+async def test_evaluate_projects_tool_calls_calculation_findings_and_citations():
     service = _service(_meal_turn_model())
 
-    result = service.evaluate(
+    result = await service.evaluate(
         "eval-meal-1",
         "We had a business dinner for 3 people, total bill was 50000 HUF, I have the receipt.",
         reference_date=date(2026, 8, 1),
@@ -88,7 +88,7 @@ def test_evaluate_projects_tool_calls_calculation_findings_and_citations():
     assert result.degraded is False
 
 
-def test_evaluate_reports_degraded_when_classification_falls_back_to_a_default():
+async def test_evaluate_reports_degraded_when_classification_falls_back_to_a_default():
     model = ScriptedChatModel(
         chat_responses=iter([AIMessage(content="")]), structured_responses=iter([])
     )
@@ -96,13 +96,13 @@ def test_evaluate_reports_degraded_when_classification_falls_back_to_a_default()
     nodes = AgentNodes(model, model, tools, CALCULATOR)
     service = AgentService(build_agent_graph(nodes))
 
-    result = service.evaluate("eval-degraded-1", "hello", reference_date=date(2026, 8, 1))
+    result = await service.evaluate("eval-degraded-1", "hello", reference_date=date(2026, 8, 1))
 
     assert result.degraded is True
     assert result.intent == "policy_question"
 
 
-def test_evaluate_pins_the_reference_date_used_by_the_deadline_check():
+async def test_evaluate_pins_the_reference_date_used_by_the_deadline_check():
     model = ScriptedChatModel(
         chat_responses=iter(
             [
@@ -122,7 +122,7 @@ def test_evaluate_pins_the_reference_date_used_by_the_deadline_check():
     nodes = AgentNodes(model, model, tools, CALCULATOR)
     service = AgentService(build_agent_graph(nodes))
 
-    result = service.evaluate(
+    result = await service.evaluate(
         "eval-deadline-1",
         "Is my expense still within the deadline?",
         reference_date=date(2026, 8, 2),

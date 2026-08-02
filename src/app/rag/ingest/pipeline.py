@@ -6,13 +6,13 @@ from langchain_core.documents import Document
 from langchain_redis import RedisVectorStore
 
 from app.integrations.redis import RedisIndex
-from app.rag.build_info import IndexBuildInfoBuilder
-from app.rag.chunker import MarkdownChunker
-from app.rag.docx_loader import CORPUS_DIR, DocxMarkdownLoader
-from app.rag.errors import IngestionError
 from app.rag.index_schema import VECTOR_DIMENSION
+from app.rag.ingest.build_info import IndexBuildInfoBuilder
+from app.rag.ingest.chunker import MarkdownChunker
+from app.rag.ingest.docx_loader import CORPUS_DIR, DocxMarkdownLoader
+from app.rag.ingest.errors import IngestionError
+from app.rag.ingest.rule_metadata import RuleMetadataResolver
 from app.rag.model import IngestResult
-from app.rag.rule_metadata import RuleMetadataResolver
 from app.rag.store import (
     EMBEDDING_MODEL_NAME,
     EMBEDDING_MODEL_REVISION,
@@ -23,7 +23,7 @@ from app.rules.loader import get_rule_catalogue
 from app.rules.model import RuleCatalogue
 from app.settings import Settings, get_settings
 
-RULES_PATH = Path(__file__).resolve().parents[2] / "rules_config" / "rules.yaml"
+RULES_PATH = Path(__file__).resolve().parents[3] / "rules_config" / "rules.yaml"
 INGEST_BATCH_SIZE = 128
 
 logger = logging.getLogger(__name__)

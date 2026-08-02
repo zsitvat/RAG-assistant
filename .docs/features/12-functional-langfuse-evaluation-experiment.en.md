@@ -41,7 +41,7 @@ for cross-referencing; the SDK's own experiment-item span (see below) is what La
 to the dataset run.
 
 `AgentService.evaluate()` mirrors `invoke_graph()`/`stream()` but delegates to
-`TurnProjector.project_evaluation()`, which projects graph state into `EvaluationResponse` instead of
+`ResponseBuilder.build_evaluation()`, which builds `EvaluationResponse` from graph state instead of
 `ChatResponse`: `intent`, `category`, `decision`, `claim`,
 `missing_slots` (via `RequiredSlotTable`, same table `route_after_extraction` uses),
 `tool_calls` (ordered names from the current turn's `AIMessage.tool_calls`), `calculation`,
@@ -145,7 +145,7 @@ uv run python -m llm_eval.run_eval --node intent
 | `src/app/api/routes/evaluation.py` | `POST /admin/eval` |
 | `src/app/api/schemas.py` | `EvaluationRequest`, `EvaluationResponse` (including `answer`) |
 | `src/app/agent/service.py` | `AgentService.evaluate()` |
-| `src/app/agent/projection.py` | `TurnProjector.project_evaluation()` |
+| `src/app/agent/responses.py` | `ResponseBuilder.build_evaluation()` |
 | `src/app/agent/state.py` | `AgentState["reference_date"]`, `AgentState["degraded"]` |
 | `src/app/agent/structured.py` | `StructuredResult` — `(value, degraded)` from `StructuredOutputRunner.run()` |
 

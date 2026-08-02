@@ -1,23 +1,7 @@
 from langchain_core.messages import BaseMessage, ToolMessage
 
-from app.agent.projection import (
-    EXTRACTED_STEP,
-    FINAL_STEP,
-    STEP_LABELS,
-    UNDERSTOOD_STEP,
-    collect_cited_sources,
-)
+from app.agent.responses import STEP_LABELS, collect_cited_sources, step_label
 from app.api.schemas import StreamEvent
-
-ANSWER_NODE = "generate_response"
-TOOL_NODE = "execute_tools"
-NODE_STEP_LABELS = {
-    "classify_intent": UNDERSTOOD_STEP,
-    "extract_information": EXTRACTED_STEP,
-    "generate_response": FINAL_STEP,
-    "ask_clarification": FINAL_STEP,
-    "out_of_scope": FINAL_STEP,
-}
 
 
 class StreamEventMapper:
@@ -49,19 +33,17 @@ class StreamEventMapper:
     @staticmethod
     def _node_step_labels(node: str, messages: list[BaseMessage]) -> list[str]:
         """Returns the allow-listed public labels a finished node may announce."""
-        if node == TOOL_NODE:
+        if node == "execute_tools":
             return [
-                STEP_LABELS[message.name]
-                for message in messages
-                if isinstance(message, ToolMessage) and message.name in STEP_LABELS
+                step_label(message.name) for message in messages if isinstance(message, ToolMessage)
             ]
-        label = NODE_STEP_LABELS.get(node)
+        label = STEP_LABELS.get(node)
         return [label] if label else []
 
     @staticmethod
     def answer_token(payload: tuple) -> StreamEvent | None:
         """Returns a token event only for chunks produced by the final-answer node."""
         chunk, metadata = payload
-        if metadata.get("langgraph_node") != ANSWER_NODE:
+        if metadata.get("langgraph_node") != "generate_response":
             return None
         return StreamEvent(event="token", data=chunk.content) if chunk.content else None

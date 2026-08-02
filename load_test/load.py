@@ -114,9 +114,7 @@ class LoadTestRunner:
             thread_id = f"{load_run_id}-rep{repetition}-{item.id}"
             start = time.monotonic()
             try:
-                await asyncio.to_thread(
-                    self._agent_service.respond, thread_id, item.input["question"]
-                )
+                await self._agent_service.ainvoke_graph(thread_id, item.input["question"])
                 return {"elapsed_ms": (time.monotonic() - start) * 1000}
             except Exception as exc:
                 return {"error": str(exc)}

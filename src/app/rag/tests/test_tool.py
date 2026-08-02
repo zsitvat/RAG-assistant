@@ -6,12 +6,12 @@ class _FakeRetriever:
     def __init__(self, docs: list) -> None:
         self._docs = docs
 
-    def search(self, query: str, category: str | None) -> list:
+    async def asearch(self, query: str, category: str | None) -> list:
         return self._docs
 
 
-def _call(tool, question: str, category: str | None = None):
-    return tool.invoke(
+async def _call(tool, question: str, category: str | None = None):
+    return await tool.ainvoke(
         {
             "name": tool.name,
             "args": {"question": question, "category": category},
@@ -21,7 +21,7 @@ def _call(tool, question: str, category: str | None = None):
     )
 
 
-def test_tool_returns_context_as_content_and_rag_result_as_artifact():
+async def test_tool_returns_context_as_content_and_rag_result_as_artifact():
     from langchain_core.documents import Document
 
     doc = Document(
@@ -40,18 +40,18 @@ def test_tool_returns_context_as_content_and_rag_result_as_artifact():
     graph = build_rag_graph(_FakeRetriever([doc]))
     tool = build_search_policies_tool(graph)
 
-    message = _call(tool, "meal limit?", "meal")
+    message = await _call(tool, "meal limit?", "meal")
 
     assert message.content == "[S1] Doc 01 › 4. Business meals\nCapped at 15000."
     assert message.artifact.results[0].rule_ids == ["R-MEAL-01"]
     assert message.artifact.citations[0].marker == "S1"
 
 
-def test_tool_reports_no_evidence_explicitly_when_nothing_is_found():
+async def test_tool_reports_no_evidence_explicitly_when_nothing_is_found():
     graph = build_rag_graph(_FakeRetriever([]))
     tool = build_search_policies_tool(graph)
 
-    message = _call(tool, "unrelated question", None)
+    message = await _call(tool, "unrelated question", None)
 
     assert message.content == NO_EVIDENCE_CONTENT
     assert message.artifact.results == []

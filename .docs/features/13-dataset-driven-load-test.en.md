@@ -51,16 +51,17 @@ max_concurrency=..., metadata={"load_run_id": load_run_id})`. The Langfuse SDK i
 concurrency gate, per-item tracing and dataset-run linking — `LoadTestRunner` supplies only the task
 function and the aggregate math, per the design note not to build a second load generator.
 
-The per-item task is `async def task(*, item, **_): ...` — it must be async (not the sync
-`AgentService.invoke_graph()` directly) because `dataset.run_experiment()` runs on its own event loop
+The per-item task is `async def task(*, item, **_): ...` and awaits `AgentService.ainvoke_graph()`
+directly — it must be async because `dataset.run_experiment()` runs on its own event loop
 (`langfuse._client.utils.run_async_safely` detects whether one is already running and spins up its
 own thread+loop if so); a synchronous task there would serialize every "concurrent" item on that one
-loop and silently defeat `max_concurrency`. The task bridges to a thread with `asyncio.to_thread(...)`
-— this is what actually lets N graph invocations run concurrently against Ollama. Each task builds a
-fresh `thread_id` from `{load_run_id}-rep{n}-{item.id}` (unique per item **and** repetition, so no two
-measured turns share LangGraph conversation state) and times the complete `agent_service.invoke_graph()`
-call with `time.monotonic()`; a raised exception is caught and returned as `{"error": ...}` rather
-than propagating, so one failed item doesn't drop out of the aggregate silently.
+loop and silently defeat `max_concurrency`. Since `ainvoke_graph()` awaits `graph.ainvoke(...)`
+natively, N graph invocations run concurrently against Ollama on that one event loop without any
+thread hop. Each task builds a fresh `thread_id` from `{load_run_id}-rep{n}-{item.id}` (unique per
+item **and** repetition, so no two measured turns share LangGraph conversation state) and times the
+complete `agent_service.ainvoke_graph()` call with `time.monotonic()`; a raised exception is caught
+and returned as `{"error": ...}` rather than propagating, so one failed item doesn't drop out of the
+aggregate silently.
 
 `LoadTestRunner` scans every repetition's `item_results`, splitting `output` into a latency sample
 (`"elapsed_ms"`) or an error count (`"error"`), then computes `total_duration_ms` (wall-clock across

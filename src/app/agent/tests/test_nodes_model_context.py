@@ -19,7 +19,7 @@ def _old_request():
     return old_human, old_tool_call, old_tool_message, old_final_answer
 
 
-def test_classify_intent_sends_the_model_only_the_filtered_context():
+async def test_classify_intent_sends_the_model_only_the_filtered_context():
     old_human, old_tool_call, old_tool_message, old_final_answer = _old_request()
     current_human = HumanMessage(content="new question")
     model = ScriptedChatModel(
@@ -28,7 +28,7 @@ def test_classify_intent_sends_the_model_only_the_filtered_context():
     )
     nodes = AgentNodes(model, model, [], CALCULATOR)
 
-    nodes.classify_intent(
+    await nodes.classify_intent(
         {"messages": [old_human, old_tool_call, old_tool_message, old_final_answer, current_human]}
     )
 
@@ -36,13 +36,13 @@ def test_classify_intent_sends_the_model_only_the_filtered_context():
     assert sent[1:] == [old_human, old_final_answer, current_human]
 
 
-def test_extract_information_sends_the_model_only_the_filtered_context():
+async def test_extract_information_sends_the_model_only_the_filtered_context():
     old_human, old_tool_call, old_tool_message, old_final_answer = _old_request()
     current_human = HumanMessage(content="new question")
     model = ScriptedChatModel(chat_responses=iter([]), structured_responses=iter([ExpenseClaim()]))
     nodes = AgentNodes(model, model, [], CALCULATOR)
 
-    nodes.extract_information(
+    await nodes.extract_information(
         {"messages": [old_human, old_tool_call, old_tool_message, old_final_answer, current_human]}
     )
 
@@ -50,13 +50,13 @@ def test_extract_information_sends_the_model_only_the_filtered_context():
     assert sent[1:] == [old_human, old_final_answer, current_human]
 
 
-def test_agent_step_sends_the_model_only_the_filtered_context():
+async def test_agent_step_sends_the_model_only_the_filtered_context():
     old_human, old_tool_call, old_tool_message, old_final_answer = _old_request()
     current_human = HumanMessage(content="new question")
     model = ScriptedChatModel(chat_responses=iter([AIMessage(content="")]))
     nodes = AgentNodes(model, model, [], CALCULATOR)
 
-    nodes.agent_step(
+    await nodes.agent_step(
         {"messages": [old_human, old_tool_call, old_tool_message, old_final_answer, current_human]}
     )
 
@@ -67,7 +67,7 @@ def test_agent_step_sends_the_model_only_the_filtered_context():
     assert current_human in sent
 
 
-def test_generate_response_sends_the_model_only_the_filtered_context():
+async def test_generate_response_sends_the_model_only_the_filtered_context():
     old_human, old_tool_call, old_tool_message, old_final_answer = _old_request()
     current_human = HumanMessage(content="new question")
     current_tool_call = AIMessage(
@@ -79,7 +79,7 @@ def test_generate_response_sends_the_model_only_the_filtered_context():
     model = ScriptedChatModel(chat_responses=iter([AIMessage(content="Final answer.")]))
     nodes = AgentNodes(model, model, [], CALCULATOR)
 
-    nodes.generate_response(
+    await nodes.generate_response(
         {
             "messages": [
                 old_human,

@@ -17,12 +17,12 @@ class RagNodes:
         """Stores the policy retriever used to search documents."""
         self._retriever = retriever
 
-    def retrieve_documents(self, state: RagState) -> RagState:
+    async def retrieve_documents(self, state: RagState) -> RagState:
         """Searches for policy documents matching the question, retrying without the category."""
         category = state.get("category")
-        docs = self._retriever.search(state["question"], category)
+        docs = await self._retriever.asearch(state["question"], category)
         if not docs and category is not None:
-            docs = self._retriever.search(state["question"], None)
+            docs = await self._retriever.asearch(state["question"], None)
             category = None
         results = sorted(
             (self._to_result(doc) for doc in docs),

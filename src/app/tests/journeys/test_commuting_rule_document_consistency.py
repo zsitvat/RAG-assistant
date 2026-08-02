@@ -1,4 +1,4 @@
-from app.rag.docx_loader import CORPUS_DIR, DocxMarkdownLoader
+from app.rag.ingest.docx_loader import CORPUS_DIR, DocxMarkdownLoader
 from app.rules.loader import load_rule_catalogue
 
 CATALOGUE = load_rule_catalogue()

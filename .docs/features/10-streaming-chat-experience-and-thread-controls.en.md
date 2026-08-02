@@ -13,12 +13,12 @@ real chat that shows live progress, streams the answer, and can reset the server
 
 ### The public event vocabulary (`src/app/agent/streaming.py`)
 
-`AgentService.stream()` consumes `graph.astream(..., stream_mode=["updates", "messages"])` and
+`AgentService.astream()` consumes `graph.astream(..., stream_mode=["updates", "messages"])` and
 delegates translation to `StreamEventMapper`; no LangGraph object reaches the client.
 
 | Source | Event | Rule |
 | --- | --- | --- |
-| node update | `step` | `NODE_STEP_LABELS` allow-list, deduplicated per turn |
+| node update | `step` | `STEP_LABELS` allow-list, deduplicated per turn |
 | `search_policies` tool message | `source` | one `ChatSource` per citation, deduplicated by `(doc_id, section)` |
 | message chunk | `token` | only when `metadata["langgraph_node"] == "generate_response"` |
 | stream end | `result` | the complete `ChatResponse` |
@@ -28,17 +28,18 @@ tool-calling `AIMessage`s and the raw `ToolMessage` payloads. Without the node f
 policy text and tool JSON would stream straight into the chat window.
 
 Step labels come from an allow-list keyed by node name, never from node output: `classify_intent` →
-"Request understood", `extract_information` → "Information extracted", `execute_tools` → the tool's
-label, and each terminal node (`generate_response`, `ask_clarification`, `out_of_scope`) → "Answer
-prepared". Deterministic clarification and refusal turns therefore produce no `token` events at all;
-their text arrives in the final `result`.
+"Intent classified", `extract_information` → "Details extracted", `execute_tools` → the tool's
+label, and each terminal node has its own distinct label (`generate_response` → "Answer generated",
+`ask_clarification` → "Clarification asked", `out_of_scope` → "Marked out of scope"). Deterministic
+clarification and refusal turns therefore produce no `token` events at all; their text arrives in the
+final `result`.
 
 ### Parity with the blocking endpoint
 
-Both endpoints end in the same `AgentService._project(thread_id, state, start)` method, which
-updates the trace and delegates to `TurnProjector.project_chat()`, so `/chat` and the `result` event
-of `/chat/stream` cannot drift. `invoke_graph()` projects `invoke()`'s return value; `stream()` projects
-`graph.get_state(config).values` once the stream is exhausted.
+Both endpoints end in the same `AgentService._build_response(thread_id, state, start)` method, which
+updates the trace and delegates to `ResponseBuilder.build_chat()`, so `/chat` and the `result` event
+of `/chat/stream` cannot drift. `ainvoke_graph()` builds it from `ainvoke()`'s return value;
+`astream()` builds it from `graph.aget_state(config).values` once the stream is exhausted.
 
 **A checkpoint round-trip flattens tool artifacts.** `get_state()` returns *serialized* channel
 values, so a `search_policies` `ToolMessage.artifact` is a plain `dict`, not a `RagResult` — the
@@ -66,9 +67,9 @@ intact, so the next message retries on the same thread.
 
 | File | Responsibility |
 | --- | --- |
-| `src/app/agent/service.py` | `AgentService.stream()`, shared `_project` |
+| `src/app/agent/service.py` | `AgentService.astream()`, shared `_build_response` |
 | `src/app/agent/streaming.py` | `StreamEventMapper` — the event allow-lists |
-| `src/app/agent/projection.py` | `TurnProjector` — shared `project_chat()` |
+| `src/app/agent/responses.py` | `ResponseBuilder` — shared `build_chat()` |
 | `src/app/api/schemas.py` | `StreamEvent` and its `to_sse()` wire rendering |
 | `src/app/api/routes/chat.py` | `POST /chat/stream` as a `StreamingResponse` |
 | `src/app/rag/model.py` | `RagResult.from_artifact` |

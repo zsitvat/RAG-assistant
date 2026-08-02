@@ -10,7 +10,6 @@ from app.agent.model import ExpenseClaim, IntentClassification
 from app.agent.nodes import AgentNodes
 from app.agent.service import AgentService
 from app.api.router import router
-from app.api.routes import chat as chat_route
 from app.dependencies import get_agent_service
 from app.rules.loader import load_rule_catalogue
 from app.tests.fakes import ScriptedChatModel, build_agent_tools, policy_document, tool_message
@@ -19,7 +18,7 @@ CATALOGUE = load_rule_catalogue()
 CALCULATOR = ReimbursementCalculator(CATALOGUE)
 
 
-def test_domestic_accommodation_within_threshold_is_deterministically_approved():
+async def test_domestic_accommodation_within_threshold_is_deterministically_approved():
     document = policy_document(
         "02",
         "3. Accommodation",
@@ -75,7 +74,7 @@ def test_domestic_accommodation_within_threshold_is_deterministically_approved()
     nodes = AgentNodes(model, model, tools, CALCULATOR)
     graph = build_agent_graph(nodes)
 
-    result = graph.invoke(
+    result = await graph.ainvoke(
         {
             "messages": [
                 (
@@ -107,7 +106,7 @@ def test_domestic_accommodation_within_threshold_is_deterministically_approved()
     assert "[S1]" in result["messages"][-1].content
 
 
-def test_equipment_above_threshold_without_approval_is_rejected():
+async def test_equipment_above_threshold_without_approval_is_rejected():
     document = policy_document(
         "01",
         "5. Work equipment and minor purchases",
@@ -157,7 +156,7 @@ def test_equipment_above_threshold_without_approval_is_rejected():
     nodes = AgentNodes(model, model, tools, CALCULATOR)
     graph = build_agent_graph(nodes)
 
-    result = graph.invoke(
+    result = await graph.ainvoke(
         {"messages": [("human", "I bought an 80000 HUF monitor without prior approval.")]},
         config={"configurable": {"thread_id": "equipment-1"}, "recursion_limit": 20},
     )
@@ -172,7 +171,7 @@ def test_equipment_above_threshold_without_approval_is_rejected():
     assert result["decision"] == "not_eligible"
 
 
-async def test_travel_journey_is_exposed_through_the_chat_endpoint(monkeypatch):
+async def test_travel_journey_is_exposed_through_the_chat_endpoint():
     document = policy_document(
         "02",
         "3. Accommodation",
@@ -227,16 +226,10 @@ async def test_travel_journey_is_exposed_through_the_chat_endpoint(monkeypatch):
     test_app.state.dependencies = SimpleNamespace(agent_service=service)
 
     async def provide_agent_service():
-        """Provides the real journey service without FastAPI's worker-thread indirection."""
+        """Provides the real journey service."""
 
         return service
 
-    async def run_direct(function, *args):
-        """Runs the synchronous service inline so the API journey stays deterministic."""
-
-        return function(*args)
-
-    monkeypatch.setattr(chat_route, "run_in_threadpool", run_direct)
     test_app.dependency_overrides[get_agent_service] = provide_agent_service
 
     transport = ASGITransport(app=test_app)
@@ -251,10 +244,10 @@ async def test_travel_journey_is_exposed_through_the_chat_endpoint(monkeypatch):
     assert body["decision"] == "partially_eligible"
     assert body["sources"][0]["source_id"] == "S1"
     assert body["steps"] == [
-        "Request understood",
-        "Information extracted",
+        "Intent classified",
+        "Details extracted",
         "Policies searched",
         "Amount calculated",
         "Rules checked",
-        "Answer prepared",
+        "Answer generated",
     ]

@@ -12,19 +12,19 @@ class _Schema(BaseModel):
     value: int
 
 
-def test_run_returns_the_structured_result_on_first_success():
+async def test_run_returns_the_structured_result_on_first_success():
     model = ScriptedChatModel(
         chat_responses=iter([]), structured_responses=iter([_Schema(value=1)])
     )
     runner = StructuredOutputRunner(model, PROMPT, _Schema)
 
-    result = runner.run([HumanMessage(content="x")], fallback=_Schema(value=0))
+    result = await runner.run([HumanMessage(content="x")], fallback=_Schema(value=0))
 
     assert result.value.value == 1
     assert result.degraded is False
 
 
-def test_run_retries_once_then_returns_the_repaired_result():
+async def test_run_retries_once_then_returns_the_repaired_result():
     class _FlakyModel(ScriptedChatModel):
         def with_structured_output(self, schema, **kwargs):
             runnable = super().with_structured_output(schema)
@@ -43,13 +43,13 @@ def test_run_retries_once_then_returns_the_repaired_result():
     model = _FlakyModel(chat_responses=iter([]), structured_responses=iter([_Schema(value=2)]))
     runner = StructuredOutputRunner(model, PROMPT, _Schema)
 
-    result = runner.run([HumanMessage(content="x")], fallback=_Schema(value=0))
+    result = await runner.run([HumanMessage(content="x")], fallback=_Schema(value=0))
 
     assert result.value.value == 2
     assert result.degraded is False
 
 
-def test_run_falls_back_when_both_attempts_fail():
+async def test_run_falls_back_when_both_attempts_fail():
     class _AlwaysFailingModel(ScriptedChatModel):
         def with_structured_output(self, schema, **kwargs):
             class _Raiser:
@@ -61,13 +61,13 @@ def test_run_falls_back_when_both_attempts_fail():
     model = _AlwaysFailingModel(chat_responses=iter([]), structured_responses=iter([]))
     runner = StructuredOutputRunner(model, PROMPT, _Schema)
 
-    result = runner.run([HumanMessage(content="x")], fallback=_Schema(value=99))
+    result = await runner.run([HumanMessage(content="x")], fallback=_Schema(value=99))
 
     assert result.value.value == 99
     assert result.degraded is True
 
 
-def test_run_falls_back_immediately_when_structured_output_is_unsupported():
+async def test_run_falls_back_immediately_when_structured_output_is_unsupported():
     class _UnsupportedModel(ScriptedChatModel):
         def with_structured_output(self, schema, **kwargs):
             raise NotImplementedError
@@ -75,7 +75,7 @@ def test_run_falls_back_immediately_when_structured_output_is_unsupported():
     model = _UnsupportedModel(chat_responses=iter([]), structured_responses=iter([]))
     runner = StructuredOutputRunner(model, PROMPT, _Schema)
 
-    result = runner.run([HumanMessage(content="x")], fallback=_Schema(value=7))
+    result = await runner.run([HumanMessage(content="x")], fallback=_Schema(value=7))
 
     assert result.value.value == 7
     assert result.degraded is True

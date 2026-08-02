@@ -1,4 +1,3 @@
-import asyncio
 import os
 
 import pytest
@@ -44,15 +43,11 @@ def redis_client() -> redis_lib.Redis:
 
 
 async def _invoke(graph, payload: dict, config: dict) -> dict:
-    """Runs a sync graph.invoke() off-thread, mirroring FastAPI's run_in_threadpool bridging
-    back to the same persistent event loop the AsyncRedisSaver checkpointer was set up on."""
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, lambda: graph.invoke(payload, config=config))
+    return await graph.ainvoke(payload, config=config)
 
 
 async def _get_state(graph, config: dict):
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, lambda: graph.get_state(config))
+    return await graph.aget_state(config)
 
 
 def _clarifying_model() -> ScriptedChatModel:
@@ -163,7 +158,7 @@ async def test_separate_workers_share_one_thread_through_redis():
 
 async def test_agent_service_stream_completes_against_the_real_redis_checkpointer():
     """Regression test: AsyncRedisSaver's sync methods raise InvalidStateError when called
-    directly on the event-loop thread. AgentService.stream() must use aget_state(), not
+    directly on the event-loop thread. AgentService.astream() must use aget_state(), not
     get_state(), to build its final result event — this only reproduces against a real
     async checkpointer, never against the default in-memory one used by other graph tests."""
     checkpointer = await build_checkpointer(TEST_REDIS_URL)
@@ -172,7 +167,7 @@ async def test_agent_service_stream_completes_against_the_real_redis_checkpointe
 
     events = [
         event
-        async for event in service.stream("checkpoint-stream", "I drive 18 km, 10 days a month.")
+        async for event in service.astream("checkpoint-stream", "I drive 18 km, 10 days a month.")
     ]
 
     assert events[-1].event == "result"
