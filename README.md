@@ -216,8 +216,10 @@ every setting and contains no credentials.
 docker compose up
 ```
 
-One image serves both processes (`api`, `ui` — same build, each with its own `command:` in
-`docker-compose.yml`). This brings up Redis 8 (+ Redis Insight at <http://127.0.0.1:5540>), Ollama
+The repository contains a mandatory [`Dockerfile`](Dockerfile) and a
+[`docker-compose.yml`](docker-compose.yml) for running all application components. One image serves
+both processes (`api`, `ui` — same build, each with its own `command:` in `docker-compose.yml`). This
+brings up Redis 8 (+ Redis Insight at <http://127.0.0.1:5540>), Ollama
 (a one-shot `ollama-pull` service pulls the configured model before the API starts), the API and the
 Streamlit UI. Compose's `depends_on` health/completion conditions order the startup; the API's own
 FastAPI lifespan ingests the corpus on boot, skipping the work when the stored manifest already
@@ -297,7 +299,22 @@ per-metric score recording; the application supplies only the task function (one
 per case, pinning `reference_date` for deterministic deadline math) and the metric functions. One
 failing case never aborts the run. A local Markdown + JSON report lands under `evaluation_results/`.
 
-**Results, scores and analysis:** see [`evaluation_results/README.md`](evaluation_results/README.md).
+**Results** (`qwen2.5:7b-instruct-q4_K_M`, 20 cases):
+
+| Metric | Result |
+| --- | ---: |
+| classification_accuracy | 90.0% |
+| slot_accuracy | 11.8% |
+| retrieval_hit_at_4 | 0.0% |
+| tool_selection_accuracy | 15.0% |
+| outcome_accuracy | 25.0% |
+| citation_accuracy | 0.0% |
+
+Intent/category classification is strong; every metric downstream of `extract_information` is weak
+because the 7B model often misses the exact canonical value the extraction prompt requires, which
+deterministically routes the turn to `ask_clarification` before it ever reaches the tool-calling loop
+— a genuine small-model capability limit under this design, not a software defect. Full analysis and
+per-case reports: see [`evaluation_results/README.md`](evaluation_results/README.md).
 
 ## 9. Load test method
 
@@ -313,8 +330,10 @@ aggregate result is written to `evaluation_results/load-<timestamp>.json` — th
 directory the functional evaluation writes its reports to — as well as printed to the terminal. The
 PoC stays uncached deliberately, so its behaviour and latency remain easy to explain.
 
-**Results, bottleneck analysis and optimisation proposals:** see
-[`evaluation_results/README.md`](evaluation_results/README.md).
+**Results:** not yet executed in this environment — it requires a live Ollama, Redis and Langfuse
+setup. Method, the reserved results table and the documented bottleneck/optimisation analysis are in
+[`evaluation_results/README.md`](evaluation_results/README.md); running
+`python -m load_test.load` (§7) fills in the results table there.
 
 ## 10. PoC boundaries (deliberately out of scope)
 

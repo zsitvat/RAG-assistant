@@ -334,6 +334,36 @@ It emits LangChain `Document` objects whose `page_content` is Markdown and whose
 the source identity. This adapter exists only because the generic Word loaders discard the heading
 information required by this corpus; all subsequent document processing uses LangChain:
 
+**A heading-preserving library could have replaced this converter.** Candidates considered:
+
+- **`pandoc`** (via `pypandoc`) — excellent, battle-tested docx → Markdown conversion that keeps
+  headings, lists and tables. Rejected because it is an external, non-Python binary: another system
+  dependency to bake into the Docker image and pin/patch independently of `uv`'s Python lockfile, for
+  a corpus of 8 fixed, hand-authored files.
+- **`markitdown`** (Microsoft, wraps `mammoth`) or `mammoth` directly — pure Python, converts docx to
+  Markdown preserving heading structure. Rejected because it is a general-purpose, multi-format
+  converter (pptx, xlsx, images, audio transcription for `markitdown`) pulled in for a single narrow
+  need, and its Markdown table output is not obviously the exact GFM syntax `MarkdownHeaderTextSplitter`
+  and the "one chunk = one rule section" invariant depend on — that fidelity would need the same kind
+  of verification this PoC's own `_table_to_markdown` already guarantees by construction.
+- **`unstructured`** (`partition_docx`, used directly rather than through LangChain's text-mode
+  loader) — classifies elements (`Title`, `NarrativeText`, `Table`, `ListItem`, ...) instead of
+  flattening to plain text, so it does not have the `docx2txt`/text-mode problem above. Rejected here
+  because turning that element stream into a heading-hierarchy Markdown string is close to the same
+  amount of mapping code this PoC already wrote, while adding a much heavier dependency surface (OCR,
+  PDF and other format extras) that this corpus never needs.
+- **`docling`** (IBM) — converts docx to Markdown with headings preserved via its own document model;
+  a strong fit in principle. Rejected for the same reason as `unstructured`: a heavier, actively
+  evolving dependency (bundled layout/model tooling) for a conversion need fully satisfied by ~60 lines
+  of `python-docx` against a small, stable set of known Word styles (`Heading 1..3`, `Title`,
+  `List Bullet`/`List Number`).
+
+None of these would be the wrong choice for a corpus that grows past a handful of files or gains
+inconsistent authors; for 8 fixed, single-author documents, the bespoke converter is easier to test,
+has no external output-format drift to guard against, and adds zero new runtime dependencies beyond
+`python-docx`, which every alternative above still needs (or wraps) to read Word styles in the first
+place.
+
 | Word element | Markdown output |
 | --- | --- |
 | paragraph style `Heading 1..3` | `#` / `##` / `###` + text |
