@@ -1,6 +1,6 @@
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from app.agent.current_request import CurrentRequest
+from app.agent.message_history import MessageHistory
 
 
 def test_messages_starts_at_latest_human_message():
@@ -11,7 +11,7 @@ def test_messages_starts_at_latest_human_message():
         AIMessage(content="answer 2"),
     ]
 
-    latest = CurrentRequest(messages).messages()
+    latest = MessageHistory(messages).messages()
 
     assert latest == messages[2:]
 
@@ -24,7 +24,7 @@ def test_agent_step_count_counts_only_tool_calling_ai_messages_in_the_current_re
         AIMessage(content="final answer"),
     ]
 
-    assert CurrentRequest(messages).agent_step_count() == 1
+    assert MessageHistory(messages).agent_step_count() == 1
 
 
 def test_tool_error_count_counts_error_status_tool_messages():
@@ -34,7 +34,7 @@ def test_tool_error_count_counts_error_status_tool_messages():
         ToolMessage(content="ok", tool_call_id="2", name="calculate", status="success"),
     ]
 
-    assert CurrentRequest(messages).tool_error_count("calculate") == 1
+    assert MessageHistory(messages).tool_error_count("calculate") == 1
 
 
 def test_find_duplicate_call_reuses_the_matching_successful_tool_message():
@@ -51,7 +51,7 @@ def test_find_duplicate_call_reuses_the_matching_successful_tool_message():
         ),
     ]
 
-    duplicate = CurrentRequest(messages).find_duplicate_call("search_policies", {"question": "x"})
+    duplicate = MessageHistory(messages).find_duplicate_call("search_policies", {"question": "x"})
 
     assert duplicate is not None
     assert duplicate.tool_call_id == "1"
@@ -61,7 +61,7 @@ def test_find_duplicate_call_returns_none_when_no_match():
     messages = [HumanMessage(content="q")]
 
     assert (
-        CurrentRequest(messages).find_duplicate_call("search_policies", {"question": "x"}) is None
+        MessageHistory(messages).find_duplicate_call("search_policies", {"question": "x"}) is None
     )
 
 
@@ -89,7 +89,7 @@ def test_model_context_condenses_a_single_previous_request_to_human_and_final_an
         current_tool_message,
     ]
 
-    context = CurrentRequest(messages).model_context()
+    context = MessageHistory(messages).model_context()
 
     assert context == [
         old_human,
@@ -120,7 +120,7 @@ def test_model_context_condenses_multiple_previous_requests():
         current_human,
     ]
 
-    context = CurrentRequest(messages).model_context()
+    context = MessageHistory(messages).model_context()
 
     assert context == [
         first_human,
@@ -153,7 +153,7 @@ def test_model_context_keeps_every_message_of_the_current_request():
         current_second_tool_message,
     ]
 
-    context = CurrentRequest(messages).model_context()
+    context = MessageHistory(messages).model_context()
 
     assert context[-5:] == [
         current_human,
@@ -170,6 +170,6 @@ def test_model_context_returns_the_full_history_when_there_is_no_human_message()
         ToolMessage(content="42", tool_call_id="1", name="calculate"),
     ]
 
-    context = CurrentRequest(messages).model_context()
+    context = MessageHistory(messages).model_context()
 
     assert context == messages

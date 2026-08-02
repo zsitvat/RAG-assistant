@@ -6,7 +6,7 @@ from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 
 from app.agent.calculator import CalculationInputError, ReimbursementCalculator
-from app.agent.current_request import CurrentRequest
+from app.agent.message_history import MessageHistory
 from app.agent.model import CalculationResult, Decision, ExpenseClaim, IntentClassification
 from app.agent.prompt_library import PromptLibrary
 from app.agent.slots import RequiredSlotTable
@@ -62,7 +62,7 @@ class AgentNodes:
 
     def classify_intent(self, state: AgentState) -> AgentState:
         """Classifies the user's intent and, if applicable, the expense category."""
-        context = CurrentRequest(state["messages"]).model_context()
+        context = MessageHistory(state["messages"]).model_context()
         result = self._classify_runner.run(
             context, fallback=IntentClassification(intent="policy_question")
         )
@@ -78,7 +78,7 @@ class AgentNodes:
         previous_decision = state.get("decision")
         category = state.get("category")
 
-        context = CurrentRequest(state["messages"]).model_context()
+        context = MessageHistory(state["messages"]).model_context()
         result = self._extract_runner.run(context, fallback=ExpenseClaim())
         extracted = result.value
         if category is not None:
@@ -109,7 +109,7 @@ class AgentNodes:
             state["intent"], state.get("category"), ExpenseClaim.from_state(state.get("claim"))
         )
         question = CLARIFICATION_QUESTIONS.get(missing[0], DEFAULT_CLARIFICATION_QUESTION)
-        if CurrentRequest(state["messages"]).was_already_asked(question):
+        if MessageHistory(state["messages"]).was_already_asked(question):
             conditional = self._conditional_distance_answer(state, missing)
             if conditional is not None:
                 return conditional
@@ -136,7 +136,7 @@ class AgentNodes:
 
     def agent_step(self, state: AgentState) -> AgentState:
         """Invokes the tool-calling model for one reasoning step, reusing duplicate calls."""
-        request = CurrentRequest(state["messages"])
+        request = MessageHistory(state["messages"])
         if request.agent_step_count() >= MAX_AGENT_STEPS:
             return {"messages": [AIMessage(content="")]}
 
@@ -203,7 +203,7 @@ class AgentNodes:
         if isinstance(last_message, AIMessage) and last_message.content == LLM_UNAVAILABLE_MESSAGE:
             return {"decision": None, "degraded": True}
 
-        request = CurrentRequest(state["messages"])
+        request = MessageHistory(state["messages"])
         request_messages = request.messages()
         tool_messages = [m for m in request_messages if isinstance(m, ToolMessage)]
 

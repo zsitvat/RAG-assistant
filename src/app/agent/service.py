@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langgraph.graph.state import CompiledStateGraph
 
-from app.agent.current_request import CurrentRequest
+from app.agent.message_history import MessageHistory
 from app.agent.model import CalculationResult, ExpenseClaim, Finding
 from app.agent.slots import RequiredSlotTable
 from app.agent.state import RECURSION_LIMIT
@@ -105,7 +105,7 @@ class AgentService:
 
     def _project(self, thread_id: str, state: dict, start: float) -> ChatResponse:
         """Builds the public reply from final graph state, shared by both endpoints."""
-        request_messages = CurrentRequest(state["messages"]).messages()
+        request_messages = MessageHistory(state["messages"]).messages()
         self._observability.update_trace(
             thread_id=thread_id,
             intent=state.get("intent"),
@@ -125,7 +125,7 @@ class AgentService:
 
     def _project_evaluation(self, thread_id: str, state: dict) -> EvaluationResponse:
         """Builds the internal evaluation contract from final graph state."""
-        request_messages = CurrentRequest(state["messages"]).messages()
+        request_messages = MessageHistory(state["messages"]).messages()
         claim = ExpenseClaim.from_state(state.get("claim"))
         intent = state["intent"]
         category = state.get("category")

@@ -1,7 +1,7 @@
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 
 
-class CurrentRequest:
+class MessageHistory:
     """Provides messages and tool-call facts for the latest user request."""
 
     def __init__(self, messages: list[BaseMessage]) -> None:
