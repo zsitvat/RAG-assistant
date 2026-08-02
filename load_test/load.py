@@ -1,22 +1,47 @@
+import argparse
 import asyncio
+import json
 import math
 import statistics
 import time
 import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime
+from pathlib import Path
+
+from pydantic import BaseModel
 
 from app.agent.service import AgentService
-from app.api.schemas import LoadTestResult
+from app.dependencies import ApplicationDependencies
 from app.integrations.langfuse import Observability
+from app.settings import Settings, get_settings
 
+DEFAULT_DATASET_NAME = "test-dataset"
 MIN_MEASURED_TURNS = 50
 MAX_MEASURED_TURNS = 200
 MIN_CONCURRENCY = 1
 MAX_CONCURRENCY = 4
+REPORT_DIR = Path(".docs/evaluation_result")
 
 
 class LoadTestValidationError(ValueError):
     """Raised when the requested load-test parameters resolve outside the allowed bounds."""
+
+
+class LoadTestResult(BaseModel):
+    """Aggregates latency, throughput and error counts for one load-test run."""
+
+    load_run_id: str
+    dataset_name: str
+    query_count: int
+    max_concurrency: int
+    total_duration_ms: int
+    throughput_queries_per_minute: float
+    latency_mean_ms: float
+    latency_median_ms: float
+    latency_p95_ms: float
+    error_count: int
+    dataset_run_urls: list[str]
 
 
 class LoadTestRunner:
@@ -113,3 +138,50 @@ class LoadTestRunner:
         ordered = sorted(values)
         index = min(len(ordered) - 1, math.ceil(percentile / 100 * len(ordered)) - 1)
         return ordered[max(0, index)]
+
+
+async def _build_runner(settings: Settings, observability: Observability) -> LoadTestRunner:
+    """Builds the full application dependency graph and wraps its agent service for load testing."""
+    dependencies = await ApplicationDependencies.build(settings)
+    return LoadTestRunner(dependencies.agent_service, observability)
+
+
+def main() -> None:
+    """CLI entry point: `python -m load_test.load [--dataset-name ...] [--repetitions N] \
+[--max-concurrency N]`."""
+    parser = argparse.ArgumentParser(
+        description="Replay a Langfuse dataset through the live agent graph under bounded "
+        "concurrency to measure latency and throughput."
+    )
+    parser.add_argument("--dataset-name", default=DEFAULT_DATASET_NAME)
+    parser.add_argument("--repetitions", type=int, default=3)
+    parser.add_argument("--max-concurrency", type=int, default=MAX_CONCURRENCY)
+    args = parser.parse_args()
+
+    settings = get_settings()
+    observability = Observability.build(settings)
+    if observability.client is None:
+        raise SystemExit(
+            "Langfuse must be enabled and configured (LANGFUSE_ENABLED=true plus credentials) "
+            "to run the load test."
+        )
+
+    runner = asyncio.run(_build_runner(settings, observability))
+    try:
+        result = runner.run(args.dataset_name, args.repetitions, args.max_concurrency)
+    except LoadTestValidationError as exc:
+        raise SystemExit(str(exc)) from exc
+
+    timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    report_path = REPORT_DIR / f"load-{timestamp}.json"
+    report_path.write_text(json.dumps(result.model_dump(), indent=2))
+
+    print(json.dumps(result.model_dump(), indent=2))
+    print(f"Wrote {report_path}")
+    for url in result.dataset_run_urls:
+        print(f"Langfuse run: {url}")
+
+
+if __name__ == "__main__":
+    main()

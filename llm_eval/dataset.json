@@ -6,10 +6,17 @@
     "expected_intent": "policy_question",
     "expected_category": null,
     "expected_slots": {},
-    "expected_tools": ["search_policies"],
-    "expected_doc_ids": ["01", "06", "07"],
+    "expected_tools": [
+      "search_policies"
+    ],
+    "expected_doc_ids": [
+      "01",
+      "06",
+      "07"
+    ],
     "expected_amount_huf": null,
-    "expected_decision": null
+    "expected_decision": null,
+    "expected_answer_summary": "Answers the general expense-submission process question by citing docs 01, 06 and 07, without stating an eligibility decision since no specific claim was described."
   },
   {
     "id": "general-02",
@@ -18,10 +25,16 @@
     "expected_intent": "document_requirements",
     "expected_category": "meal",
     "expected_slots": {},
-    "expected_tools": ["search_policies", "check_rules"],
-    "expected_doc_ids": ["01"],
+    "expected_tools": [
+      "search_policies",
+      "check_rules"
+    ],
+    "expected_doc_ids": [
+      "01"
+    ],
     "expected_amount_huf": null,
-    "expected_decision": "eligible"
+    "expected_decision": "eligible",
+    "expected_answer_summary": "Lists the documents required for a business meal expense claim, citing doc 01, and indicates such a claim would be eligible."
   },
   {
     "id": "meal-01",
@@ -35,10 +48,17 @@
       "is_business_related": true,
       "non_reimbursable_amount": 0
     },
-    "expected_tools": ["search_policies", "calculate", "check_rules"],
-    "expected_doc_ids": ["01"],
+    "expected_tools": [
+      "search_policies",
+      "calculate",
+      "check_rules"
+    ],
+    "expected_doc_ids": [
+      "01"
+    ],
     "expected_amount_huf": 48000,
-    "expected_decision": "eligible"
+    "expected_decision": "eligible",
+    "expected_answer_summary": "States the meal claim is eligible for the full 48,000 HUF claimed, citing doc 01."
   },
   {
     "id": "meal-02",
@@ -52,10 +72,17 @@
       "is_business_related": true,
       "non_reimbursable_amount": 0
     },
-    "expected_tools": ["search_policies", "calculate", "check_rules"],
-    "expected_doc_ids": ["01"],
+    "expected_tools": [
+      "search_policies",
+      "calculate",
+      "check_rules"
+    ],
+    "expected_doc_ids": [
+      "01"
+    ],
     "expected_amount_huf": 90000,
-    "expected_decision": "partially_eligible"
+    "expected_decision": "partially_eligible",
+    "expected_answer_summary": "States the meal claim is only partially eligible, reimbursing 90,000 HUF instead of the 100,000 HUF claimed, citing doc 01."
   },
   {
     "id": "meal-03",
@@ -69,10 +96,17 @@
       "is_business_related": true,
       "non_reimbursable_amount": 9000
     },
-    "expected_tools": ["search_policies", "calculate", "check_rules"],
-    "expected_doc_ids": ["01"],
+    "expected_tools": [
+      "search_policies",
+      "calculate",
+      "check_rules"
+    ],
+    "expected_doc_ids": [
+      "01"
+    ],
     "expected_amount_huf": 45000,
-    "expected_decision": "partially_eligible"
+    "expected_decision": "partially_eligible",
+    "expected_answer_summary": "States the meal claim is only partially eligible, reimbursing 45,000 HUF instead of the 60,000 HUF claimed since 9,000 HUF of it was alcohol, citing doc 01."
   },
   {
     "id": "travel-01",
@@ -85,10 +119,17 @@
       "is_business_related": true,
       "is_international_trip": false
     },
-    "expected_tools": ["search_policies", "calculate", "check_rules"],
-    "expected_doc_ids": ["02"],
+    "expected_tools": [
+      "search_policies",
+      "calculate",
+      "check_rules"
+    ],
+    "expected_doc_ids": [
+      "02"
+    ],
     "expected_amount_huf": 40000,
-    "expected_decision": "eligible"
+    "expected_decision": "eligible",
+    "expected_answer_summary": "States the domestic hotel expense is eligible for the full 40,000 HUF claimed, citing doc 02."
   },
   {
     "id": "travel-02",
@@ -101,10 +142,17 @@
       "is_business_related": true,
       "is_international_trip": false
     },
-    "expected_tools": ["search_policies", "calculate", "check_rules"],
-    "expected_doc_ids": ["02"],
+    "expected_tools": [
+      "search_policies",
+      "calculate",
+      "check_rules"
+    ],
+    "expected_doc_ids": [
+      "02"
+    ],
     "expected_amount_huf": 12000,
-    "expected_decision": "partially_eligible"
+    "expected_decision": "partially_eligible",
+    "expected_answer_summary": "States the domestic taxi expense is partially eligible, with a reimbursable amount of 12,000 HUF, citing doc 02."
   },
   {
     "id": "travel-03",
@@ -118,10 +166,17 @@
       "is_international_trip": true,
       "approval_obtained": false
     },
-    "expected_tools": ["search_policies", "calculate", "check_rules"],
-    "expected_doc_ids": ["02"],
+    "expected_tools": [
+      "search_policies",
+      "calculate",
+      "check_rules"
+    ],
+    "expected_doc_ids": [
+      "02"
+    ],
     "expected_amount_huf": 200000,
-    "expected_decision": "not_eligible"
+    "expected_decision": "not_eligible",
+    "expected_answer_summary": "States the international travel expense is not eligible because department head approval has not been obtained, citing doc 02."
   },
   {
     "id": "commuting-01",
@@ -133,10 +188,17 @@
       "expense_type": "pass",
       "amount_huf": 20000
     },
-    "expected_tools": ["search_policies", "calculate", "check_rules"],
-    "expected_doc_ids": ["03"],
+    "expected_tools": [
+      "search_policies",
+      "calculate",
+      "check_rules"
+    ],
+    "expected_doc_ids": [
+      "03"
+    ],
     "expected_amount_huf": 16000,
-    "expected_decision": "eligible"
+    "expected_decision": "eligible",
+    "expected_answer_summary": "States the commuting pass expense is eligible, with a reimbursable amount of 16,000 HUF (less than the 20,000 HUF pass cost), citing doc 03."
   },
   {
     "id": "commuting-02",
@@ -150,10 +212,17 @@
       "distance_is_one_way": true,
       "commute_days_per_month": 20
     },
-    "expected_tools": ["search_policies", "calculate", "check_rules"],
-    "expected_doc_ids": ["03"],
+    "expected_tools": [
+      "search_policies",
+      "calculate",
+      "check_rules"
+    ],
+    "expected_doc_ids": [
+      "03"
+    ],
     "expected_amount_huf": 7200,
-    "expected_decision": "not_eligible"
+    "expected_decision": "not_eligible",
+    "expected_answer_summary": "States the own-car commuting expense claim is not eligible, citing doc 03."
   },
   {
     "id": "commuting-03",
@@ -169,7 +238,8 @@
     "expected_tools": [],
     "expected_doc_ids": [],
     "expected_amount_huf": null,
-    "expected_decision": "needs_info"
+    "expected_decision": "needs_info",
+    "expected_answer_summary": "Asks a clarifying question rather than giving a decision, since required information (whether the distance is one-way or round trip) is missing; no citation is expected."
   },
   {
     "id": "mileage-01",
@@ -181,10 +251,17 @@
       "distance_km": 30,
       "distance_is_one_way": true
     },
-    "expected_tools": ["search_policies", "calculate", "check_rules"],
-    "expected_doc_ids": ["04"],
+    "expected_tools": [
+      "search_policies",
+      "calculate",
+      "check_rules"
+    ],
+    "expected_doc_ids": [
+      "04"
+    ],
     "expected_amount_huf": 2700,
-    "expected_decision": "eligible"
+    "expected_decision": "eligible",
+    "expected_answer_summary": "States the mileage expense for the client visit is eligible, with a reimbursable amount of 2,700 HUF, citing doc 04."
   },
   {
     "id": "equipment-01",
@@ -196,10 +273,17 @@
       "amount_huf": 40000,
       "is_business_related": true
     },
-    "expected_tools": ["search_policies", "calculate", "check_rules"],
-    "expected_doc_ids": ["01"],
+    "expected_tools": [
+      "search_policies",
+      "calculate",
+      "check_rules"
+    ],
+    "expected_doc_ids": [
+      "01"
+    ],
     "expected_amount_huf": 40000,
-    "expected_decision": "eligible"
+    "expected_decision": "eligible",
+    "expected_answer_summary": "States the equipment purchase is eligible for the full 40,000 HUF claimed, citing doc 01."
   },
   {
     "id": "equipment-02",
@@ -212,10 +296,17 @@
       "is_business_related": true,
       "approval_obtained": false
     },
-    "expected_tools": ["search_policies", "calculate", "check_rules"],
-    "expected_doc_ids": ["01"],
+    "expected_tools": [
+      "search_policies",
+      "calculate",
+      "check_rules"
+    ],
+    "expected_doc_ids": [
+      "01"
+    ],
     "expected_amount_huf": 180000,
-    "expected_decision": "not_eligible"
+    "expected_decision": "not_eligible",
+    "expected_answer_summary": "States the equipment purchase is not eligible because management approval has not been obtained, citing doc 01."
   },
   {
     "id": "benefits-01",
@@ -229,10 +320,17 @@
       "annual_budget_used_huf": 40000,
       "tenure_months": 12
     },
-    "expected_tools": ["search_policies", "calculate", "check_rules"],
-    "expected_doc_ids": ["05"],
+    "expected_tools": [
+      "search_policies",
+      "calculate",
+      "check_rules"
+    ],
+    "expected_doc_ids": [
+      "05"
+    ],
     "expected_amount_huf": 50000,
-    "expected_decision": "eligible"
+    "expected_decision": "eligible",
+    "expected_answer_summary": "States the recreational benefit claim is eligible for the full 50,000 HUF claimed, citing doc 05."
   },
   {
     "id": "benefits-02",
@@ -246,10 +344,17 @@
       "annual_budget_used_huf": 0,
       "tenure_months": 3
     },
-    "expected_tools": ["search_policies", "calculate", "check_rules"],
-    "expected_doc_ids": ["05"],
+    "expected_tools": [
+      "search_policies",
+      "calculate",
+      "check_rules"
+    ],
+    "expected_doc_ids": [
+      "05"
+    ],
     "expected_amount_huf": 80000,
-    "expected_decision": "not_eligible"
+    "expected_decision": "not_eligible",
+    "expected_answer_summary": "States the training allowance claim is not eligible given the short tenure, citing doc 05."
   },
   {
     "id": "deadline-01",
@@ -260,10 +365,16 @@
     "expected_slots": {
       "expense_date": "2026-07-10"
     },
-    "expected_tools": ["search_policies", "check_rules"],
-    "expected_doc_ids": ["01"],
+    "expected_tools": [
+      "search_policies",
+      "check_rules"
+    ],
+    "expected_doc_ids": [
+      "01"
+    ],
     "expected_amount_huf": null,
-    "expected_decision": "eligible"
+    "expected_decision": "eligible",
+    "expected_answer_summary": "States the meal expense submission is still within the deadline, citing doc 01."
   },
   {
     "id": "deadline-02",
@@ -274,10 +385,16 @@
     "expected_slots": {
       "expense_date": "2026-05-01"
     },
-    "expected_tools": ["search_policies", "check_rules"],
-    "expected_doc_ids": ["01"],
+    "expected_tools": [
+      "search_policies",
+      "check_rules"
+    ],
+    "expected_doc_ids": [
+      "01"
+    ],
     "expected_amount_huf": null,
-    "expected_decision": "not_eligible"
+    "expected_decision": "not_eligible",
+    "expected_answer_summary": "States the equipment expense submission deadline has expired, citing doc 01."
   },
   {
     "id": "document-01",
@@ -292,10 +409,18 @@
       "non_reimbursable_amount": 0,
       "has_receipt": false
     },
-    "expected_tools": ["search_policies", "calculate", "check_rules"],
-    "expected_doc_ids": ["01", "06"],
+    "expected_tools": [
+      "search_policies",
+      "calculate",
+      "check_rules"
+    ],
+    "expected_doc_ids": [
+      "01",
+      "06"
+    ],
     "expected_amount_huf": 30000,
-    "expected_decision": "not_eligible"
+    "expected_decision": "not_eligible",
+    "expected_answer_summary": "States the meal expense claim is not eligible because the receipt is missing, citing docs 01 and 06."
   },
   {
     "id": "unsupported-01",
@@ -307,6 +432,7 @@
     "expected_tools": [],
     "expected_doc_ids": [],
     "expected_amount_huf": null,
-    "expected_decision": "out_of_scope"
+    "expected_decision": "out_of_scope",
+    "expected_answer_summary": "Declines to answer since the request is a personal tax question outside company expense/benefits policy scope, with a disclaimer and no fabricated policy answer."
   }
 ]

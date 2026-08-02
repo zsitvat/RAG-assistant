@@ -3,7 +3,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from pydantic import BaseModel
 
 from app.agent.structured import StructuredOutputRunner
-from tests.fakes import ScriptedChatModel
+from app.tests.fakes import ScriptedChatModel
 
 PROMPT = ChatPromptTemplate.from_messages([MessagesPlaceholder("messages")])
 

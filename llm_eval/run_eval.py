@@ -12,24 +12,38 @@ from app.integrations.langfuse import Observability
 from app.integrations.llm import build_chat_model
 from app.rules.loader import load_rule_catalogue
 from app.settings import Settings, get_settings
-from eval.langfuse_sync import DATASET_NAME, LangfuseDatasetSync
-from eval.metrics import EvaluationMetrics
-from eval.model import EvalDataset
-from eval.report import EvaluationReport
+from llm_eval.dataset_sync import DATASET_NAME, LangfuseDatasetSync
+from llm_eval.judge import JUDGE_PROMPT, AnswerJudgeVerdict
+from llm_eval.metrics import EvaluationMetrics
+from llm_eval.model import EvalDataset
+from llm_eval.report import EvaluationReport
 
 DATASET_PATH = Path(__file__).parent / "dataset.json"
-REPORT_DIR = Path(".docs/eval")
+REPORT_DIR = Path(".docs/evaluation_result")
 REQUEST_TIMEOUT_SECONDS = 180
 
 
 class EvaluationRunner:
-    """Syncs the dataset, runs it as a Langfuse experiment, and writes the local reports."""
+    """Syncs the dataset, runs it as a Langfuse experiment, and writes the local reports.
+
+    The six deterministic metrics always evaluate whatever LLM_MODEL the live endpoint is
+    configured with; there is no independent reference model to confirm a low score there is a
+    real capability limit rather than a harness/prompt defect. The answer_quality judge is the one
+    exception: it runs on EVAL_JUDGE_MODEL, independently configurable from LLM_MODEL, to avoid
+    the tested model grading its own answers. See technical design §13.3 "Known limitation".
+    """
 
     def __init__(self, settings: Settings, observability: Observability) -> None:
         """Stores settings and the observability adapter used for sync, scoring and prompts."""
         self._settings = settings
         self._client = observability.client
-        self._metrics = EvaluationMetrics()
+        self._metrics = EvaluationMetrics(
+            answer_judge=StructuredOutputRunner(
+                build_chat_model(settings, settings.eval_judge_model),
+                JUDGE_PROMPT,
+                AnswerJudgeVerdict,
+            )
+        )
         self._classify_runner = StructuredOutputRunner(
             build_chat_model(settings),
             PromptLibrary(observability).get("classify_intent").template,
@@ -56,6 +70,7 @@ class EvaluationRunner:
                 self._metrics.tool_selection_accuracy,
                 self._metrics.outcome_accuracy,
                 self._metrics.citation_accuracy,
+                self._metrics.answer_quality,
             ]
         )
 
@@ -105,7 +120,7 @@ class EvaluationRunner:
 
 
 def main() -> None:
-    """CLI entry point: `python -m eval.run_eval [--node intent]`."""
+    """CLI entry point: `python -m llm_eval.run_eval [--node intent]`."""
     parser = argparse.ArgumentParser(description="Run the functional evaluation dataset.")
     parser.add_argument("--node", choices=["intent"], default=None)
     args = parser.parse_args()

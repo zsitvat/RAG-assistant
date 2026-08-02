@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     llm_backend: Literal["ollama", "dummy"] = "ollama"
     ollama_base_url: str = "http://ollama:11434"
     llm_model: str = "qwen2.5:7b-instruct-q4_K_M"
+    eval_judge_model: str = "qwen2.5:7b-instruct-q4_K_M"
 
     api_base_url: str = "http://api:8000"
     ui_origin: str = "http://localhost:8501"

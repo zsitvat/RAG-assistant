@@ -8,6 +8,7 @@ METRIC_ORDER = [
     "tool_selection_accuracy",
     "outcome_accuracy",
     "citation_accuracy",
+    "answer_quality",
 ]
 
 

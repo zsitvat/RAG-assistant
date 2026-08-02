@@ -28,6 +28,7 @@ class EvalCase(BaseModel):
     expected_doc_ids: list[str] = []
     expected_amount_huf: float | None = None
     expected_decision: Decision | None = None
+    expected_answer_summary: str
 
     @model_validator(mode="after")
     def _validate_shape(self) -> "EvalCase":

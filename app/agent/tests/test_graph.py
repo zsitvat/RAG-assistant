@@ -8,7 +8,7 @@ from app.agent.model import ExpenseClaim, IntentClassification
 from app.agent.nodes import AgentNodes
 from app.agent.state import MAX_AGENT_STEPS
 from app.rules.loader import load_rule_catalogue
-from tests.fakes import ScriptedChatModel
+from app.tests.fakes import ScriptedChatModel
 
 CALCULATOR = ReimbursementCalculator(load_rule_catalogue())
 

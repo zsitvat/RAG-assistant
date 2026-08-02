@@ -23,7 +23,7 @@ contract is. It is the implementation reference.
 | No paid API, local open-source LLM + trade-off notes | §9 – Ollama + Qwen2.5-7B-Instruct, dummy LLM fallback |
 | Streamlit UI showing the main steps and RAG result | §10.2 – streamed, expandable source and step summary; §11 – detailed diagnostics in Langfuse |
 | Containerised, Dockerfile mandatory, compose preferred | §12 – root `Dockerfile` + compose with `api`, `ui`, `ollama`, `redis` |
-| 10–20 question functional eval | §13 – version-controlled `eval/dataset.<lang>.json`, executed as a Langfuse experiment |
+| 10–20 question functional eval | §13 – version-controlled `llm_eval/dataset.<lang>.json`, executed as a Langfuse experiment |
 | 50–200 query load test, latency, bottleneck, 1–2 optimisations | §14 |
 | README with problem, architecture, results, run instructions | §16 – milestone M7 |
 
@@ -133,8 +133,8 @@ app/
     routes/
       health.py                  # liveness/readiness endpoints
       chat.py                    # chat, streaming and thread-reset endpoints
-      admin.py                   # ingest, index-stat and load-test endpoints
-      evaluation.py              # internal single-turn evaluation endpoint used by eval/run_eval.py
+      admin.py                   # ingest and index-stat endpoints
+      evaluation.py              # internal single-turn evaluation endpoint used by llm_eval/run_eval.py
   agent/
     service.py                 # invoke, stream and reset use cases exposed to the API
     graph.py                   # node/routing assembly and compilation
@@ -152,9 +152,6 @@ app/
     prompts.py                  # embedded PoC prompt templates
     prompt_library.py           # Langfuse-resolved-vs-embedded prompt resolution and validation
     tests/                      # co-located unit tests for this package
-  evaluation/
-    load.py                    # endpoint-triggered Langfuse dataset load experiment
-    tests/                     # co-located unit tests for this package
   integrations/
     llm.py                     # ChatOllama/FakeListChatModel factory
     redis.py                   # Redis connection, build-info and index-stat operations
@@ -186,42 +183,59 @@ app/
     loader.py                   # rules.yaml loading and validation
     model.py                    # rule-catalogue Pydantic contracts
     tests/                      # co-located unit tests for this package
-eval/
+  tests/
+    fakes.py                    # shared test doubles (ScriptedChatModel, tool/document builders)
+    test_dependencies.py        # app/dependencies.py DI container
+    api/                        # full-HTTP-stack tests exercised through app.main
+    journeys/                   # cross-module compiled-graph and rule/document-consistency integration tests
+llm_eval/                    # standalone functional-evaluation CLI script, not a formal package (no __init__.py, no tests)
   dataset.json               # 20 functional test cases; source of truth
   model.py                   # EvalCase/EvalDataset contracts and validation errors
-  metrics.py                 # per-case/aggregate evaluation metrics
+  metrics.py                 # per-case/aggregate evaluation metrics, including the answer_quality judge
   report.py                  # Markdown/JSON local report generation
-  langfuse_sync.py           # syncs dataset.json to the Langfuse dataset
+  dataset_sync.py            # syncs dataset.json to the Langfuse dataset
+  judge.py                   # AnswerJudgeVerdict + judge prompt for the answer_quality metric
   run_eval.py                # sync dataset + run Langfuse experiment + local reports
-  tests/                     # co-located unit tests for this package
-tests/
-  fakes.py                   # shared test doubles (ScriptedChatModel, tool/document builders)
-  test_dependencies.py       # app/dependencies.py DI container
-  api/                       # full-HTTP-stack tests exercised through app.main
-  journeys/                  # cross-module compiled-graph and rule/document-consistency integration tests
-rules.yaml                # small language-independent deterministic rule catalogue
+load_test/                   # standalone load-test CLI script, not a formal package (no __init__.py, no tests)
+  load.py                    # LoadTestRunner + LoadTestResult + CLI entry point
+config/
+  rules.yaml                # small language-independent deterministic rule catalogue
+docker/
+  entrypoint.sh
 Dockerfile
 docker-compose.yml
-entrypoint.sh
 pyproject.toml             # project metadata, dependencies, Ruff/Bandit/pytest/coverage configuration
 uv.lock                    # pinned, reproducible dependency lock file (committed)
 sonar-project.properties   # Sonar source, test and coverage paths
 README.md
 ```
 
-Unit tests are co-located with the package they cover, under a `tests/` subfolder inside that
-package (`app/agent/tests/test_calculator.py` covers `app/agent/calculator.py`; the top-level
-`eval/` package gets `eval/tests/` the same way). A test's location names the module it exercises
-without a separate mirrored tree to keep in sync. Two kinds of tests don't belong to a single
-package and stay under the root `tests/`: `tests/journeys/` holds full compiled-graph journeys and
-rule/document-consistency checks that exercise `agent`, `rag` and `rules` together, and `tests/api/`
-holds tests that exercise the HTTP surface end-to-end through `app.main` rather than importing
-`app.api.routes.*` directly. `tests/fakes.py` holds test doubles shared across all of these
-locations, imported everywhere as `from tests.fakes import ...` — which is also why the root
-`tests/` package and every package-local `tests/` subfolder carry an `__init__.py`. `pytest`
-discovers all of them via `testpaths = ["tests", "app", "eval"]`; coverage and Sonar configuration
-explicitly excise the co-located `tests/` subfolders from source-code accounting so they are
-measured as tests, not counted as application code.
+Unit tests inside the `app/` package are co-located with the module they cover, under a `tests/`
+subfolder inside that sub-package (`app/agent/tests/test_calculator.py` covers
+`app/agent/calculator.py`). A test's location names the module it exercises without a separate
+mirrored tree to keep in sync. Two kinds of tests don't belong to a single sub-package and stay
+under `app/tests/` instead: `app/tests/journeys/` holds full compiled-graph journeys and
+rule/document-consistency checks that exercise `agent`, `rag` and `rules` together, and
+`app/tests/api/` holds tests that exercise the HTTP surface end-to-end through `app.main` rather
+than importing `app.api.routes.*` directly. `app/tests/fakes.py` holds test doubles shared across
+all of these locations, imported everywhere as `from app.tests.fakes import ...` — which is also why
+`app/tests/` and every sub-package `tests/` subfolder carry an `__init__.py`.
+
+`llm_eval/` and `load_test/` are the two exceptions to that package structure, and the only parts of
+the repository with no unit tests at all: each is a standalone CLI script users run directly
+(`python -m llm_eval.run_eval`, `python -m load_test.load`) against a live Redis/Ollama/Langfuse
+stack, not app logic exercised by the deployed request path, so neither carries an `__init__.py` nor
+a `tests/` subfolder — they are validated by running them, not by a mocked unit-test suite (§13.4).
+`load_test/` in particular used to be `app/loadtest/`, invoked as an `/admin/load-test` endpoint
+inside the live FastAPI process; it moved out to a standalone script (§14) specifically so a crash
+or resource exhaustion during a load run cannot take real `/chat` traffic down with it.
+
+`pytest` discovers tests via `testpaths = ["app"]` — `llm_eval/` and `load_test/` are outside that
+scope entirely, so coverage (`source = ["app"]`) never touches either. Sonar configuration explicitly
+excises the co-located `app/**/tests/` subfolders from source-code accounting so they are measured as
+tests, not counted as application code. `load_test/load.py` stays in the Sonar and Bandit source scan
+(it is still real code worth static analysis, even without tests); `llm_eval/` stays outside all of
+it, matching its existing scope as a dev tool rather than shipped production code.
 
 Dependency management uses `uv` directly: runtime dependencies live in `[project.dependencies]` and
 development/quality-tool dependencies in `[dependency-groups.dev]`, both inside `pyproject.toml`;
@@ -1044,7 +1058,6 @@ schemas live in `app/api/schemas.py`; route modules only handle transport and ca
 | `POST` | `/chat` | one request: `{thread_id, message}` → minimal user-facing `ChatResponse` |
 | `POST` | `/chat/stream` | same, streamed as SSE: public `step`, `source` and `token` events, then one `result` event with the complete `ChatResponse` |
 | `POST` | `/admin/eval` | run one evaluation turn and return the internal structured outputs needed by the eval harness; not used by the UI |
-| `POST` | `/admin/load-test` | synchronously run a named Langfuse dataset as a bounded-concurrency load experiment and return aggregate timings plus Langfuse run links |
 | `GET` | `/health` | liveness — process is up |
 | `GET` | `/ready` | readiness — Redis reachable, index present with matching `DIM`, LLM responding |
 | `POST` | `/admin/ingest` | trigger ingest (no-op when `manifest:corpus` matches); used by the entrypoint and by tests |
@@ -1197,6 +1210,7 @@ variables:
 | `LLM_BACKEND` | `ollama` | `ollama` or `dummy` |
 | `OLLAMA_BASE_URL` | `http://ollama:11434` | serving endpoint |
 | `LLM_MODEL` | `qwen2.5:7b-instruct-q4_K_M` | model tag |
+| `EVAL_JUDGE_MODEL` | `qwen2.5:7b-instruct-q4_K_M` | model tag used by `llm_eval`'s `answer_quality` LLM-as-judge metric; defaults to the same model as `LLM_MODEL` but can be pointed at a second pulled model for an independent judge | i
 | `API_BASE_URL` | `http://api:8000` | used by the Streamlit client |
 | `REDIS_URL` | `redis://redis:6379/0` | single datastore connection |
 | `LANGFUSE_ENABLED` | `true` | turn the callback handler on/off; required for official eval and load runs |
@@ -1333,7 +1347,7 @@ rather than silently losing the file copy.
 
 ### 13.1 Dataset
 
-`eval/dataset.json`, a JSON array of 20 cases covering: general policy question, meal expense, exceeding a cap,
+`llm_eval/dataset.json`, a JSON array of 20 cases covering: general policy question, meal expense, exceeding a cap,
 prohibited item (alcohol), travel, accommodation, taxi, commuting by pass, commuting by own car,
 one-way/round-trip ambiguity, mileage for a client visit, EV rate, work equipment under and over
 the approval threshold, holiday allowance with partial budget used, training allowance eligibility,
@@ -1350,7 +1364,8 @@ deadline still open, deadline expired, missing receipt, unsupported question.
     "expected_tools": ["search_policies", "calculate", "check_rules"],
     "expected_doc_ids": ["01", "06"],
     "expected_amount_huf": 75000,
-    "expected_decision": "partially_eligible"
+    "expected_decision": "partially_eligible",
+    "expected_answer_summary": "States the meal claim is only partially eligible, reimbursing 75,000 HUF instead of the 82,000 HUF claimed since 7,000 HUF was alcohol, citing doc 01."
   }
 ]
 ```
@@ -1371,26 +1386,51 @@ metadata.
 | Tool-selection accuracy | current-turn ordered tool-name list equals `expected_tools` |
 | Outcome accuracy | `decision` matches and, when present, calculation `amount_huf` equals `expected_amount_huf` |
 | Citation accuracy | the answer cites at least one expected document returned by retrieval |
+| Answer quality | LLM-as-judge: does the final answer text (`EvaluationResponse.answer`) correctly and clearly convey `expected_answer_summary`, without a fabricated decision, amount or citation |
 
-Each case therefore produces six simple Boolean/numeric Langfuse scores. The report aggregates each
-score as a percentage and lists failed case ids. A clarification case uses
-`expected_decision: needs_info`, so it needs no separate metric.
+The first six are simple deterministic Boolean/numeric checks over structured graph state — none of
+them ever look at the generated answer's prose. `answer_quality` is the one exception and the only
+non-deterministic metric: `EvaluationMetrics.answer_quality` sends the question, the final answer
+text and the case's `expected_answer_summary` (a short, hand-authored reference of what a correct
+answer must state) to a judge chat model via `StructuredOutputRunner`, which returns a typed
+`AnswerJudgeVerdict{correct, reasoning}`. The judge runs on `EVAL_JUDGE_MODEL` — independently
+configurable from `LLM_MODEL` — specifically so the model being evaluated is never the one grading
+its own answers. The report aggregates each score as a percentage and lists failed case ids. A
+clarification case uses `expected_decision: needs_info`, so it needs no separate outcome/citation
+metric, but still gets an `answer_quality` judgement against its own `expected_answer_summary`.
 
 ### 13.3 Runner
 
-`python -m eval.run_eval` validates `eval/dataset.json`, idempotently synchronises its cases to the
-versioned Langfuse dataset `rag-assistant-functional`, and starts a named Langfuse experiment. The
+`python -m llm_eval.run_eval` validates `llm_eval/dataset.json`, idempotently synchronises its cases to the
+versioned Langfuse dataset `test-dataset`, and starts a named Langfuse experiment. The
 runner posts each case to the running API (`POST /admin/eval`) with the dataset item id and
 experiment name in trace metadata plus a pinned `reference_date` request field, then reads metrics
 from the internal `EvaluationResponse`. It still measures the deployed graph over HTTP, but does
 not force evaluation-only fields into the user-facing contract. Langfuse stores the item-to-trace
 link, run metadata and six per-case scores. One pass over the 20 cases is the official PoC
 evaluation; a suspicious failure can be rerun manually and compared through its trace. The runner
-writes `.docs/eval/functional-<timestamp>.md` (summary table + per-case rows + failure notes) and a
+writes `.docs/evaluation_result/functional-<timestamp>.md` (summary table + per-case rows + failure notes) and a
 machine-readable `.json` next to it, and pushes each metric to Langfuse as a score on that turn's
 trace (§11), so a failure can be opened and inspected step by step. `--node intent` uses the same
 dataset and experiment flow while evaluating only one node in-process (the assignment explicitly
 allows node-level evaluation) — useful because intent errors cascade.
+
+**Known limitation — the agent being evaluated is always whatever `LLM_MODEL` the live endpoint is
+configured with, never an independent reference model.** This is deliberate for answering "is this
+deployed configuration good enough," but it means a low score on the six deterministic metrics
+cannot, by construction, distinguish a genuine capability limit of that one model from a harness or
+prompt defect that would depress scores for any model. `answer_quality` (§13.2) closes half of this
+gap: its judge model is `EVAL_JUDGE_MODEL`, independently configurable from `LLM_MODEL`, so the
+model generating an answer never grades its own answer. The remaining half is not closed — there is
+still no second *agent* backend to confirm a low deterministic-metric score is a model-capability
+limit rather than a harness/prompt defect. The README's current low-score analysis (§8) reaches its
+"capability limit, not a bug" conclusion through manual spot-checking of individual `/admin/eval`
+traces, not through a second agent-model run. A more convincing version of that argument would
+additionally run the same `llm_eval/dataset.json` with `LLM_MODEL` pointed at a second,
+larger/different model and compare scores — if the second model scores materially higher, that
+confirms a model-capability limit; if it also stays low, that points at the harness or prompts
+instead. Not implemented here: it would need a second pulled Ollama model and a per-run model
+parameter threaded through `EvaluationRunner`, which is future work rather than a PoC requirement.
 
 ### 13.4 Tests
 
@@ -1408,7 +1448,7 @@ allows node-level evaluation) — useful because intent errors cascade.
 - **Turn isolation**: a clarification answer merges into its pending claim, while a new expense in
   the same thread replaces the old claim; loop budgets, duplicate-call detection, projected
   artifacts and decisions only inspect `CurrentRequest.messages()`.
-- **API contract**: schema snapshots of `ChatResponse`, `EvaluationResponse`, `LoadTestResult` and the OpenAPI
+- **API contract**: schema snapshots of `ChatResponse`, `EvaluationResponse` and the OpenAPI
   document, plus an SSE test asserting deduplicated `step`/`source` events, answer-only token
   streaming and a final `result` containing the same accumulated steps and sources.
 - **Logging**: both handlers receive the same correlation fields, sensitive payload fields are
@@ -1419,6 +1459,10 @@ allows node-level evaluation) — useful because intent errors cascade.
   both variants accept the same variables.
 - **Quality configuration**: Ruff and Bandit configuration parses successfully, their scans pass,
   coverage XML is produced, and the Sonar quality gate passes in CI.
+- **Deliberately untested**: `llm_eval/` and `load_test/` (§3) have no unit tests and are excluded
+  from `pytest`'s `testpaths` — both are standalone CLI scripts run manually against a live
+  Redis/Ollama/Langfuse stack, not app logic exercised by the deployed request path, so they are
+  validated by running them rather than by a mocked unit-test suite.
 - **Integration**: full graph with `LLM_BACKEND=dummy` against a real Redis 8 container
   (testcontainers, or a `REDIS_URL` pointing at the compose service) with a `test:` key prefix and a
   flush per test — RediSearch vector search cannot be faked with `fakeredis`. Covers routing,
@@ -1429,28 +1473,34 @@ allows node-level evaluation) — useful because intent errors cascade.
 
 ## 14. Load test
 
-The load test is intentionally one simple synchronous admin endpoint:
+The load test is intentionally a standalone CLI script, not an API endpoint:
 
-```http
-POST /admin/load-test
-{
-  "dataset_name": "rag-assistant-functional",
-  "repetitions": 3,
-  "max_concurrency": 4
-}
+```bash
+python -m load_test.load --dataset-name test-dataset --repetitions 3 --max-concurrency 4
 ```
 
-The endpoint fetches the named dataset from Langfuse and calls its SDK experiment runner with a task
-that invokes the same `AgentService` used by `/chat`. Every item receives a fresh `thread_id`; the
-task measures elapsed time around the complete graph invocation and returns the latency alongside
-the agent result. The Langfuse runner supplies bounded concurrent execution, automatic tracing,
-per-item error isolation and dataset-run links, so the application does not implement a second load
-generator. The default 20-item dataset × 3 repetitions produces 60 measured turns; request
-validation requires a total between 50 and 200 and `max_concurrency` between 1 and 4.
+`load_test/load.py` was originally an `/admin/load-test` endpoint invoked inside the live FastAPI
+worker. It moved to a separate process because that design shared fate with real traffic: a crash or
+resource exhaustion triggered by the synthetic load could take down the same worker serving `/chat`,
+and the aggregated `LoadTestResult` existed only in that one request handler's memory until the final
+HTTP response — a mid-run crash lost the whole result, salvageable only from whatever per-item traces
+had already reached Langfuse. As a standalone script, `main()` builds its own
+`ApplicationDependencies` (the same container the FastAPI lifespan builds) and its own `AgentService`
+instance, so it stresses the same shared Ollama/Redis backends real traffic uses without running
+inside the same OS process — a crash here cannot take `/chat` down with it.
+
+The script fetches the named dataset from Langfuse and calls its SDK experiment runner with a task
+that invokes its own `AgentService`, the same graph `/chat` uses. Every item receives a fresh
+`thread_id`; the task measures elapsed time around the complete graph invocation and returns the
+latency alongside the agent result. The Langfuse runner supplies bounded concurrent execution,
+automatic tracing, per-item error isolation and dataset-run links, so the application does not
+implement a second load generator. The default 20-item dataset × 3 repetitions produces 60 measured
+turns; `LoadTestRunner.run()` validates the resolved total is between 50 and 200 and
+`max_concurrency` is between 1 and 4, raising `LoadTestValidationError` otherwise.
 
 Each repetition creates a named Langfuse experiment run with the same `load_run_id` in metadata, so
-all traces remain filterable as one load scenario. The endpoint waits for all repetitions and then
-returns:
+all traces remain filterable as one load scenario. The script waits for all repetitions and then
+prints:
 
 ```python
 class LoadTestResult(BaseModel):
@@ -1467,12 +1517,14 @@ class LoadTestResult(BaseModel):
     dataset_run_urls: list[str]
 ```
 
-This is deliberately not a job system: there is no queue, progress endpoint or cancellation flow,
-and the caller must allow a long HTTP timeout. It measures the deployed graph, model contention and
-Langfuse instrumentation, but not network or `/chat` transport overhead. Per-node and
-per-generation spans in the linked Langfuse runs identify the bottleneck; the returned aggregate is
-copied into the README's evaluation section rather than generating a separate local load-report
-format.
+This is deliberately not a job system: there is no queue, progress endpoint or cancellation flow, and
+the invocation blocks in the terminal until every repetition completes. It measures the deployed
+graph, model contention and Langfuse instrumentation, but not network or `/chat` transport overhead.
+Per-node and per-generation spans in the linked Langfuse runs identify the bottleneck. The aggregate
+is written as JSON to `.docs/evaluation_result/load-<timestamp>.json` — the same shared results
+directory `llm_eval/run_eval.py` writes its functional-evaluation reports to — and printed to the
+terminal; the printed aggregate is copied into the README's evaluation section rather than
+generating a separate local load-report format.
 
 Expected bottleneck: aggregate LLM generation. A complete turn makes two fixed calls (classify and
 extract), one final response call and 1–4 agent calls, so 4–7 in total depending on how many tools the
@@ -1511,7 +1563,7 @@ load result and proposes these production optimisations without adding them to t
 | Missing slot the user refuses to give | answer presents the conditional result ("if one-way, then X; if round-trip, then Y") |
 | Cap/limit not found for a category | rule checker emits a `warning` finding, answer is marked lower-confidence |
 | Corpus not ingested at boot | entrypoint runs ingest; ingest failure exits non-zero with the reason |
-| Langfuse disabled or unreachable for `/admin/load-test` | reject the load-test request with a clear 503; normal chat remains available with its configured tracing fallback |
+| Langfuse disabled or unreachable when running `load_test.load` | `main()` exits with a clear message before building any dependencies; normal chat is unaffected since the script never touches the live process |
 | Out-of-scope or advice-seeking question (tax/legal) | `out_of_scope` node with an explicit disclaimer |
 | API unreachable from the UI | the UI shows a connection error and keeps the thread — conversation state is server-side, so a retry continues where it stopped |
 
@@ -1531,7 +1583,7 @@ describe a fictional company, are not a real company's rules and are not tax or 
 | M4 | Main graph | compiled LangGraph `StateGraph`, `ToolNode`, ReAct loop guardrails and clarification-then-resume — verified with a scripted LangChain chat model that emits fixed tool calls |
 | M5 | API + UI | FastAPI endpoints with the public `ChatResponse` and internal `EvaluationResponse` contracts, LangChain `ChatOllama` wired, prompts tuned, focused Streamlit chat complete |
 | M6 | Docker | `docker compose up` works from a clean clone |
-| M7 | Evaluation | repository functional dataset, Langfuse functional experiment, endpoint-triggered traced load run, local functional report in `.docs/eval/`, README written |
+| M7 | Evaluation | repository functional dataset, Langfuse functional experiment, script-triggered traced load run, local functional report in `.docs/evaluation_result/`, README written |
 
 During planning, the implementation reference is updated directly. The final README and generated
 evaluation reports are produced at M7; no planning changelog or per-component feature-document tree

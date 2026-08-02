@@ -1,10 +1,21 @@
 from datetime import date
 
+from langchain_core.messages import HumanMessage
 from langfuse import Evaluation
+
+from app.agent.structured import StructuredOutputRunner
+from llm_eval.judge import AnswerJudgeVerdict
+
+UNAVAILABLE_VERDICT = AnswerJudgeVerdict(correct=False, reasoning="judge model unavailable")
 
 
 class EvaluationMetrics:
-    """Computes the six deterministic functional-evaluation scores as Langfuse evaluators."""
+    """Computes the functional-evaluation scores as Langfuse evaluators: six deterministic,
+    plus one LLM-as-judge check of the final answer text against a reference summary."""
+
+    def __init__(self, answer_judge: StructuredOutputRunner | None = None) -> None:
+        """Stores the structured-output runner used to judge final-answer quality, if configured."""
+        self._answer_judge = answer_judge
 
     def classification_accuracy(self, *, output: dict, expected_output: dict, **_: object):
         """Scores whether the classified intent, and category when expected, both match."""
@@ -66,6 +77,27 @@ class EvaluationMetrics:
             return []
         cited = set(output.get("cited_doc_ids") or [])
         return Evaluation(name="citation_accuracy", value=bool(cited & set(expected_docs)))
+
+    def answer_quality(self, *, input: dict, output: dict, expected_output: dict, **_: object):
+        """LLM-as-judge: does the final answer convey the expected decision/amount/citations?"""
+        expected_summary = expected_output.get("expected_answer_summary")
+        if not expected_summary or self._answer_judge is None:
+            return []
+        answer = output.get("answer")
+        if not answer:
+            return Evaluation(name="answer_quality", value=False, comment="no answer text returned")
+
+        prompt = (
+            f"Question: {input.get('question', '')}\n\n"
+            f"Chatbot answer:\n{answer}\n\n"
+            f"Reference (what a correct answer must convey): {expected_summary}"
+        )
+        result = self._answer_judge.run(
+            [HumanMessage(content=prompt)], fallback=UNAVAILABLE_VERDICT
+        )
+        return Evaluation(
+            name="answer_quality", value=result.value.correct, comment=result.value.reasoning
+        )
 
     @classmethod
     def _slot_matches(cls, actual: object, expected: object) -> bool:

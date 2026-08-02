@@ -13,7 +13,7 @@ from app.api.router import router
 from app.api.routes import chat as chat_route
 from app.dependencies import get_agent_service
 from app.rules.loader import load_rule_catalogue
-from tests.fakes import ScriptedChatModel, build_agent_tools, policy_document, tool_message
+from app.tests.fakes import ScriptedChatModel, build_agent_tools, policy_document, tool_message
 
 CATALOGUE = load_rule_catalogue()
 CALCULATOR = ReimbursementCalculator(CATALOGUE)

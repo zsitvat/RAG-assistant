@@ -60,7 +60,7 @@ exclude_dirs = ["tests", ".venv"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
-testpaths = ["tests", "app", "eval"]
+testpaths = ["app"]
 asyncio_mode = "auto"
 
 [tool.coverage.run]
@@ -72,5 +72,7 @@ omit = [
     "app/rules/tests/*",
     "app/integrations/tests/*",
     "app/logging/tests/*",
-    "app/evaluation/tests/*",
+    "app/tests/*",
+    "app/tests/api/*",
+    "app/tests/journeys/*",
 ]

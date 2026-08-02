@@ -12,7 +12,7 @@ from app.agent.nodes import AgentNodes
 from app.agent.service import AgentService
 from app.integrations.checkpointer import CHECKPOINT_TTL_MINUTES, build_checkpointer
 from app.rules.loader import load_rule_catalogue
-from tests.fakes import ScriptedChatModel, build_agent_tools, policy_document
+from app.tests.fakes import ScriptedChatModel, build_agent_tools, policy_document
 
 TEST_REDIS_URL = os.environ.get("TEST_REDIS_URL", "redis://127.0.0.1:6379/0")
 CATALOGUE = load_rule_catalogue()

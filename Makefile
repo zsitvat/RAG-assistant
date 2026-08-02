@@ -13,7 +13,7 @@ format-check:
 	uv run ruff format --check .
 
 security:
-	uv run bandit -c pyproject.toml -r app
+	uv run bandit -c pyproject.toml -r app load_test
 
 test:
 	uv run pytest --cov=app --cov-report=term-missing --cov-report=xml

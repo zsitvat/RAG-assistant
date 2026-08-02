@@ -142,6 +142,7 @@ class AgentService:
             retrieved_doc_ids=self._collect_retrieved_doc_ids(request_messages),
             cited_doc_ids=self._collect_cited_doc_ids(request_messages),
             degraded=state.get("degraded", False),
+            answer=state["messages"][-1].content,
         )
 
     def _node_events(

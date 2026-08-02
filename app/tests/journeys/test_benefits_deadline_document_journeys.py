@@ -7,7 +7,7 @@ from app.agent.graph import build_agent_graph
 from app.agent.model import ExpenseClaim, IntentClassification
 from app.agent.nodes import AgentNodes
 from app.rules.loader import load_rule_catalogue
-from tests.fakes import (
+from app.tests.fakes import (
     ScriptedChatModel,
     build_agent_tools,
     policy_document,

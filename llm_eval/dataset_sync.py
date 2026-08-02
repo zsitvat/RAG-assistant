@@ -1,9 +1,9 @@
 from langfuse import Langfuse
 from langfuse.api.commons.errors.not_found_error import NotFoundError
 
-from eval.model import EvalCase, EvalDataset
+from llm_eval.model import EvalCase, EvalDataset
 
-DATASET_NAME = "rag-assistant-functional"
+DATASET_NAME = "test-dataset"
 
 
 class LangfuseDatasetSync:

@@ -95,15 +95,6 @@ async def test_admin_eval_returns_the_typed_evaluation_projection(client):
     assert body["degraded"] is True
 
 
-async def test_admin_load_test_rejects_disabled_langfuse_with_503(client):
-    response = await client.post(
-        "/admin/load-test",
-        json={"dataset_name": "rag-assistant-functional", "repetitions": 3, "max_concurrency": 4},
-    )
-
-    assert response.status_code == 503
-
-
 async def test_thread_reset_deletes_the_conversation_state(client):
     await client.post("/chat", json={"thread_id": "reset-me", "message": "hello"})
 

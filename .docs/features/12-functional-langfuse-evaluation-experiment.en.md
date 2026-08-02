@@ -6,13 +6,13 @@ A reviewer can synchronise a repository-owned, 20-case functional dataset to Lan
 experiment against the deployed API, and get both a Langfuse-linked trace/score per case and a local
 Markdown + JSON report with aggregate pass rates per metric.
 
-`python -m eval.run_eval` (optionally `--node intent` for a classifier-only pass) is the one command
+`python -m llm_eval.run_eval` (optionally `--node intent` for a classifier-only pass) is the one command
 that ties this together: validate the dataset → idempotently sync it to Langfuse → run it as a
-`dataset.run_experiment(...)` → write `.docs/eval/functional-<timestamp>.md` / `.json`.
+`dataset.run_experiment(...)` → write `.docs/evaluation_result/functional-<timestamp>.md` / `.json`.
 
 ## How it works
 
-### Dataset (`eval/dataset.json`, `eval/model.py`)
+### Dataset (`llm_eval/dataset.json`, `llm_eval/model.py`)
 
 20 hand-authored cases span general policy, all six expense categories, a clarification
 (one-way/round-trip ambiguity), a deadline still open and one expired, a missing-receipt case and an
@@ -60,7 +60,7 @@ now returns a `StructuredResult(value, degraded)` `NamedTuple` instead of a bare
 know whether they got a real answer or the caller-supplied fallback (previously this was only visible
 as a warning log line with no signal reaching the caller).
 
-### Metrics (`eval/metrics.py`)
+### Metrics (`llm_eval/metrics.py`)
 
 Six `EvaluationMetrics` methods, each a Langfuse `EvaluatorFunction`: `classification_accuracy`,
 `slot_accuracy` (share of expected slots matching, tolerant of JSON `int`/`float`/ISO-date-string
@@ -72,14 +72,14 @@ score validation) when a case has nothing to score against, e.g. `slot_accuracy`
 `expected_slots` — the report excludes a metric entirely from a case's scores rather than counting
 it as a failure, and it never contributes to that metric's pass-rate denominator.
 
-### Langfuse sync (`eval/langfuse_sync.py`)
+### Langfuse sync (`llm_eval/dataset_sync.py`)
 
-`LangfuseDatasetSync.sync()` creates the `rag-assistant-functional` dataset on a `NotFoundError` from
+`LangfuseDatasetSync.sync()` creates the `test-dataset` dataset on a `NotFoundError` from
 `get_dataset`, then calls `create_dataset_item(id=case.id, ...)` per case — the SDK upserts by `id`,
 so re-running sync after editing a case (or adding a new one) is idempotent and never duplicates
 items.
 
-### Runner and reports (`eval/run_eval.py`, `eval/report.py`)
+### Runner and reports (`llm_eval/run_eval.py`, `llm_eval/report.py`)
 
 `EvaluationRunner.run()` syncs, fetches the Langfuse dataset, and calls
 `langfuse_dataset.run_experiment(task=..., evaluators=[...], max_concurrency=4)`. The SDK itself
@@ -90,7 +90,7 @@ additionally catch their own errors and return `{"error": ...}` instead of raisi
 still gets its own traced span and shows up in the report with its trace id, rather than silently
 vanishing. `EvaluationReport` aggregates a percentage per metric and writes both a human-readable
 Markdown table (with a "Failure notes" section linking each failed case to its trace id) and a
-machine-readable JSON file with the same data, under `.docs/eval/`.
+machine-readable JSON file with the same data, under `.docs/evaluation_result/`.
 
 `--node intent` swaps the HTTP task for an in-process one that only runs `classify_intent`'s
 `StructuredOutputRunner` directly (built once in `EvaluationRunner.__init__`, not per item) and scores
@@ -101,23 +101,23 @@ isolating the classifier is the fastest way to check it didn't regress.
 
 ```bash
 # Requires LANGFUSE_ENABLED=true and real credentials in .env — this is a real network call.
-uv run python -m eval.run_eval
-uv run python -m eval.run_eval --node intent
+uv run python -m llm_eval.run_eval
+uv run python -m llm_eval.run_eval --node intent
 ```
 
 ## Key files
 
 | File | Responsibility |
 | --- | --- |
-| `eval/dataset.json` | 20 version-controlled functional test cases |
-| `eval/model.py` | `EvalCase`, `EvalDataset`, `DatasetValidationError` |
-| `eval/metrics.py` | `EvaluationMetrics` — the six Langfuse evaluator functions |
-| `eval/langfuse_sync.py` | `LangfuseDatasetSync` — idempotent dataset upsert |
-| `eval/report.py` | `EvaluationReport` — aggregate + per-case Markdown/JSON report |
-| `eval/run_eval.py` | `EvaluationRunner`, CLI entry point |
+| `llm_eval/dataset.json` | 20 version-controlled functional test cases |
+| `llm_eval/model.py` | `EvalCase`, `EvalDataset`, `DatasetValidationError` |
+| `llm_eval/metrics.py` | `EvaluationMetrics` — the six Langfuse evaluator functions |
+| `llm_eval/dataset_sync.py` | `LangfuseDatasetSync` — idempotent dataset upsert |
+| `llm_eval/report.py` | `EvaluationReport` — aggregate + per-case Markdown/JSON report |
+| `llm_eval/run_eval.py` | `EvaluationRunner`, CLI entry point |
 | `app/api/routes/evaluation.py` | `POST /admin/eval` |
 | `app/api/schemas.py` | `EvaluationRequest`, `EvaluationResponse` |
 | `app/agent/service.py` | `AgentService.evaluate()` and its projection helpers |
 | `app/agent/state.py` | `AgentState["reference_date"]`, `AgentState["degraded"]` |
 | `app/agent/structured.py` | `StructuredResult` — `(value, degraded)` from `StructuredOutputRunner.run()` |
-| `eval/tests/test_dataset.py`, `eval/tests/test_metrics.py`, `eval/tests/test_langfuse_sync.py`, `eval/tests/test_report.py`, `eval/tests/test_run_eval.py`, `app/agent/tests/test_service_evaluate.py`, `tests/api/test_api_contracts.py` | unit tests (mocked Langfuse; no network) |
+| `llm_eval/test_dataset.py`, `llm_eval/test_metrics.py`, `llm_eval/test_dataset_sync.py`, `llm_eval/test_report.py`, `llm_eval/test_run_eval.py`, `app/agent/tests/test_service_evaluate.py`, `app/tests/api/test_api_contracts.py` | unit tests (mocked Langfuse; no network) |

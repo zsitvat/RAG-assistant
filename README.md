@@ -86,7 +86,7 @@ edges), tool execution (`ToolNode`), checkpointing (`AsyncRedisSaver`) and strea
 
 The agent runs entirely inside the FastAPI service; the Streamlit UI is a thin HTTP client with no
 graph imports, so the agent stays independently callable (curl, the eval harness, the load-test
-endpoint, another front-end).
+script, another front-end).
 
 **Two-layer knowledge design** — the single most important design decision in the project:
 
@@ -242,16 +242,17 @@ make sonar
 
 ```bash
 # Requires LANGFUSE_ENABLED=true and real credentials in .env, and the API reachable at API_BASE_URL.
-uv run python -m eval.run_eval               # full 20-case functional evaluation
-uv run python -m eval.run_eval --node intent # classifier-only fast pass
-curl -X POST http://127.0.0.1:8000/admin/load-test \
-  -H 'Content-Type: application/json' \
-  -d '{"dataset_name": "rag-assistant-functional", "repetitions": 3, "max_concurrency": 4}'
+uv run python -m llm_eval.run_eval               # full 20-case functional evaluation
+uv run python -m llm_eval.run_eval --node intent # classifier-only fast pass
+
+# Requires LANGFUSE_ENABLED=true and real credentials in .env; runs in-process against a live Redis/Ollama.
+uv run python -m load_test.load                                          # defaults: 3 reps, concurrency 4
+uv run python -m load_test.load --repetitions 5 --max-concurrency 2      # override the defaults
 ```
 
 ## 8. Evaluation method and results
 
-**Dataset** — `eval/dataset.json`, 20 version-controlled cases spanning general policy, all six
+**Dataset** — `llm_eval/dataset.json`, 20 version-controlled cases spanning general policy, all six
 expense categories (meal, travel, commuting, mileage, equipment, benefits), a one-way/round-trip
 clarification, a still-open and an expired submission deadline, a missing-receipt case and an
 out-of-scope question. Every case's `expected_amount_huf`/`expected_decision` was verified against
@@ -259,19 +260,19 @@ the real `ReimbursementCalculator`/`RuleChecker` output for its exact claim fiel
 committed, not hand-computed — so a case failing means the agent diverged from the deterministic rule
 engine, not that the dataset is wrong.
 
-**Metrics** (`eval/metrics.py`, six deterministic Langfuse evaluators, no answer-prose parsing
+**Metrics** (`llm_eval/metrics.py`, six deterministic Langfuse evaluators, no answer-prose parsing
 anywhere): classification accuracy (intent + category), slot accuracy (share of expected `ExpenseClaim`
 fields matching exactly), retrieval hit@4, tool-selection accuracy (exact ordered tool-call list —
 the strictest, most model-behavior-sensitive metric), outcome accuracy (decision + calculated amount),
 citation accuracy (an expected document actually placed in the answer's citation context, not merely
 retrieved).
 
-**Runner** — `python -m eval.run_eval` idempotently syncs the dataset to a Langfuse dataset
-(`rag-assistant-functional`, upserted by stable case id) and runs it as a Langfuse
+**Runner** — `python -m llm_eval.run_eval` idempotently syncs the dataset to a Langfuse dataset
+(`test-dataset`, upserted by stable case id) and runs it as a Langfuse
 `dataset.run_experiment(...)`, which supplies concurrency, per-item tracing/dataset-run linking and
 per-metric score recording; the application supplies only the task function (one `POST /admin/eval`
 per case, pinning `reference_date` for deterministic deadline math) and the metric functions. One
-failing case never aborts the run. A local Markdown + JSON report lands under `.docs/eval/`.
+failing case never aborts the run. A local Markdown + JSON report lands under `.docs/evaluation_result/`.
 
 **Results** (`qwen2.5:7b-instruct-q4_K_M`, official run 2026-08-02T10:26:25Z, 20 cases):
 
@@ -286,7 +287,6 @@ failing case never aborts the run. A local Markdown + JSON report lands under `.
 
 Langfuse experiment:
 <https://cloud.langfuse.com/project/cms7txjr50008ad0jxqp7myo0/datasets/cmsbnbrox02a9ad0h25lj6w0b/runs/8ae3032e-758d-407b-8990-045ea29d1e19>.
-Full per-case breakdown and failure notes: `.docs/eval/functional-20260802-102625.md`.
 
 **Analysis — these numbers are real and honest, and the low scores have one consistent, verified
 root cause.** `classification_accuracy` (intent + category) is strong at 90%; every metric downstream
@@ -309,11 +309,17 @@ few-shot examples of the canonical enum values — both documented as follow-ups
 
 ## 9. Load test method and results
 
-`POST /admin/load-test` replays a named Langfuse dataset through the exact same `AgentService` module
-`/chat` uses (never a recursive HTTP call to itself), under bounded concurrency supplied by the same
-Langfuse experiment runner. Endpoint is intentionally synchronous — no job queue, no progress
-polling, no cancellation; callers must allow a long request timeout. It measures the complete graph
-invocation only, not `/chat` transport overhead or network latency.
+`python -m load_test.load` is a standalone CLI script, not an API endpoint: it builds its own copy of
+the application dependency graph (the same `ApplicationDependencies.build()` the FastAPI lifespan
+uses) and replays a named Langfuse dataset through its own `AgentService` instance, under bounded
+concurrency supplied by the same Langfuse experiment runner. Running it as a separate process — not
+an endpoint inside the live `uvicorn` worker — means a crash or resource exhaustion during the load
+test cannot take real `/chat` traffic down with it, and per-item results are traced to Langfuse as
+they complete rather than existing only in one process's memory until a final HTTP response. It
+measures the complete graph invocation only, not `/chat` transport overhead or network latency. The
+aggregate result is written to `.docs/evaluation_result/load-<timestamp>.json` — the same shared
+results directory the functional evaluation writes its reports to — as well as printed to the
+terminal.
 
 **Results** (default 20-item dataset × 3 repetitions = 60 measured turns, `max_concurrency=4`, run
 <!-- LOAD_TEST_TIMESTAMP -->):
@@ -406,27 +412,7 @@ this project makes no compliance claim.
   `LANGFUSE_ENABLED` switch that already governs tracing, rather than two separate toggles.
 - **Redis as the single datastore** — see §4 above.
 
-## 13. Requirement traceability
-
-| Assignment requirement | Where it is satisfied |
-| --- | --- |
-| Real problem + justification | §1 above, [`01-idea-plan.en.md`](.docs/plan/01-idea-plan.en.md) |
-| LangChain/LangGraph implementation | §3 above; technical design §4–§9 |
-| LangGraph agentic workflow, ≥5 nodes | §3.1 above — 7 nodes |
-| Autonomous decision making (conditional routing) | §3.1 above — ReAct tool-calling loop; `route_after_agent` |
-| Decomposition into subtasks | §3.1 above — classification, extraction, routing, tool execution, response generation as separate nodes |
-| State management for intermediate results | `AgentState`, checkpointed per thread (Redis) |
-| ≥2 tools, at least one non-retrieval | §3.3 above — `calculate`, `check_rules` |
-| Dedicated modular RAG subgraph | §3.2 above |
-| Free-form text data source, quality over quantity | Fictional `.docx` policy corpus, header-aware chunking, one Redis vector index |
-| No paid API, local open-source LLM + trade-off notes | §5 above |
-| Streamlit UI showing the main steps and RAG result | §2 above — streamed step/source summary |
-| Containerised, Dockerfile mandatory, compose preferred | §7 above — root `Dockerfile` + compose with `api`, `ui`, `ollama`, `redis` |
-| 10–20 question functional eval | §8 above |
-| 50–200 query load test, latency, bottleneck, 1–2 optimisations | §9 above |
-| README with problem, architecture, results, run instructions | this file |
-
-## 14. What's committed, what isn't
+## 13. What's committed, what isn't
 
 No credentials, personal data, embedding/model caches, runtime logs or machine-specific artifacts are
 committed — `.env`, `.venv`, `logs/`, `.sonar/`, `sonar-project.properties` and coverage/cache
