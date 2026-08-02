@@ -114,7 +114,7 @@ client = ChatApiClient(settings.api_base_url)
 
 st.set_page_config(page_title="RAG Assistant")
 st.title("Corporate Expense & Benefits Assistant")
-st.caption("Demo policies describe a fictional company. Not tax or legal advice.")
+st.caption("Company policies. Not tax or legal advice.")
 
 st.session_state.setdefault("thread_id", str(uuid.uuid4()))
 st.session_state.setdefault("history", [])

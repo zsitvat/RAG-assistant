@@ -65,10 +65,14 @@ class AgentNodes:
     def classify_intent(self, state: AgentState) -> AgentState:
         """Classifies the user's intent and, if applicable, the expense category."""
         context = CurrentRequest(state["messages"]).model_context()
-        classification = self._classify_runner.run(
+        result = self._classify_runner.run(
             context, fallback=IntentClassification(intent="policy_question")
         )
-        return {"intent": classification.intent, "category": classification.category}
+        return {
+            "intent": result.value.intent,
+            "category": result.value.category,
+            "degraded": result.degraded,
+        }
 
     def extract_information(self, state: AgentState) -> AgentState:
         """Extracts and merges expense claim fields from the conversation so far."""
@@ -77,7 +81,8 @@ class AgentNodes:
         category = state.get("category")
 
         context = CurrentRequest(state["messages"]).model_context()
-        extracted = self._extract_runner.run(context, fallback=ExpenseClaim())
+        result = self._extract_runner.run(context, fallback=ExpenseClaim())
+        extracted = result.value
         if category is not None:
             extracted = extracted.model_copy(update={"category": category})
 
@@ -85,7 +90,11 @@ class AgentNodes:
             category is None or category == previous_claim.category
         )
         claim = previous_claim.merged_with(extracted) if is_continuation else extracted
-        return {"claim": claim, "decision": None}
+        return {
+            "claim": claim,
+            "decision": None,
+            "degraded": state.get("degraded", False) or result.degraded,
+        }
 
     def route_after_extraction(self, state: AgentState) -> str:
         """Routes to clarification, the agent step, or out-of-scope handling."""
@@ -194,26 +203,35 @@ class AgentNodes:
         """Generates the final answer from the gathered tool evidence and derives the decision."""
         last_message = state["messages"][-1]
         if isinstance(last_message, AIMessage) and last_message.content == LLM_UNAVAILABLE_MESSAGE:
-            return {"decision": None}
+            return {"decision": None, "degraded": True}
 
         request = CurrentRequest(state["messages"])
         request_messages = request.messages()
         tool_messages = [m for m in request_messages if isinstance(m, ToolMessage)]
 
         if not tool_messages:
-            return {"messages": [AIMessage(content=NO_TOOL_ARTIFACT_MESSAGE)], "decision": None}
+            return {
+                "messages": [AIMessage(content=NO_TOOL_ARTIFACT_MESSAGE)],
+                "decision": None,
+                "degraded": True,
+            }
 
         decision = self._derive_decision(tool_messages)
         answer = self._invoke_with_retry(
             self._prompt("generate_response") | self._response_model, request.model_context()
         )
         if answer is None:
-            return {"messages": [AIMessage(content=LLM_UNAVAILABLE_MESSAGE)], "decision": decision}
+            return {
+                "messages": [AIMessage(content=LLM_UNAVAILABLE_MESSAGE)],
+                "decision": decision,
+                "degraded": True,
+            }
 
         if request.agent_step_count() >= MAX_AGENT_STEPS:
             answer = answer.model_copy(
                 update={"content": answer.content + INCOMPLETE_EVIDENCE_NOTE}
             )
+            return {"messages": [answer], "decision": decision, "degraded": True}
         return {"messages": [answer], "decision": decision}
 
     @staticmethod

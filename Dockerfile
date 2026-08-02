@@ -24,6 +24,7 @@ RUN groupadd --system app && useradd --system --gid app --create-home --home-dir
 
 WORKDIR /app
 ENV PATH=/app/.venv/bin:$PATH \
+    PYTHONPATH=/app \
     PYTHONUNBUFFERED=1 \
     HF_HOME=/app/.cache/huggingface \
     HF_HUB_OFFLINE=1

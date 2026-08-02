@@ -1,13 +1,15 @@
 import time
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langgraph.graph.state import CompiledStateGraph
 
 from app.agent.current_request import CurrentRequest
+from app.agent.model import CalculationResult, ExpenseClaim, Finding
+from app.agent.slots import RequiredSlotTable
 from app.agent.state import RECURSION_LIMIT
-from app.api.schemas import ChatResponse, ChatSource, StreamEvent
+from app.api.schemas import ChatResponse, ChatSource, EvaluationResponse, StreamEvent
 from app.integrations.langfuse import Observability
 from app.rag.model import RagResult
 
@@ -32,7 +34,7 @@ ALWAYS_FIRST_STEPS = [UNDERSTOOD_STEP, EXTRACTED_STEP]
 
 
 class AgentService:
-    """The one place graph messages/artifacts become the public chat contract."""
+    """The one place graph messages/artifacts become the public chat and evaluation contracts."""
 
     def __init__(
         self, graph: CompiledStateGraph, observability: Observability | None = None
@@ -40,6 +42,7 @@ class AgentService:
         """Stores the compiled agent graph and the observability adapter used to trace turns."""
         self._graph = graph
         self._observability = observability or Observability(None)
+        self._slots = RequiredSlotTable()
 
     def respond(self, thread_id: str, message: str) -> ChatResponse:
         """Runs the user's message through the agent graph and projects the result into a reply."""
@@ -69,15 +72,36 @@ class AgentService:
         final_state = (await self._graph.aget_state(config)).values
         yield StreamEvent(event="result", data=self._project(thread_id, final_state, start))
 
-    @staticmethod
-    def _input(message: str) -> dict:
-        """Builds graph input containing the current user message."""
-        return {"messages": [HumanMessage(content=message)]}
+    def evaluate(
+        self,
+        thread_id: str,
+        message: str,
+        reference_date: date,
+        dataset_item_id: str | None = None,
+        experiment_name: str | None = None,
+    ) -> EvaluationResponse:
+        """Runs one evaluation turn and projects the graph state into the internal eval contract."""
+        config = self._config(
+            thread_id,
+            tags=("eval",),
+            dataset_item_id=dataset_item_id,
+            experiment_name=experiment_name,
+        )
+        result = self._graph.invoke(self._input(message, reference_date), config=config)
+        return self._project_evaluation(thread_id, result)
 
-    def _config(self, thread_id: str) -> dict:
+    @staticmethod
+    def _input(message: str, reference_date: date | None = None) -> dict:
+        """Builds graph input containing the current user message and optional pinned date."""
+        payload: dict = {"messages": [HumanMessage(content=message)]}
+        if reference_date is not None:
+            payload["reference_date"] = reference_date
+        return payload
+
+    def _config(self, thread_id: str, **trace_kwargs: object) -> dict:
         """Builds the graph config, attaching one Langfuse trace per turn when enabled."""
         config = {"configurable": {"thread_id": thread_id}, "recursion_limit": RECURSION_LIMIT}
-        return config | self._observability.trace_config(thread_id)
+        return config | self._observability.trace_config(thread_id, **trace_kwargs)
 
     def _project(self, thread_id: str, state: dict, start: float) -> ChatResponse:
         """Builds the public reply from final graph state, shared by both endpoints."""
@@ -96,6 +120,27 @@ class AgentService:
             decision=state.get("decision"),
             sources=self._collect_cited_sources(request_messages),
             steps=self._collect_step_labels(request_messages),
+        )
+
+    def _project_evaluation(self, thread_id: str, state: dict) -> EvaluationResponse:
+        """Builds the internal evaluation contract from final graph state."""
+        request_messages = CurrentRequest(state["messages"]).messages()
+        claim = ExpenseClaim.from_state(state.get("claim"))
+        intent = state["intent"]
+        category = state.get("category")
+        return EvaluationResponse(
+            thread_id=thread_id,
+            intent=intent,
+            category=category,
+            decision=state.get("decision"),
+            claim=claim,
+            missing_slots=self._slots.missing(intent, category, claim),
+            tool_calls=self._collect_tool_calls(request_messages),
+            calculation=self._collect_calculation(request_messages),
+            findings=self._collect_findings(request_messages),
+            retrieved_doc_ids=self._collect_retrieved_doc_ids(request_messages),
+            cited_doc_ids=self._collect_cited_doc_ids(request_messages),
+            degraded=state.get("degraded", False),
         )
 
     def _node_events(
@@ -178,3 +223,66 @@ class AgentService:
         if isinstance(request_messages[-1], AIMessage):
             steps.append(FINAL_STEP)
         return steps
+
+    @staticmethod
+    def _collect_tool_calls(request_messages: list[BaseMessage]) -> list[str]:
+        """Collects the ordered tool-call names issued during the current request."""
+        return [
+            call["name"]
+            for message in request_messages
+            if isinstance(message, AIMessage)
+            for call in message.tool_calls
+        ]
+
+    @staticmethod
+    def _collect_calculation(request_messages: list[BaseMessage]) -> CalculationResult | None:
+        """Returns the last calculation result from the current request, if the tool ran."""
+        return next(
+            (
+                message.artifact
+                for message in reversed(request_messages)
+                if isinstance(message, ToolMessage)
+                and message.name == "calculate"
+                and isinstance(message.artifact, CalculationResult)
+            ),
+            None,
+        )
+
+    @staticmethod
+    def _collect_findings(request_messages: list[BaseMessage]) -> list[Finding]:
+        """Returns the last rule-check findings from the current request, if the tool ran."""
+        return next(
+            (
+                message.artifact
+                for message in reversed(request_messages)
+                if isinstance(message, ToolMessage)
+                and message.name == "check_rules"
+                and isinstance(message.artifact, list)
+            ),
+            [],
+        )
+
+    @staticmethod
+    def _collect_retrieved_doc_ids(request_messages: list[BaseMessage]) -> list[str]:
+        """Collects deduplicated doc ids retrieved by policy-search tool calls, before budgeting."""
+        doc_ids: list[str] = []
+        for message in request_messages:
+            if not (isinstance(message, ToolMessage) and message.name == "search_policies"):
+                continue
+            for result in RagResult.from_artifact(message.artifact).results:
+                if result.doc_id not in doc_ids:
+                    doc_ids.append(result.doc_id)
+        return doc_ids
+
+    @staticmethod
+    def _collect_cited_doc_ids(request_messages: list[BaseMessage]) -> list[str]:
+        """Collects deduplicated doc ids actually placed in the answer's citation context."""
+        doc_ids: list[str] = []
+        for message in request_messages:
+            if not (isinstance(message, ToolMessage) and message.name == "search_policies"):
+                continue
+            for citation in RagResult.from_artifact(message.artifact).citations:
+                if citation.doc_id not in doc_ids:
+                    doc_ids.append(citation.doc_id)
+        return doc_ids
+        return doc_ids

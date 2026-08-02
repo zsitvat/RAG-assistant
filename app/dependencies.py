@@ -35,6 +35,7 @@ class ApplicationDependencies:
     vector_store: RedisVectorStore | None
     checkpointer: BaseCheckpointSaver
     agent_service: AgentService
+    observability: Observability
 
     @staticmethod
     async def build(settings: Settings) -> "ApplicationDependencies":
@@ -76,6 +77,7 @@ class ApplicationDependencies:
             vector_store=vector_store,
             checkpointer=checkpointer,
             agent_service=AgentService(build_agent_graph(nodes, checkpointer), observability),
+            observability=observability,
         )
 
     @staticmethod
@@ -119,3 +121,9 @@ def get_checkpointer(request: Request) -> BaseCheckpointSaver:
     """Provides the conversation checkpointer."""
 
     return ApplicationDependencies.from_request(request).checkpointer
+
+
+def get_observability(request: Request) -> Observability:
+    """Provides the observability adapter."""
+
+    return ApplicationDependencies.from_request(request).observability

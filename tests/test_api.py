@@ -78,6 +78,32 @@ async def test_chat_returns_a_typed_response_even_without_a_real_llm(client):
     assert "Answer prepared" in body["steps"]
 
 
+async def test_admin_eval_returns_the_typed_evaluation_projection(client):
+    response = await client.post(
+        "/admin/eval",
+        json={"thread_id": "eval-t1", "message": "hello", "reference_date": "2026-08-02"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["thread_id"] == "eval-t1"
+    assert body["intent"] == "policy_question"
+    assert body["decision"] is None
+    assert body["tool_calls"] == []
+    assert body["retrieved_doc_ids"] == []
+    assert body["cited_doc_ids"] == []
+    assert body["degraded"] is True
+
+
+async def test_admin_load_test_rejects_disabled_langfuse_with_503(client):
+    response = await client.post(
+        "/admin/load-test",
+        json={"dataset_name": "rag-assistant-functional", "repetitions": 3, "max_concurrency": 4},
+    )
+
+    assert response.status_code == 503
+
+
 async def test_thread_reset_deletes_the_conversation_state(client):
     await client.post("/chat", json={"thread_id": "reset-me", "message": "hello"})
 

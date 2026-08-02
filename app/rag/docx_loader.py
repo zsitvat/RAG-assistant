@@ -10,7 +10,7 @@ CORPUS_DIR = Path(".docs/sources/en")
 
 
 class DocxMarkdownLoader(BaseLoader):
-    """LangChain loader converting the fictional company's `.docx` corpus to Markdown."""
+    """LangChain loader converting the `.docx` corpus to Markdown."""
 
     def __init__(
         self, corpus_dir: Path = CORPUS_DIR, converter: DocxToMarkdownConverter | None = None

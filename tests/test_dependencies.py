@@ -12,11 +12,13 @@ from app.dependencies import (
     ApplicationDependencies,
     get_agent_service,
     get_checkpointer,
+    get_observability,
     get_redis_index,
     get_rule_catalogue,
     get_settings,
     get_vector_store,
 )
+from app.integrations.langfuse import Observability
 from app.integrations.redis import RedisIndex
 from app.rules.model import RuleCatalogue
 from app.settings import Settings
@@ -30,6 +32,7 @@ def test_providers_read_the_typed_application_container():
         vector_store=MagicMock(spec=RedisVectorStore),
         checkpointer=MagicMock(spec=BaseCheckpointSaver),
         agent_service=MagicMock(spec=AgentService),
+        observability=MagicMock(spec=Observability),
     )
     request = cast(
         Request,
@@ -42,6 +45,7 @@ def test_providers_read_the_typed_application_container():
     assert get_vector_store(request) is dependencies.vector_store
     assert get_checkpointer(request) is dependencies.checkpointer
     assert get_agent_service(request) is dependencies.agent_service
+    assert get_observability(request) is dependencies.observability
 
 
 async def test_build_fails_when_redis_is_unreachable():

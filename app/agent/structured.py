@@ -1,5 +1,5 @@
 import logging
-from typing import TypeVar
+from typing import NamedTuple, TypeVar
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage
@@ -9,6 +9,13 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
+
+
+class StructuredResult[SchemaT](NamedTuple):
+    """Pairs a structured-output value with whether it is the caller-supplied fallback."""
+
+    value: SchemaT
+    degraded: bool
 
 
 class StructuredOutputRunner:
@@ -22,14 +29,14 @@ class StructuredOutputRunner:
         self._prompt = prompt
         self._schema = schema
 
-    def run(self, messages: list[BaseMessage], fallback: SchemaT) -> SchemaT:
+    def run(self, messages: list[BaseMessage], fallback: SchemaT) -> StructuredResult[SchemaT]:
         """Runs the prompt against the chat model, retrying once before falling back."""
         runnable = self._build_runnable()
         if runnable is None:
-            return fallback
+            return StructuredResult(fallback, degraded=True)
 
         try:
-            return runnable.invoke({"messages": messages})
+            return StructuredResult(runnable.invoke({"messages": messages}), degraded=False)
         except Exception as exc:
             logger.warning(
                 f"structured output for {self._schema.__name__} failed; retrying once: "
@@ -41,13 +48,13 @@ class StructuredOutputRunner:
             HumanMessage(content="Your previous output was invalid or unparsable. Try again."),
         ]
         try:
-            return runnable.invoke({"messages": repair_messages})
+            return StructuredResult(runnable.invoke({"messages": repair_messages}), degraded=False)
         except Exception as exc:
             logger.warning(
                 f"structured output for {self._schema.__name__} degraded to fallback after "
                 f"repair retry: {type(exc).__name__}: {exc}"
             )
-            return fallback
+            return StructuredResult(fallback, degraded=True)
 
     def _build_runnable(self):
         """Builds the structured-output runnable when supported by the model."""

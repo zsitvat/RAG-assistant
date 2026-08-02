@@ -33,7 +33,7 @@ DEFAULT_CLARIFICATION_QUESTION = "Could you share a few more details?"
 OUT_OF_SCOPE_MESSAGE = (
     "I can help with company expense reimbursement and benefits policy questions, but I can't "
     "provide tax or legal advice or help with anything outside that scope. The policies I know "
-    "describe a fictional company, are not a real company's rules, and are not tax or legal advice."
+    "are company policies and are not tax or legal advice."
 )
 NO_TOOL_ARTIFACT_MESSAGE = (
     "I do not have enough verified evidence to answer that policy-dependent question yet. Please "

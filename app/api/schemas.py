@@ -1,9 +1,12 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from app.agent.model import Decision
+from app.agent.model import CalculationResult, Decision, ExpenseClaim, Finding, Intent
+from app.rules.model import Category
+
+FUNCTIONAL_DATASET_NAME = "rag-assistant-functional"
 
 
 class HealthResponse(BaseModel):
@@ -72,3 +75,54 @@ class StreamEvent(BaseModel):
         """Renders the event in the server-sent events wire format."""
         payload = self.model_dump_json(include={"data"})
         return f"event: {self.event}\ndata: {payload}\n\n"
+
+
+class EvaluationRequest(BaseModel):
+    """Carries one evaluation turn's input, pinned for deterministic scoring."""
+
+    thread_id: str
+    message: str
+    reference_date: date
+    dataset_item_id: str | None = None
+    experiment_name: str | None = None
+
+
+class EvaluationResponse(BaseModel):
+    """Carries the internal, typed graph outputs needed to score one evaluation turn."""
+
+    thread_id: str
+    intent: Intent
+    category: Category | None
+    decision: Decision | None
+    claim: ExpenseClaim
+    missing_slots: list[str]
+    tool_calls: list[str]
+    calculation: CalculationResult | None
+    findings: list[Finding]
+    retrieved_doc_ids: list[str]
+    cited_doc_ids: list[str]
+    degraded: bool
+
+
+class LoadTestRequest(BaseModel):
+    """Requests a bounded-concurrency replay of a Langfuse dataset for load measurement."""
+
+    dataset_name: str = FUNCTIONAL_DATASET_NAME
+    repetitions: int = Field(default=3, ge=1)
+    max_concurrency: int = Field(default=4, ge=1, le=4)
+
+
+class LoadTestResult(BaseModel):
+    """Aggregates latency, throughput and error counts for one load-test run."""
+
+    load_run_id: str
+    dataset_name: str
+    query_count: int
+    max_concurrency: int
+    total_duration_ms: int
+    throughput_queries_per_minute: float
+    latency_mean_ms: float
+    latency_median_ms: float
+    latency_p95_ms: float
+    error_count: int
+    dataset_run_urls: list[str]

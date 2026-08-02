@@ -42,7 +42,8 @@ def build_check_rules_tool(
     def check_rules(runtime: ToolRuntime) -> tuple[str, list[Finding]]:
         """Checks the claim held in the graph state against all applicable rules."""
         claim = ExpenseClaim.from_state(runtime.state["claim"])
-        findings = rule_checker.check(claim, reference_date_provider(), runtime.state.get("intent"))
+        reference_date = runtime.state.get("reference_date") or reference_date_provider()
+        findings = rule_checker.check(claim, reference_date, runtime.state.get("intent"))
         summary = "; ".join(f"{f.rule_id}:{f.status}" for f in findings) or "no applicable rules"
         return summary, findings
 

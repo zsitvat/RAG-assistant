@@ -20,7 +20,8 @@ def test_run_returns_the_structured_result_on_first_success():
 
     result = runner.run([HumanMessage(content="x")], fallback=_Schema(value=0))
 
-    assert result.value == 1
+    assert result.value.value == 1
+    assert result.degraded is False
 
 
 def test_run_retries_once_then_returns_the_repaired_result():
@@ -44,7 +45,8 @@ def test_run_retries_once_then_returns_the_repaired_result():
 
     result = runner.run([HumanMessage(content="x")], fallback=_Schema(value=0))
 
-    assert result.value == 2
+    assert result.value.value == 2
+    assert result.degraded is False
 
 
 def test_run_falls_back_when_both_attempts_fail():
@@ -61,7 +63,8 @@ def test_run_falls_back_when_both_attempts_fail():
 
     result = runner.run([HumanMessage(content="x")], fallback=_Schema(value=99))
 
-    assert result.value == 99
+    assert result.value.value == 99
+    assert result.degraded is True
 
 
 def test_run_falls_back_immediately_when_structured_output_is_unsupported():
@@ -74,4 +77,5 @@ def test_run_falls_back_immediately_when_structured_output_is_unsupported():
 
     result = runner.run([HumanMessage(content="x")], fallback=_Schema(value=7))
 
-    assert result.value == 7
+    assert result.value.value == 7
+    assert result.degraded is True

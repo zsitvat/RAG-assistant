@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated, TypedDict
 
 from langchain_core.messages import BaseMessage
@@ -19,3 +20,5 @@ class AgentState(TypedDict, total=False):
     category: Category | None
     claim: ExpenseClaim
     decision: Decision | None
+    reference_date: date | None
+    degraded: bool
