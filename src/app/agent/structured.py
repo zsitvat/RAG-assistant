@@ -1,5 +1,5 @@
 import logging
-from typing import NamedTuple, TypeVar
+from typing import NamedTuple
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage
@@ -7,8 +7,6 @@ from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
-
-SchemaT = TypeVar("SchemaT", bound=BaseModel)
 
 
 class StructuredResult[SchemaT](NamedTuple):
@@ -18,7 +16,7 @@ class StructuredResult[SchemaT](NamedTuple):
     degraded: bool
 
 
-class StructuredOutputRunner:
+class StructuredOutputRunner[SchemaT: BaseModel]:
     """Any failure to parse or validate the model's output degrades to a caller-supplied default."""
 
     def __init__(
