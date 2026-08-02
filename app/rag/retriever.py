@@ -10,7 +10,7 @@ from app.rules.model import Category
 
 
 class Retriever(BaseRetriever):
-    """LangChain retriever wrapping the policy vector store; the category filter is chosen per search call."""
+    """LangChain retriever over the policy vector store; category filter chosen per search call."""
 
     vector_store: RedisVectorStore
     k: int = TOP_K

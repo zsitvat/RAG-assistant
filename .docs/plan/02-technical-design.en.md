@@ -1210,7 +1210,7 @@ variables:
 | `LLM_BACKEND` | `ollama` | `ollama` or `dummy` |
 | `OLLAMA_BASE_URL` | `http://ollama:11434` | serving endpoint |
 | `LLM_MODEL` | `qwen2.5:7b-instruct-q4_K_M` | model tag |
-| `EVAL_JUDGE_MODEL` | `qwen2.5:7b-instruct-q4_K_M` | model tag used by `llm_eval`'s `answer_quality` LLM-as-judge metric; defaults to the same model as `LLM_MODEL` but can be pointed at a second pulled model for an independent judge | i
+| `EVAL_JUDGE_MODEL` | `qwen2.5:7b-instruct-q4_K_M` | model tag for `llm_eval`'s `answer_quality` LLM-as-judge metric; defaults to the same tag as `LLM_MODEL` for a working out-of-the-box default, but pointing it at a second pulled model gives a materially more meaningful judgement by avoiding self-grading |
 | `API_BASE_URL` | `http://api:8000` | used by the Streamlit client |
 | `REDIS_URL` | `redis://redis:6379/0` | single datastore connection |
 | `LANGFUSE_ENABLED` | `true` | turn the callback handler on/off; required for official eval and load runs |
@@ -1399,6 +1399,13 @@ its own answers. The report aggregates each score as a percentage and lists fail
 clarification case uses `expected_decision: needs_info`, so it needs no separate outcome/citation
 metric, but still gets an `answer_quality` judgement against its own `expected_answer_summary`.
 
+`EVAL_JUDGE_MODEL` **defaults to the same tag as `LLM_MODEL`**, so out of the box the judge and the
+model it grades are the same model — a real self-grading-bias risk (a model's own systematic
+mistakes read as "correct" to itself). It would be materially more useful to point `EVAL_JUDGE_MODEL`
+at a genuinely different, ideally stronger, model — this only requires pulling a second Ollama model
+and setting the env var; no code change. The default is the same model purely so the metric runs
+out of the box on the single model this PoC's local-machine budget (§1.2) already pulls.
+
 ### 13.3 Runner
 
 `python -m llm_eval.run_eval` validates `llm_eval/dataset.json`, idempotently synchronises its cases to the
@@ -1409,7 +1416,7 @@ from the internal `EvaluationResponse`. It still measures the deployed graph ove
 not force evaluation-only fields into the user-facing contract. Langfuse stores the item-to-trace
 link, run metadata and six per-case scores. One pass over the 20 cases is the official PoC
 evaluation; a suspicious failure can be rerun manually and compared through its trace. The runner
-writes `.docs/evaluation_result/functional-<timestamp>.md` (summary table + per-case rows + failure notes) and a
+writes `evaluation_results/functional-<timestamp>.md` (summary table + per-case rows + failure notes) and a
 machine-readable `.json` next to it, and pushes each metric to Langfuse as a score on that turn's
 trace (§11), so a failure can be opened and inspected step by step. `--node intent` uses the same
 dataset and experiment flow while evaluating only one node in-process (the assignment explicitly
@@ -1521,7 +1528,7 @@ This is deliberately not a job system: there is no queue, progress endpoint or c
 the invocation blocks in the terminal until every repetition completes. It measures the deployed
 graph, model contention and Langfuse instrumentation, but not network or `/chat` transport overhead.
 Per-node and per-generation spans in the linked Langfuse runs identify the bottleneck. The aggregate
-is written as JSON to `.docs/evaluation_result/load-<timestamp>.json` — the same shared results
+is written as JSON to `evaluation_results/load-<timestamp>.json` — the same shared results
 directory `llm_eval/run_eval.py` writes its functional-evaluation reports to — and printed to the
 terminal; the printed aggregate is copied into the README's evaluation section rather than
 generating a separate local load-report format.
@@ -1583,7 +1590,7 @@ describe a fictional company, are not a real company's rules and are not tax or 
 | M4 | Main graph | compiled LangGraph `StateGraph`, `ToolNode`, ReAct loop guardrails and clarification-then-resume — verified with a scripted LangChain chat model that emits fixed tool calls |
 | M5 | API + UI | FastAPI endpoints with the public `ChatResponse` and internal `EvaluationResponse` contracts, LangChain `ChatOllama` wired, prompts tuned, focused Streamlit chat complete |
 | M6 | Docker | `docker compose up` works from a clean clone |
-| M7 | Evaluation | repository functional dataset, Langfuse functional experiment, script-triggered traced load run, local functional report in `.docs/evaluation_result/`, README written |
+| M7 | Evaluation | repository functional dataset, Langfuse functional experiment, script-triggered traced load run, local functional report in `evaluation_results/`, README written |
 
 During planning, the implementation reference is updated directly. The final README and generated
 evaluation reports are produced at M7; no planning changelog or per-component feature-document tree

@@ -21,7 +21,7 @@ MIN_MEASURED_TURNS = 50
 MAX_MEASURED_TURNS = 200
 MIN_CONCURRENCY = 1
 MAX_CONCURRENCY = 4
-REPORT_DIR = Path(".docs/evaluation_result")
+REPORT_DIR = Path("evaluation_results")
 
 
 class LoadTestValidationError(ValueError):

@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     llm_backend: Literal["ollama", "dummy"] = "ollama"
     ollama_base_url: str = "http://ollama:11434"
     llm_model: str = "qwen2.5:7b-instruct-q4_K_M"
+    # Defaults to llm_model so the eval judge runs out of the box; point it at a genuinely
+    # different (ideally stronger) pulled model for a meaningful judgement, since a model
+    # grading its own answers risks not catching its own systematic mistakes.
     eval_judge_model: str = "qwen2.5:7b-instruct-q4_K_M"
 
     api_base_url: str = "http://api:8000"

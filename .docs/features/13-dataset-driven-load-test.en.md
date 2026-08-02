@@ -75,7 +75,7 @@ exits with a clear message if Langfuse isn't enabled and configured — before d
 expensive. Only then does it build the full `ApplicationDependencies` (Redis connection, ingestion,
 checkpointer, agent graph — the same construction the FastAPI lifespan performs) via
 `asyncio.run(...)`, wraps the resulting `AgentService` in a `LoadTestRunner`, and runs it. The
-`LoadTestResult` is written as JSON to `.docs/evaluation_result/load-<timestamp>.json` — the same
+`LoadTestResult` is written as JSON to `evaluation_results/load-<timestamp>.json` — the same
 shared results directory `llm_eval/run_eval.py` writes its functional-evaluation reports to — and
 also printed to the terminal along with the Langfuse run links.
 

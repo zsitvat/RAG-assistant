@@ -7,6 +7,22 @@ LangChain + LangGraph, a local open-source LLM (Ollama), Redis 8, FastAPI and St
 > made up for this prototype. Nothing it says is real company policy, and nothing it says is tax or
 > legal advice.
 
+## Contents
+
+1. [The problem and why this topic](#1-the-problem-and-why-this-topic)
+2. [User journeys](#2-user-journeys)
+3. [Architecture](#3-architecture)
+4. [Redis: single datastore, and what that costs](#4-redis-single-datastore-and-what-that-costs)
+5. [Model trade-offs](#5-model-trade-offs)
+6. [Production rule-catalogue extraction (not built here)](#6-production-rule-catalogue-extraction-not-built-here)
+7. [Setup, configuration and run commands](#7-setup-configuration-and-run-commands)
+8. [Evaluation method](#8-evaluation-method)
+9. [Load test method](#9-load-test-method)
+10. [PoC boundaries (deliberately out of scope)](#10-poc-boundaries-deliberately-out-of-scope)
+11. [Production recommendations (not implemented)](#11-production-recommendations-not-implemented)
+12. [Key design decisions](#12-key-design-decisions)
+13. [What's committed, what isn't](#13-whats-committed-what-isnt)
+
 ## 1. The problem and why this topic
 
 An agentic RAG chatbot that answers employees' questions about expense reimbursement and benefits
@@ -250,7 +266,7 @@ uv run python -m load_test.load                                          # defau
 uv run python -m load_test.load --repetitions 5 --max-concurrency 2      # override the defaults
 ```
 
-## 8. Evaluation method and results
+## 8. Evaluation method
 
 **Dataset** — `llm_eval/dataset.json`, 20 version-controlled cases spanning general policy, all six
 expense categories (meal, travel, commuting, mileage, equipment, benefits), a one-way/round-trip
@@ -260,54 +276,28 @@ the real `ReimbursementCalculator`/`RuleChecker` output for its exact claim fiel
 committed, not hand-computed — so a case failing means the agent diverged from the deterministic rule
 engine, not that the dataset is wrong.
 
-**Metrics** (`llm_eval/metrics.py`, six deterministic Langfuse evaluators, no answer-prose parsing
-anywhere): classification accuracy (intent + category), slot accuracy (share of expected `ExpenseClaim`
-fields matching exactly), retrieval hit@4, tool-selection accuracy (exact ordered tool-call list —
-the strictest, most model-behavior-sensitive metric), outcome accuracy (decision + calculated amount),
-citation accuracy (an expected document actually placed in the answer's citation context, not merely
-retrieved).
+**Metrics** (`llm_eval/metrics.py`, seven Langfuse evaluators): classification accuracy (intent +
+category), slot accuracy (share of expected `ExpenseClaim` fields matching exactly), retrieval hit@4,
+tool-selection accuracy (exact ordered tool-call list — the strictest, most model-behavior-sensitive
+metric), outcome accuracy (decision + calculated amount), citation accuracy (an expected document
+actually placed in the answer's citation context, not merely retrieved) — six deterministic checks
+over structured graph state, no answer-prose parsing among them — plus **answer quality**, an
+LLM-as-judge check of the actual generated answer text against a hand-authored
+`expected_answer_summary` per case (`llm_eval/judge.py`). The judge runs on `EVAL_JUDGE_MODEL`,
+independently configurable from `LLM_MODEL` (defaults to the same tag so it works out of the box,
+but pointing it at a genuinely different model gives a materially more meaningful judgement, since a
+model grading its own answers risks not catching its own systematic mistakes).
 
 **Runner** — `python -m llm_eval.run_eval` idempotently syncs the dataset to a Langfuse dataset
 (`test-dataset`, upserted by stable case id) and runs it as a Langfuse
 `dataset.run_experiment(...)`, which supplies concurrency, per-item tracing/dataset-run linking and
 per-metric score recording; the application supplies only the task function (one `POST /admin/eval`
 per case, pinning `reference_date` for deterministic deadline math) and the metric functions. One
-failing case never aborts the run. A local Markdown + JSON report lands under `.docs/evaluation_result/`.
+failing case never aborts the run. A local Markdown + JSON report lands under `evaluation_results/`.
 
-**Results** (`qwen2.5:7b-instruct-q4_K_M`, official run 2026-08-02T10:26:25Z, 20 cases):
+**Results, scores and analysis:** see [`evaluation_results/README.md`](evaluation_results/README.md).
 
-| Metric | Pass rate | Scored cases |
-| --- | --- | --- |
-| classification_accuracy | 90.0% | 20 |
-| slot_accuracy | 11.8% | 17 |
-| retrieval_hit_at_4 | 0.0% | 18 |
-| tool_selection_accuracy | 15.0% | 20 |
-| outcome_accuracy | 25.0% | 20 |
-| citation_accuracy | 0.0% | 18 |
-
-Langfuse experiment:
-<https://cloud.langfuse.com/project/cms7txjr50008ad0jxqp7myo0/datasets/cmsbnbrox02a9ad0h25lj6w0b/runs/8ae3032e-758d-407b-8990-045ea29d1e19>.
-
-**Analysis — these numbers are real and honest, and the low scores have one consistent, verified
-root cause.** `classification_accuracy` (intent + category) is strong at 90%; every metric downstream
-of `extract_information` is weak. Spot-checking individual `/admin/eval` calls for low-scoring cases
-shows the 7B model frequently fails to produce the *exact* canonical value the extraction prompt asks
-for — e.g. writing `expense_type: "transport"` instead of the required `"pass"`, or failing to infer
-an implied numeric zero from "no alcohol" into `non_reimbursable_amount: 0`. Because
-`route_after_extraction` is deterministic and correct, an imprecise extraction correctly routes the
-turn to `ask_clarification` *before* the agent ever reaches `agent_step`/`search_policies` — so
-`retrieval_hit_at_4`, `tool_selection_accuracy` and `citation_accuracy` are structurally zero for any
-turn that never reaches the tool-calling loop, which is most of them here. This is the evaluation
-harness catching a genuine capability limit of a small, locally-served model under this design — not
-a software defect, and not something the dataset was loosened to hide. One real dataset-authoring bug
-*was* found and fixed this way: `general-01`'s expected documents were assigned from a category tag
-without checking the actual corpus file titles, and pointed partly at a glossary document; verified
-directly against the live endpoint and corrected (see the dated change-log entry). A materially better
-score on the extraction-dependent metrics would need either a larger/more instruction-precise model
-than fits the one-developer-machine budget (§5), or a refined extraction prompt with explicit
-few-shot examples of the canonical enum values — both documented as follow-ups, not implemented here.
-
-## 9. Load test method and results
+## 9. Load test method
 
 `python -m load_test.load` is a standalone CLI script, not an API endpoint: it builds its own copy of
 the application dependency graph (the same `ApplicationDependencies.build()` the FastAPI lifespan
@@ -317,35 +307,12 @@ an endpoint inside the live `uvicorn` worker — means a crash or resource exhau
 test cannot take real `/chat` traffic down with it, and per-item results are traced to Langfuse as
 they complete rather than existing only in one process's memory until a final HTTP response. It
 measures the complete graph invocation only, not `/chat` transport overhead or network latency. The
-aggregate result is written to `.docs/evaluation_result/load-<timestamp>.json` — the same shared
-results directory the functional evaluation writes its reports to — as well as printed to the
-terminal.
+aggregate result is written to `evaluation_results/load-<timestamp>.json` — the same shared results
+directory the functional evaluation writes its reports to — as well as printed to the terminal. The
+PoC stays uncached deliberately, so its behaviour and latency remain easy to explain.
 
-**Results** (default 20-item dataset × 3 repetitions = 60 measured turns, `max_concurrency=4`, run
-<!-- LOAD_TEST_TIMESTAMP -->):
-
-<!-- LOAD_TEST_RESULTS_TABLE -->
-
-Langfuse dataset runs: <!-- LOAD_TEST_LANGFUSE_URLS -->.
-
-**Bottleneck**: a complete turn makes 2 fixed model calls (classify, extract) plus 1 final response
-call plus 1–4 agent tool-selection calls — 4–7 LLM calls per turn depending on how many tools the
-agent decides to use. Ollama serialises generation on this one local model, so aggregate LLM
-generation dominates total latency by an order of magnitude; concurrency beyond ~2–4 is expected to
-mostly grow queue time rather than throughput, confirmed by comparing per-repetition wall time against
-the linked per-generation Langfuse spans <!-- BOTTLENECK_NOTE -->. Retrieval (a single CPU embedding
-forward pass + Redis KNN over a few hundred vectors) and the deterministic tools are sub-millisecond
-by comparison — exactly why the retrieval path was kept simple.
-
-**Documented, not implemented, optimisations**:
-
-1. **Fast path for simple policy questions** — when intent is `policy_question` with high confidence,
-   skip `extract_information` and proceed directly to the agent loop, removing one LLM call without
-   removing the dedicated classifier or autonomous tool choice.
-2. **Production Redis cache layer** — cache query embeddings and retrieval results with bounded TTLs,
-   once real traffic shows enough repeated questions to justify the invalidation/observability cost.
-
-The PoC stays uncached deliberately, so its behaviour and latency remain easy to explain.
+**Results, bottleneck analysis and optimisation proposals:** see
+[`evaluation_results/README.md`](evaluation_results/README.md).
 
 ## 10. PoC boundaries (deliberately out of scope)
 
@@ -396,7 +363,9 @@ The organisation's role (provider, deployer or both), intended use and actual in
 decisions must be assessed by qualified legal and compliance specialists before any production use —
 this project makes no compliance claim.
 
-## 12. Key design decisions (full rationale in [§17](.docs/plan/02-technical-design.en.md))
+## 12. Key design decisions
+
+Full rationale for each of these in [§17 of the technical design](.docs/plan/02-technical-design.en.md).
 
 - **Tool selection is a ReAct loop**, not a static intent→tool table or a single planner call — the
   one piece of the design that most directly demonstrates autonomous decision-making, bounded by

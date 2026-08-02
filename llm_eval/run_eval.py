@@ -19,7 +19,7 @@ from llm_eval.model import EvalDataset
 from llm_eval.report import EvaluationReport
 
 DATASET_PATH = Path(__file__).parent / "dataset.json"
-REPORT_DIR = Path(".docs/evaluation_result")
+REPORT_DIR = Path("evaluation_results")
 REQUEST_TIMEOUT_SECONDS = 180
 
 
