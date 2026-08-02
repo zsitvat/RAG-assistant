@@ -11,7 +11,7 @@ real chat that shows live progress, streams the answer, and can reset the server
 
 ## How it works
 
-### The public event vocabulary (`app/agent/service.py`)
+### The public event vocabulary (`src/app/agent/service.py`)
 
 `AgentService.stream()` consumes `graph.astream(..., stream_mode=["updates", "messages"])` and
 translates it; no LangGraph object reaches the client.
@@ -44,7 +44,7 @@ values, so a `search_policies` `ToolMessage.artifact` is a plain `dict`, not a `
 same class of problem `ExpenseClaim.from_state` already solves for the claim. `RagResult`
 now has a matching `from_artifact()` coercion, and source collection goes through it.
 
-### Streamlit chat (`app/ui.py`)
+### Streamlit chat (`src/app/ui.py`)
 
 `ChatApiClient` owns every HTTP call; the page keeps only presentation state
 (`thread_id`, `history`) — conversation truth stays in the LangGraph checkpoint. During a turn,
@@ -65,17 +65,17 @@ intact, so the next message retries on the same thread.
 
 | File | Responsibility |
 | --- | --- |
-| `app/agent/service.py` | `stream()`, the event allow-lists, shared `_project` |
-| `app/api/schemas.py` | `StreamEvent` and its `to_sse()` wire rendering |
-| `app/api/routes/chat.py` | `POST /chat/stream` as a `StreamingResponse` |
-| `app/rag/model.py` | `RagResult.from_artifact` |
-| `app/ui.py` | `ChatApiClient` and the chat page |
-| `app/main.py`, `app/settings.py` | UI-origin CORS |
+| `src/app/agent/service.py` | `stream()`, the event allow-lists, shared `_project` |
+| `src/app/api/schemas.py` | `StreamEvent` and its `to_sse()` wire rendering |
+| `src/app/api/routes/chat.py` | `POST /chat/stream` as a `StreamingResponse` |
+| `src/app/rag/model.py` | `RagResult.from_artifact` |
+| `src/app/ui.py` | `ChatApiClient` and the chat page |
+| `src/app/main.py`, `src/app/settings.py` | UI-origin CORS |
 | `tests/journeys/test_chat_stream.py` | event vocabulary, allow-listing, dedup, token filtering, blocking parity, no-token turns, SSE wire format, HTTP contract |
 
 ## Related restructuring
 
-`app/core/` was split in the same change: `app/core/config.py` → `app/settings.py`,
-`app/core/logging.py` → `app/logging/config.py`. Request-correlation middleware
-(`app/core/observability.py`, `RequestContextMiddleware`) was removed rather than moved — see the
+`src/app/core/` was split in the same change: `src/app/core/config.py` → `src/app/settings.py`,
+`src/app/core/logging.py` → `src/app/logging/config.py`. Request-correlation middleware
+(`src/app/core/observability.py`, `RequestContextMiddleware`) was removed rather than moved — see the
 logging feature doc for why.

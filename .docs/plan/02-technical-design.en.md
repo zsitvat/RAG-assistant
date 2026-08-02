@@ -122,72 +122,74 @@ The current repository is:
 ```
 .env.example              # committed application-setting template; .env is local and ignored
 Makefile                  # install, quality, Sonar and local run commands
-app/
-  main.py                    # FastAPI app assembly and lifespan boundary
-  dependencies.py            # typed dependency container, runtime wiring and providers
-  settings.py                # pydantic-settings runtime configuration
-  ui.py                      # Streamlit chat client
-  api/
-    router.py                  # combines the route modules
-    schemas.py                 # HTTP request/response contracts
-    routes/
-      health.py                  # liveness/readiness endpoints
-      chat.py                    # chat, streaming and thread-reset endpoints
-      admin.py                   # ingest and index-stat endpoints
-      evaluation.py              # internal single-turn evaluation endpoint used by llm_eval/run_eval.py
-  agent/
-    service.py                 # invoke, stream and reset use cases exposed to the API
-    graph.py                   # node/routing assembly and compilation
-    nodes.py                   # node callbacks, including classify_intent
-    state.py                   # LangGraph AgentState contract
-    model.py                   # expense-claim Pydantic domain contracts
-    messages.py                # fixed non-LLM-generated user-facing strings
-    current_request.py         # messages/tool-call facts scoped to the latest request
-    calculator.py              # deterministic reimbursement-calculation module
-    deadline.py                # submission-deadline check
-    rule_checker.py            # receipt/supporting-document rule checks
-    slots.py                   # required-slot lookup per (intent, category)
-    structured.py               # structured-output value + fallback-used flag
-    tools.py                    # LangChain tool adapters over calculator/deadline/rule_checker
-    prompts.py                  # embedded PoC prompt templates
-    prompt_library.py           # Langfuse-resolved-vs-embedded prompt resolution and validation
-    tests/                      # co-located unit tests for this package
-  integrations/
-    llm.py                     # ChatOllama/FakeListChatModel factory
-    redis.py                   # Redis connection, build-info and index-stat operations
-    checkpointer.py            # Redis-backed LangGraph checkpointer (sync + async)
-    ollama.py                  # Ollama reachability/model-pulled readiness check
-    readiness.py               # aggregates LLM + Redis readiness behind /ready
-    langfuse.py                # Langfuse client, trace metadata and prompt-resolution access
-    tests/                     # co-located unit tests for this package
-  logging/
-    config.py                  # stdout + UTC-midnight rotating-file JSON logging, retention cleanup
-    tests/                     # co-located unit tests for this package
-  rag/
-    graph.py                    # retrieve -> context subgraph
-    state.py                    # LangGraph RagState contract
-    model.py                    # retrieval/ingestion Pydantic contracts
-    retriever.py                # vector-store retriever with per-call category filter
-    store.py                    # query:/passage: prefixing for the embedding model
-    tool.py                     # search_policies tool wrapping the RAG subgraph
-    ingest.py                   # load, chunk, validate and upsert the corpus into Redis
-    chunker.py                  # header-aware, table-preserving Markdown chunker
-    docx_loader.py              # LangChain loader for the .docx corpus
-    docx_converter.py           # .docx -> Markdown conversion
-    rule_metadata.py            # attaches section_id/rule_ids/categories, validates rules.yaml anchors
-    build_info.py               # corpus build info used to decide whether ingestion can be skipped
-    index_schema.py             # Redis index field/vector-dimension schema
-    errors.py                   # corpus conversion/chunking/cross-check exceptions
-    tests/                      # co-located unit tests for this package
-  rules/
-    loader.py                   # rules.yaml loading and validation
-    model.py                    # rule-catalogue Pydantic contracts
-    tests/                      # co-located unit tests for this package
-  tests/
-    fakes.py                    # shared test doubles (ScriptedChatModel, tool/document builders)
-    test_dependencies.py        # app/dependencies.py DI container
-    api/                        # full-HTTP-stack tests exercised through app.main
-    journeys/                   # cross-module compiled-graph and rule/document-consistency integration tests
+src/
+  app/                       # the deployed application package (src layout: keeps it out of the
+                              # repo root, alongside the standalone llm_eval/ and load_test/ tools)
+    main.py                    # FastAPI app assembly and lifespan boundary
+    dependencies.py            # typed dependency container, runtime wiring and providers
+    settings.py                # pydantic-settings runtime configuration
+    ui.py                      # Streamlit chat client
+    api/
+      router.py                  # combines the route modules
+      schemas.py                 # HTTP request/response contracts
+      routes/
+        health.py                  # liveness/readiness endpoints
+        chat.py                    # chat, streaming and thread-reset endpoints
+        admin.py                   # ingest and index-stat endpoints
+        evaluation.py              # internal single-turn evaluation endpoint used by llm_eval/run_eval.py
+    agent/
+      service.py                 # invoke, stream and reset use cases exposed to the API
+      graph.py                   # node/routing assembly and compilation
+      nodes.py                   # node callbacks, including classify_intent
+      state.py                   # LangGraph AgentState contract
+      model.py                   # expense-claim Pydantic domain contracts
+      messages.py                # fixed non-LLM-generated user-facing strings
+      current_request.py         # messages/tool-call facts scoped to the latest request
+      calculator.py              # deterministic reimbursement-calculation module
+      deadline.py                # submission-deadline check
+      rule_checker.py            # receipt/supporting-document rule checks
+      slots.py                   # required-slot lookup per (intent, category)
+      structured.py               # structured-output value + fallback-used flag
+      tools.py                    # LangChain tool adapters over calculator/deadline/rule_checker
+      prompts.py                  # embedded PoC prompt templates
+      prompt_library.py           # Langfuse-resolved-vs-embedded prompt resolution and validation
+      tests/                      # co-located unit tests for this package
+    integrations/
+      llm.py                     # ChatOllama/FakeListChatModel factory
+      redis.py                   # Redis connection, build-info and index-stat operations
+      checkpointer.py            # Redis-backed LangGraph checkpointer (sync + async)
+      ollama.py                  # Ollama reachability/model-pulled readiness check
+      readiness.py               # aggregates LLM + Redis readiness behind /ready
+      langfuse.py                # Langfuse client, trace metadata and prompt-resolution access
+      tests/                     # co-located unit tests for this package
+    logging/
+      config.py                  # stdout + UTC-midnight rotating-file JSON logging, retention cleanup
+      tests/                     # co-located unit tests for this package
+    rag/
+      graph.py                    # retrieve -> context subgraph
+      state.py                    # LangGraph RagState contract
+      model.py                    # retrieval/ingestion Pydantic contracts
+      retriever.py                # vector-store retriever with per-call category filter
+      store.py                    # query:/passage: prefixing for the embedding model
+      tool.py                     # search_policies tool wrapping the RAG subgraph
+      ingest.py                   # load, chunk, validate and upsert the corpus into Redis
+      chunker.py                  # header-aware, table-preserving Markdown chunker
+      docx_loader.py              # LangChain loader for the .docx corpus
+      docx_converter.py           # .docx -> Markdown conversion
+      rule_metadata.py            # attaches section_id/rule_ids/categories, validates rules.yaml anchors
+      build_info.py               # corpus build info used to decide whether ingestion can be skipped
+      index_schema.py             # Redis index field/vector-dimension schema
+      errors.py                   # corpus conversion/chunking/cross-check exceptions
+      tests/                      # co-located unit tests for this package
+    rules/
+      loader.py                   # rules.yaml loading and validation
+      model.py                    # rule-catalogue Pydantic contracts
+      tests/                      # co-located unit tests for this package
+    tests/
+      fakes.py                    # shared test doubles (ScriptedChatModel, tool/document builders)
+      test_dependencies.py        # app/dependencies.py DI container
+      api/                        # full-HTTP-stack tests exercised through app.main
+      journeys/                   # cross-module compiled-graph and rule/document-consistency integration tests
 llm_eval/                    # standalone functional-evaluation CLI script, not a formal package (no __init__.py, no tests)
   dataset.json               # 20 functional test cases; source of truth
   model.py                   # EvalCase/EvalDataset contracts and validation errors
@@ -207,32 +209,37 @@ docker-compose.yml
 pyproject.toml             # project metadata, dependencies, Ruff/Bandit/pytest/coverage configuration
 uv.lock                    # pinned, reproducible dependency lock file (committed)
 sonar-project.properties   # Sonar source, test and coverage paths
+evaluation_results/        # eval/load-test results (README §8/§9 point here; not embedded inline)
 README.md
 ```
 
-Unit tests inside the `app/` package are co-located with the module they cover, under a `tests/`
-subfolder inside that sub-package (`app/agent/tests/test_calculator.py` covers
-`app/agent/calculator.py`). A test's location names the module it exercises without a separate
+Unit tests inside the `src/app/` package are co-located with the module they cover, under a `tests/`
+subfolder inside that sub-package (`src/app/agent/tests/test_calculator.py` covers
+`src/app/agent/calculator.py`). A test's location names the module it exercises without a separate
 mirrored tree to keep in sync. Two kinds of tests don't belong to a single sub-package and stay
-under `app/tests/` instead: `app/tests/journeys/` holds full compiled-graph journeys and
+under `src/app/tests/` instead: `src/app/tests/journeys/` holds full compiled-graph journeys and
 rule/document-consistency checks that exercise `agent`, `rag` and `rules` together, and
-`app/tests/api/` holds tests that exercise the HTTP surface end-to-end through `app.main` rather
-than importing `app.api.routes.*` directly. `app/tests/fakes.py` holds test doubles shared across
+`src/app/tests/api/` holds tests that exercise the HTTP surface end-to-end through `app.main` rather
+than importing `app.api.routes.*` directly. `src/app/tests/fakes.py` holds test doubles shared across
 all of these locations, imported everywhere as `from app.tests.fakes import ...` — which is also why
-`app/tests/` and every sub-package `tests/` subfolder carry an `__init__.py`.
+`src/app/tests/` and every sub-package `tests/` subfolder carry an `__init__.py`.
 
 `llm_eval/` and `load_test/` are the two exceptions to that package structure, and the only parts of
 the repository with no unit tests at all: each is a standalone CLI script users run directly
 (`python -m llm_eval.run_eval`, `python -m load_test.load`) against a live Redis/Ollama/Langfuse
 stack, not app logic exercised by the deployed request path, so neither carries an `__init__.py` nor
 a `tests/` subfolder — they are validated by running them, not by a mocked unit-test suite (§13.4).
-`load_test/` in particular used to be `app/loadtest/`, invoked as an `/admin/load-test` endpoint
+`load_test/` in particular used to be `app/loadtest/` (back when `app/` itself lived at the repo
+root, before the `src/` layout below), invoked as an `/admin/load-test` endpoint
 inside the live FastAPI process; it moved out to a standalone script (§14) specifically so a crash
 or resource exhaustion during a load run cannot take real `/chat` traffic down with it.
 
-`pytest` discovers tests via `testpaths = ["app"]` — `llm_eval/` and `load_test/` are outside that
-scope entirely, so coverage (`source = ["app"]`) never touches either. Sonar configuration explicitly
-excises the co-located `app/**/tests/` subfolders from source-code accounting so they are measured as
+`pytest` discovers tests via `testpaths = ["src/app"]`, resolving the `app` import through
+`pythonpath = [".", "src"]` (the `.` entry is what lets `llm_eval/`/`load_test/` import `app.*` while
+staying outside `src/` themselves). `llm_eval/` and `load_test/` are outside pytest's `testpaths`
+scope entirely, so coverage (`source = ["app"]` — the import name, unaffected by the `src/` move)
+never touches either. Sonar configuration explicitly
+excises the co-located `src/app/**/tests/` subfolders from source-code accounting so they are measured as
 tests, not counted as application code. `load_test/load.py` stays in the Sonar and Bandit source scan
 (it is still real code worth static analysis, even without tests); `llm_eval/` stays outside all of
 it, matching its existing scope as a dev tool rather than shipped production code.
@@ -248,9 +255,9 @@ Application settings are documented in `.env.example` and loaded from the ignore
 `pydantic-settings`. The committed template contains no credentials. The local development file may
 select `LLM_BACKEND=dummy`, loopback URLs and disabled Langfuse without changing source code.
 
-All endpoint functions live under `app/api/routes/`. `app/api/router.py` only combines their
-`APIRouter` instances, and `app/main.py` only assembles the FastAPI application and owns its
-lifespan. `app/dependencies.py` owns runtime wiring through a typed `ApplicationDependencies`
+All endpoint functions live under `src/app/api/routes/`. `src/app/api/router.py` only combines their
+`APIRouter` instances, and `src/app/main.py` only assembles the FastAPI application and owns its
+lifespan. `src/app/dependencies.py` owns runtime wiring through a typed `ApplicationDependencies`
 container and exposes the small FastAPI providers used by routes. The lifespan builds this container
 once and stores it as `app.state.dependencies`; imports perform no resource creation. This keeps
 transport code out of both the application entry point and the agent workflow.
@@ -258,8 +265,8 @@ transport code out of both the application entry point and the agent workflow.
 New application behaviour is organised around small, cohesive classes. Ad hoc module-level helper
 functions and boilerplate getters/setters are avoided; framework-required entry points are the
 exception. Dependency-injection providers and runtime wiring remain centralised in
-`app/dependencies.py`. Each future domain module keeps its Pydantic contracts in that module's
-`model.py`; the shell's existing `app/api/schemas.py` remains the current transport-contract file
+`src/app/dependencies.py`. Each future domain module keeps its Pydantic contracts in that module's
+`model.py`; the shell's existing `src/app/api/schemas.py` remains the current transport-contract file
 until the API module is expanded. Source files do not use file-level or module-level docstrings.
 
 ---
@@ -318,7 +325,7 @@ paragraphs — after that a `MarkdownHeaderTextSplitter` has nothing to split on
 fixed-size chunks, which destroys the "one chunk = one rule section" property the citations and the
 `rule_ids` metadata depend on.
 
-So `app/rag/ingest.py` uses a small `python-docx` normaliser behind LangChain's `BaseLoader`
+So `src/app/rag/ingest.py` uses a small `python-docx` normaliser behind LangChain's `BaseLoader`
 interface.
 It emits LangChain `Document` objects whose `page_content` is Markdown and whose `metadata` contains
 the source identity. This adapter exists only because the generic Word loaders discard the heading
@@ -526,7 +533,7 @@ categories:
 ```
 
 The FastAPI lifespan loads it once into a pydantic `RuleCatalogue` and passes that dependency to the
-calculator and rule-checker modules through `app/dependencies.py`. Typed accessors expose values such
+calculator and rule-checker modules through `src/app/dependencies.py`. Typed accessors expose values such
 as `rules.meal.limit_per_person`. A missing or malformed rule raises at startup, not mid-request.
 
 ### 4.5 `rules.yaml` is hand-authored — and would not be in a real system
@@ -699,7 +706,7 @@ agent_step  ──tool call──▶  execute_tools  ──ToolMessage──▶ 
      └────────────────── up to MAX_AGENT_STEPS (4) ───────────┘
 ```
 
-The three LangChain tools it may call, as the LLM sees them (schemas in `app/agent/tools.py`, descriptions are part
+The three LangChain tools it may call, as the LLM sees them (schemas in `src/app/agent/tools.py`, descriptions are part
 of the contract because they are what the model actually reasons over):
 
 | Tool | Arguments the agent chooses | Description given to the model |
@@ -737,7 +744,7 @@ and more run-to-run variance than a planner would have. The functional eval reco
 tool sequence in Langfuse, so a failed selection can be inspected without adding variance analysis
 to the PoC report.
 
-### 6.4 Conditional edges (`app/agent/graph.py`)
+### 6.4 Conditional edges (`src/app/agent/graph.py`)
 
 ```python
 def route_after_extraction(s):          # -> "ask_clarification" | "agent_step" | "out_of_scope"
@@ -848,7 +855,7 @@ returns the submitted eligible amount with `cap_huf=None` and a lower-confidence
 inventing a limit. Applicable rules are selected deterministically from the claim and catalogue.
 Rule identifiers and eligibility explanations belong to the separate rule-checker result.
 
-`CalculationResult` is defined in `app/agent/model.py` with the other Pydantic schemas. Its deliberately
+`CalculationResult` is defined in `src/app/agent/model.py` with the other Pydantic schemas. Its deliberately
 small interface contains only values consumed by the agent and evaluation:
 
 - `amount_huf` is the amount the calculation says can be reimbursed;
@@ -924,7 +931,7 @@ flowchart LR
     B --> C([END])
 ```
 
-Own state in `app/rag/state.py`, kept to the same rule as §5 — two inputs and one output:
+Own state in `src/app/rag/state.py`, kept to the same rule as §5 — two inputs and one output:
 
 ```python
 class RagState(TypedDict, total=False):
@@ -986,7 +993,7 @@ insufficient, they are the natural next steps, in that order.
 | `qwen2.5:3b-instruct` | 2–3× faster, fits small machines | more extraction errors |
 | LangChain test chat model | deterministic CI and UI smoke tests; emits scripted `AIMessage` tool calls so the LangGraph ReAct loop is testable without Ollama | canned answers only |
 
-`app/integrations/llm.py` returns a LangChain `BaseChatModel`: `ChatOllama` for
+`src/app/integrations/llm.py` returns a LangChain `BaseChatModel`: `ChatOllama` for
 `LLM_BACKEND=ollama`, or a deterministic LangChain-compatible test model for
 `LLM_BACKEND=dummy`, so tests and CI can run without Ollama. Temperature 0 for classification,
 extraction and tool selection; 0.2 for the final answer.
@@ -1000,7 +1007,7 @@ requests and no `json.loads` scattered across nodes.
 The four prompt names are `classify-intent`, `extract-information`, `agent-step` and
 `generate-response`. Each is rendered as a LangChain `ChatPromptTemplate` and composed with its
 model/parser as a `Runnable`. Every one has a version-controlled template embedded in
-`app/agent/prompts.py`. These
+`src/app/agent/prompts.py`. These
 templates are the guaranteed fallback and make offline development, tests and a fresh clone
 self-contained.
 
@@ -1043,15 +1050,15 @@ values.
 
 ### 10.1 HTTP API
 
-FastAPI owns the agent. `app/main.py` creates the application, registers `app/api/router.py` and
+FastAPI owns the agent. `src/app/main.py` creates the application, registers `src/app/api/router.py` and
 defines an `@asynccontextmanager` lifespan annotated as `AsyncGenerator[None, None]`. The lifespan
 loads `.env`-backed settings, configures JSON logging and delegates runtime wiring to
 `ApplicationDependencies.build()`. That builder opens Redis, verifies the corpus build information,
 warms the embedding model, builds the RAG subgraph and compiles the main graph once. The resulting
 typed container is stored as `app.state.dependencies`, so the first user request does not pay setup
 cost and routes do not access loosely named state attributes. The HTTP
-schemas live in `app/api/schemas.py`; route modules only handle transport and call
-`app/agent/service.py` through the provider defined in `app/dependencies.py`. Endpoints:
+schemas live in `src/app/api/schemas.py`; route modules only handle transport and call
+`src/app/agent/service.py` through the provider defined in `src/app/dependencies.py`. Endpoints:
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -1137,7 +1144,7 @@ The sidebar provides reset thread (`DELETE /threads/{id}`) plus read-only index 
 
 `st.session_state`: `thread_id`, `messages`, with each stored assistant message containing its
 answer metadata, sources and steps. Streaming uses `/chat/stream` via
-`app/ui.py`; the metadata line appears when the final `result` event arrives. On a connection
+`src/app/ui.py`; the metadata line appears when the final `result` event arrives. On a connection
 error the UI shows the API's `detail` and keeps the conversation, since the state lives server-side.
 Clarification questions render as normal assistant messages with a distinct badge.
 
@@ -1169,7 +1176,7 @@ behaviour and model generations are not duplicated in the API response or Stream
 focused on the employee-facing answer, while developers and reviewers inspect execution details in
 Langfuse.
 
-**Application logging is independent of Langfuse.** `app/core/logging.py` configures the standard
+**Application logging is independent of Langfuse.** `src/app/core/logging.py` configures the standard
 Python logging hierarchy once at process startup with two handlers receiving the same structured JSON
 record:
 
@@ -1187,7 +1194,7 @@ operational log into an ungoverned copy of conversation data. One Uvicorn worker
 
 > **Known gap (descoped from task 10):** `request_id`/`thread_id` correlation via context variables,
 > and capturing Uvicorn/FastAPI/Streamlit framework loggers into the same structured format, are
-> **not implemented**. `app/logging/config.py` only emits the fields listed above; there is no
+> **not implemented**. `src/app/logging/config.py` only emits the fields listed above; there is no
 > request-scoped contextvar binding and framework loggers are not redirected through the JSON
 > formatter. This was cut from task 10's acceptance criteria as out of scope for the PoC rather than
 > tracked as a bug — revisit if cross-request debugging in Langfuse-disabled runs becomes painful.
@@ -1316,17 +1323,19 @@ Quality checks run locally and in CI; they are not application services and add 
 | --- | --- | --- |
 | Ruff lint | `ruff check .` | imports, correctness rules and consistent Python style |
 | Ruff format | `ruff format --check .` | formatting drift |
-| Bandit | `bandit -c pyproject.toml -r app` | common Python security issues in application code |
+| Bandit | `bandit -c pyproject.toml -r src/app load_test` | common Python security issues in application code |
 | Tests + coverage | `pytest --cov=app --cov-report=term-missing --cov-report=xml` | behaviour and `coverage.xml` for Sonar |
 | Sonar | `make sonar` (`uv run pysonar`) | maintainability, duplication, bugs, vulnerabilities and coverage quality gate |
 
 `pyproject.toml` targets Python 3.12 and holds the small Ruff, Bandit and pytest configuration.
-`sonar-project.properties` sets `app` as source, `tests` as tests, reads `coverage.xml`, and excludes
-`app/ui.py` from coverage. Limiting `sonar.sources` to `app` and `sonar.tests` to `tests` keeps the
-fictional corpus, generated reports and local logs outside analysis without additional exclusion
-patterns. The locked `pysonar` package supplies the Python scanner without a separately managed
-system Java installation. `make sonar` first requires `SONAR_TOKEN`, regenerates `coverage.xml`,
-submits the result and waits for the configured quality gate.
+`sonar-project.properties` sets `sonar.sources=src/app,load_test`, lists every co-located
+`src/app/**/tests/` subfolder under `sonar.tests` (§3), reads `coverage.xml`, and excludes
+`src/app/ui.py` from coverage and `src/app/settings.py` plus the test subfolders themselves from the
+source scan. Scoping sources this way keeps the fictional corpus, `llm_eval/` (a dev tool, not
+shipped production code), generated reports and local logs outside analysis without additional
+exclusion patterns. The locked `pysonar` package supplies the Python scanner without a separately
+managed system Java installation. `make sonar` first requires `SONAR_TOKEN`, regenerates
+`coverage.xml`, submits the result and waits for the configured quality gate.
 
 The Sonar service is **SonarCloud** — the free tier, external to the application runtime and to the
 Compose stack. It was chosen over a self-hosted SonarQube container for the same reason as Langfuse

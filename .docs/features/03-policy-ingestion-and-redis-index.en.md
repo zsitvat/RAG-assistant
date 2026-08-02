@@ -12,20 +12,20 @@ index state through the application (`/admin/ingest`, `/admin/stats`, the Stream
 
 ## How it works
 
-### The rule catalogue (`app/rules/`)
+### The rule catalogue (`src/app/rules/`)
 
 `config/rules.yaml` is the deterministic rule catalogue: per-document category and
 section-anchor declarations, and per-category rule definitions (limits, rates, approval tiers,
 deadlines). Every number in it was read directly from the source `.docx` files, not copied from the
 technical design's illustrative example — several values differ (see the deviation note below).
-`app/rules/model.py` defines the typed Pydantic models (`RuleCatalogue`, `DocumentMeta`,
+`src/app/rules/model.py` defines the typed Pydantic models (`RuleCatalogue`, `DocumentMeta`,
 `SectionMeta`, `RuleDefinition`, `ApprovalTier`, `SubmissionRules`, `CategoryRules`) and validates,
 at load time, that every rule's `doc_ref` resolves to a declared document and section, that document
-categories are never empty, and that rule ids are unique. `app/rules/loader.py` exposes
+categories are never empty, and that rule ids are unique. `src/app/rules/loader.py` exposes
 `load_rule_catalogue(path)` and a cached `get_rule_catalogue()`; a missing or malformed catalogue
 raises `RuleCatalogueError` before the application starts serving requests.
 
-### Ingestion (`app/rag/`)
+### Ingestion (`src/app/rag/`)
 
 Each concern is one small class in its own module:
 
@@ -63,20 +63,20 @@ Each concern is one small class in its own module:
   unreachable so the rest of the app can still run in dummy/offline mode.
 - `python -m app.rag.ingest` is the standalone CLI entry point.
 
-### The vector store (`app/rag/index_schema.py`, `app/rag/store.py`)
+### The vector store (`src/app/rag/index_schema.py`, `src/app/rag/store.py`)
 
-`app/rag/index_schema.py` holds the Redis index identity and schema as plain constants:
+`src/app/rag/index_schema.py` holds the Redis index identity and schema as plain constants:
 `INDEX_NAME` (`idx:chunks`), `KEY_PREFIX` (`chunk`), `TOP_K`, `VECTOR_DIMENSION` (384), distance
 metric (`COSINE`), algorithm (`HNSW`), vector datatype (`FLOAT32`), and the metadata schema (`doc_id`,
 `section_id`, `categories`, `rule_ids` as `TAG` fields — the LangChain integration's default `|`
 separator matches the design's tag format with no extra configuration; `section` as `TEXT NOSTEM`).
-`app/rag/store.py` holds `E5Embeddings` (a thin `HuggingFaceEmbeddings` subclass adding the
+`src/app/rag/store.py` holds `E5Embeddings` (a thin `HuggingFaceEmbeddings` subclass adding the
 `query:`/`passage:` prefixes `intfloat/multilingual-e5-small` needs) and `build_vector_store()`,
 which constructs a `langchain_redis.RedisVectorStore` from that schema. Chunk keys are
 `chunk:{doc_id}:{chunk_index}` (`add_texts(..., keys=[f"{doc_id}:{chunk_index}"])`, prefixed
 automatically by the integration's `key_prefix`).
 
-### Redis lifecycle (`app/integrations/redis.py`)
+### Redis lifecycle (`src/app/integrations/redis.py`)
 
 **`RedisIndex`** wraps the raw Redis connection (constructed from a `redis_url`) plus everything the
 LangChain integration doesn't own: `ping()`, `build_info:corpus` read/write (as JSON), and
@@ -88,16 +88,16 @@ and similarity searches go through `RedisVectorStore`, never through `RedisIndex
 
 ### API and UI
 
-- `POST /admin/ingest` and `GET /admin/stats` (`app/api/routes/admin.py`) return `503` with a clear
+- `POST /admin/ingest` and `GET /admin/stats` (`src/app/api/routes/admin.py`) return `503` with a clear
   `detail` when Redis is unavailable, instead of a raw 500.
-- `GET /ready` (`app/api/routes/health.py`, delegating to `app/integrations/readiness.py`'s
+- `GET /ready` (`src/app/api/routes/health.py`, delegating to `src/app/integrations/readiness.py`'s
   `ReadinessChecker`) now pings the real Redis client; overall `ready` is `false` when Redis is
   unreachable (previously a fixed `not_configured` placeholder from task 1).
 - `ApplicationDependencies.build()` calls `connect_and_ingest()` during the FastAPI lifespan. If
   Redis is unreachable, dependency construction raises and FastAPI startup fails. This prevents the
   application from serving chat without policy retrieval or durable conversation state. `/ready`
   and Redis-dependent admin endpoints still report failures if Redis becomes unavailable later.
-- The Streamlit sidebar (`app/ui.py`) calls `GET /admin/stats` and renders indexed-chunk count and
+- The Streamlit sidebar (`src/app/ui.py`) calls `GET /admin/stats` and renders indexed-chunk count and
   per-category counts; it contains no Redis-specific logic.
 
 ## How to use
@@ -114,7 +114,7 @@ curl http://127.0.0.1:8000/admin/stats
 Run the Redis 8 integration test (skipped automatically if unreachable):
 
 ```bash
-TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest app/integrations/tests/test_redis_integration.py -v
+TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest src/app/integrations/tests/test_redis_integration.py -v
 ```
 
 ## Key files
@@ -122,24 +122,24 @@ TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest app/integrations/tests/tes
 | File | Responsibility |
 | --- | --- |
 | `config/rules.yaml` | deterministic rule catalogue, hand-authored from the real corpus |
-| `app/rules/model.py` | `RuleCatalogue` typed models + cross-reference validation |
-| `app/rules/loader.py` | `load_rule_catalogue()`, cached `get_rule_catalogue()` |
-| `app/rag/errors.py` | `IngestionError` |
-| `app/rag/docx_converter.py` | `DocxToMarkdownConverter` |
-| `app/rag/docx_loader.py` | `DocxMarkdownLoader` (LangChain `BaseLoader`) |
-| `app/rag/chunker.py` | `MarkdownChunker` |
-| `app/rag/rule_metadata.py` | `RuleMetadataResolver` |
-| `app/rag/build_info.py` | `IndexBuildInfoBuilder` |
-| `app/rag/ingest.py` | `CorpusIngestor`, `connect_and_ingest`, CLI entry point |
-| `app/rag/index_schema.py` | Redis index name, key prefix, vector/schema constants |
-| `app/rag/store.py` | `E5Embeddings`, `RedisVectorStore` factory |
-| `app/integrations/redis.py` | `RedisIndex` — connection, build-info read/write, index stats |
-| `app/api/routes/admin.py` | `/admin/ingest`, `/admin/stats` |
-| `app/api/routes/health.py` | `/health`, `/ready` routes (thin, delegates to `ReadinessChecker`) |
-| `app/integrations/readiness.py` | `ReadinessChecker` — Redis + LLM readiness checks |
-| `app/ui.py` | sidebar index stats |
-| `app/rules/tests/test_rules.py`, `app/rag/tests/test_ingest.py`, `app/rag/tests/test_run_ingest.py`, `tests/api/test_admin.py`, `app/integrations/tests/test_health_readiness.py` | unit tests (no Redis required) |
-| `app/integrations/tests/test_redis_integration.py` | integration tests against a real Redis 8 instance |
+| `src/app/rules/model.py` | `RuleCatalogue` typed models + cross-reference validation |
+| `src/app/rules/loader.py` | `load_rule_catalogue()`, cached `get_rule_catalogue()` |
+| `src/app/rag/errors.py` | `IngestionError` |
+| `src/app/rag/docx_converter.py` | `DocxToMarkdownConverter` |
+| `src/app/rag/docx_loader.py` | `DocxMarkdownLoader` (LangChain `BaseLoader`) |
+| `src/app/rag/chunker.py` | `MarkdownChunker` |
+| `src/app/rag/rule_metadata.py` | `RuleMetadataResolver` |
+| `src/app/rag/build_info.py` | `IndexBuildInfoBuilder` |
+| `src/app/rag/ingest.py` | `CorpusIngestor`, `connect_and_ingest`, CLI entry point |
+| `src/app/rag/index_schema.py` | Redis index name, key prefix, vector/schema constants |
+| `src/app/rag/store.py` | `E5Embeddings`, `RedisVectorStore` factory |
+| `src/app/integrations/redis.py` | `RedisIndex` — connection, build-info read/write, index stats |
+| `src/app/api/routes/admin.py` | `/admin/ingest`, `/admin/stats` |
+| `src/app/api/routes/health.py` | `/health`, `/ready` routes (thin, delegates to `ReadinessChecker`) |
+| `src/app/integrations/readiness.py` | `ReadinessChecker` — Redis + LLM readiness checks |
+| `src/app/ui.py` | sidebar index stats |
+| `src/app/rules/tests/test_rules.py`, `src/app/rag/tests/test_ingest.py`, `src/app/rag/tests/test_run_ingest.py`, `tests/api/test_admin.py`, `src/app/integrations/tests/test_health_readiness.py` | unit tests (no Redis required) |
+| `src/app/integrations/tests/test_redis_integration.py` | integration tests against a real Redis 8 instance |
 
 ## Deliberate deviations from the technical design
 
@@ -157,5 +157,5 @@ TEST_REDIS_URL=redis://127.0.0.1:6379/0 uv run pytest app/integrations/tests/tes
 - **Ingestion is a set of cohesive classes, one per module, not a flat file of free functions** —
   per the project's object-oriented code-architecture preference. `connect_and_ingest` is the only
   remaining module-level function, kept because it is the FastAPI lifespan's required entry point.
-  `app/integrations/redis.py` similarly wraps the Redis connection and its lifecycle operations in
+  `src/app/integrations/redis.py` similarly wraps the Redis connection and its lifecycle operations in
   one `RedisIndex` class rather than a client plus free functions.

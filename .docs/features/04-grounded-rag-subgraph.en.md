@@ -11,7 +11,7 @@ independently of the main agent and exposed to it as a `search_policies` LangCha
 
 ## How it works
 
-### State (`app/rag/state.py`) and nodes (`app/rag/graph.py`)
+### State (`src/app/rag/state.py`) and nodes (`src/app/rag/graph.py`)
 
 `RagState` is a `TypedDict` with three keys: `question` and `category` in, `result: RagResult` out.
 It lives separately from graph construction and node behaviour. `RagNodes` holds the injected
@@ -32,7 +32,7 @@ It lives separately from graph construction and node behaviour. `RagNodes` holds
 build_context -> END` and compiles the graph. Constructing or importing this module does no network
 or Redis work — the retriever is only called when a node runs.
 
-### Retrieval (`app/rag/retriever.py`)
+### Retrieval (`src/app/rag/retriever.py`)
 
 `Retriever` is a `langchain_core.retrievers.BaseRetriever` subclass wrapping a `RedisVectorStore`,
 so retrieval goes through the LangChain retriever interface (`.invoke()`) rather than a direct
@@ -52,7 +52,7 @@ argument rather than construction state, so one `Retriever` instance (injected i
 `build_rag_graph`) serves every category — tests supply a fake with the same `search(query,
 category)` shape, and only the real Redis integration constructs the genuine one.
 
-### Result models (`app/rag/model.py`)
+### Result models (`src/app/rag/model.py`)
 
 - **`RetrievedResult`**: `content`, `similarity`, `doc_id`, `doc_title`, `section_id`, `section`,
   `categories`, `rule_ids`, `source_path` — everything needed to trace a result back to its source.
@@ -62,7 +62,7 @@ category)` shape, and only the real Redis integration constructs the genuine one
   `results[0].similarity` (0.0 when there are no results) — there is no separate confidence field to
   drift out of sync with the results.
 
-### Confidence threshold (`app/rag/index_schema.py`)
+### Confidence threshold (`src/app/rag/index_schema.py`)
 
 `MIN_CONFIDENCE_THRESHOLD = 0.8` was calibrated against the live corpus and embedding model: one
 representative on-topic question per category (general, meal, equipment, travel, commuting, mileage,
@@ -72,7 +72,7 @@ mars today", "who won the football world cup in 2018", ...) score 0.708-0.786. A
 say the policy does not cover the question — this task only guarantees the value is present and
 correctly derived, not the response text.
 
-### Tool exposure (`app/rag/tool.py`)
+### Tool exposure (`src/app/rag/tool.py`)
 
 `build_search_policies_tool(rag_graph)` returns a `@tool(response_format="content_and_artifact")`
 LangChain tool named `search_policies` taking `question` and an optional `category`. Its content is
@@ -99,13 +99,13 @@ search_policies = build_search_policies_tool(graph)
 
 | File | Responsibility |
 | --- | --- |
-| `app/rag/state.py` | `RagState` LangGraph state contract |
-| `app/rag/graph.py` | `RagNodes`, `build_rag_graph` |
-| `app/rag/retriever.py` | `Retriever` |
-| `app/rag/tool.py` | `build_search_policies_tool` (`search_policies`) |
-| `app/rag/model.py` | `RetrievedResult`, `Citation`, `RagResult` |
-| `app/rag/index_schema.py` | `MIN_CONFIDENCE_THRESHOLD`, `CONTEXT_TOKEN_BUDGET` (alongside `TOP_K`) |
-| `app/rag/tests/test_retriever.py` | filter/similarity-conversion unit tests (mocked vector store) |
-| `app/rag/tests/test_graph.py` | filtered/unfiltered/fallback/empty/ranking/budget/dedup node tests |
-| `app/rag/tests/test_tool.py` | content-and-artifact tool behaviour |
-| `app/integrations/tests/test_redis_integration.py` | per-category grounded-evidence and low-confidence tests against Redis 8 |
+| `src/app/rag/state.py` | `RagState` LangGraph state contract |
+| `src/app/rag/graph.py` | `RagNodes`, `build_rag_graph` |
+| `src/app/rag/retriever.py` | `Retriever` |
+| `src/app/rag/tool.py` | `build_search_policies_tool` (`search_policies`) |
+| `src/app/rag/model.py` | `RetrievedResult`, `Citation`, `RagResult` |
+| `src/app/rag/index_schema.py` | `MIN_CONFIDENCE_THRESHOLD`, `CONTEXT_TOKEN_BUDGET` (alongside `TOP_K`) |
+| `src/app/rag/tests/test_retriever.py` | filter/similarity-conversion unit tests (mocked vector store) |
+| `src/app/rag/tests/test_graph.py` | filtered/unfiltered/fallback/empty/ranking/budget/dedup node tests |
+| `src/app/rag/tests/test_tool.py` | content-and-artifact tool behaviour |
+| `src/app/integrations/tests/test_redis_integration.py` | per-category grounded-evidence and low-confidence tests against Redis 8 |

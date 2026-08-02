@@ -59,20 +59,20 @@ select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
 exclude_dirs = ["tests", ".venv"]
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
-testpaths = ["app"]
+pythonpath = [".", "src"]
+testpaths = ["src/app"]
 asyncio_mode = "auto"
 
 [tool.coverage.run]
 source = ["app"]
 omit = [
-    "app/ui.py",
-    "app/agent/tests/*",
-    "app/rag/tests/*",
-    "app/rules/tests/*",
-    "app/integrations/tests/*",
-    "app/logging/tests/*",
-    "app/tests/*",
-    "app/tests/api/*",
-    "app/tests/journeys/*",
+    "src/app/ui.py",
+    "src/app/agent/tests/*",
+    "src/app/rag/tests/*",
+    "src/app/rules/tests/*",
+    "src/app/integrations/tests/*",
+    "src/app/logging/tests/*",
+    "src/app/tests/*",
+    "src/app/tests/api/*",
+    "src/app/tests/journeys/*",
 ]

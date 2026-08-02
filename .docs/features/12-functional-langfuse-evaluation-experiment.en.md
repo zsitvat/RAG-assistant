@@ -28,9 +28,9 @@ additionally rejects duplicate ids and references to a category or document id t
 `RuleCatalogue` doesn't know about — all of this runs before any network call, so a broken dataset
 never reaches Langfuse or the API.
 
-### Evaluation endpoint (`POST /admin/eval`, `app/api/routes/evaluation.py`)
+### Evaluation endpoint (`POST /admin/eval`, `src/app/api/routes/evaluation.py`)
 
-Separate from `/admin/ingest`/`/admin/stats` (`app/api/routes/admin.py`) — evaluation is its own
+Separate from `/admin/ingest`/`/admin/stats` (`src/app/api/routes/admin.py`) — evaluation is its own
 route module. `EvaluationRequest` carries `{thread_id, message, reference_date, dataset_item_id?,
 experiment_name?}`; `reference_date` is injected into `AgentState["reference_date"]` (new field) so
 `check_rules`'s deadline math is deterministic regardless of when the eval actually runs — the tool
@@ -51,7 +51,7 @@ for citation accuracy — a different, smaller set than `retrieved_doc_ids`), `d
 field the `answer_quality` metric needs, and the only prose the six deterministic metrics still never
 touch.
 
-### `degraded`: a per-turn, non-sticky flag (`app/agent/state.py`, `app/agent/nodes.py`)
+### `degraded`: a per-turn, non-sticky flag (`src/app/agent/state.py`, `src/app/agent/nodes.py`)
 
 New `AgentState["degraded"]` field. `classify_intent` runs first on every turn and always sets it
 (`True`/`False`) from whether `StructuredOutputRunner` fell back to its default; every later node in
@@ -139,13 +139,13 @@ uv run python -m llm_eval.run_eval --node intent
 | `llm_eval/dataset_sync.py` | `LangfuseDatasetSync` — idempotent dataset upsert |
 | `llm_eval/report.py` | `EvaluationReport` — aggregate + per-case Markdown/JSON report |
 | `llm_eval/run_eval.py` | `EvaluationRunner`, CLI entry point |
-| `app/settings.py` | `EVAL_JUDGE_MODEL` — independent judge-model configuration |
-| `app/integrations/llm.py` | `build_chat_model(settings, model=None)` — optional model-name override |
-| `app/api/routes/evaluation.py` | `POST /admin/eval` |
-| `app/api/schemas.py` | `EvaluationRequest`, `EvaluationResponse` (including `answer`) |
-| `app/agent/service.py` | `AgentService.evaluate()` and its projection helpers |
-| `app/agent/state.py` | `AgentState["reference_date"]`, `AgentState["degraded"]` |
-| `app/agent/structured.py` | `StructuredResult` — `(value, degraded)` from `StructuredOutputRunner.run()` |
+| `src/app/settings.py` | `EVAL_JUDGE_MODEL` — independent judge-model configuration |
+| `src/app/integrations/llm.py` | `build_chat_model(settings, model=None)` — optional model-name override |
+| `src/app/api/routes/evaluation.py` | `POST /admin/eval` |
+| `src/app/api/schemas.py` | `EvaluationRequest`, `EvaluationResponse` (including `answer`) |
+| `src/app/agent/service.py` | `AgentService.evaluate()` and its projection helpers |
+| `src/app/agent/state.py` | `AgentState["reference_date"]`, `AgentState["degraded"]` |
+| `src/app/agent/structured.py` | `StructuredResult` — `(value, degraded)` from `StructuredOutputRunner.run()` |
 
 `llm_eval/` has no unit tests — it is a standalone CLI script validated by running it against a live
 Redis/Ollama/Langfuse stack, not app logic exercised by the deployed request path (technical design

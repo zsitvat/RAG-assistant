@@ -165,7 +165,7 @@ Run the repository-defined checks over the complete implementation:
 | --- | --- | --- |
 | Ruff lint | `ruff check .` | no lint errors |
 | Ruff formatting | `ruff format --check .` | no formatting drift |
-| Bandit | `bandit -c pyproject.toml -r app` | no unaccepted security findings |
+| Bandit | `bandit -c pyproject.toml -r src/app load_test` | no unaccepted security findings |
 | Tests and coverage | `pytest --cov=app --cov-report=term-missing --cov-report=xml` | all tests pass and coverage is reported |
 | Sonar | `make sonar` (`uv run pysonar`) | configured quality gate passes |
 

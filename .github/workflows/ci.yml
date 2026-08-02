@@ -82,7 +82,7 @@ jobs:
         run: uv sync --locked --dev
 
       - name: Run security checks
-        run: uv run bandit -c pyproject.toml -r app
+        run: uv run bandit -c pyproject.toml -r src/app load_test
 
   pytest:
     name: Pytest

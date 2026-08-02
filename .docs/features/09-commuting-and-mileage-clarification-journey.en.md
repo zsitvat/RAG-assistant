@@ -12,7 +12,7 @@ conditional outcomes instead of asking forever.
 
 ## How it works
 
-### Commuting transport modes (`app/agent/calculator.py`)
+### Commuting transport modes (`src/app/agent/calculator.py`)
 
 `_calculate_commuting` now dispatches on `expense_type` to three private calculations:
 
@@ -34,7 +34,7 @@ describes it (§5: "Personal-vehicle reimbursement may be calculated only for ac
 `commute_days_per_month` scales the distance, not the cap. The doc 03 §7 worked example (18 km,
 10 office days → 10,800 HUF) is now a regression test.
 
-### Mode-aware required slots (`app/agent/slots.py`)
+### Mode-aware required slots (`src/app/agent/slots.py`)
 
 `RequiredSlotTable` is keyed by `(intent, category)`, which cannot express "a pass claim needs a
 price but a car claim needs a distance". Commuting now takes a second lookup step: the base entry
@@ -42,7 +42,7 @@ requires `expense_type` (the transport-mode declaration doc 03 §2 asks for), an
 `_commuting_mode_slots` appends the mode's own slots once it is known. An unrecognised mode falls
 back to the personal-vehicle slots.
 
-### Redis-backed conversation state (`app/integrations/checkpointer.py`)
+### Redis-backed conversation state (`src/app/integrations/checkpointer.py`)
 
 `build_checkpointer(redis_url)` returns a `RedisSaver` (from `langgraph-checkpoint-redis`) with a
 `default_ttl` of 1,440 minutes and `refresh_on_read`, writing under the `checkpoint:*` /
@@ -58,14 +58,14 @@ envelope on load, so `state["claim"]` is a `dict` after any resumed turn — whi
 missing, i.e. an endless clarification loop. `ExpenseClaim.from_state()` is the single coercion
 point that accepts a model, a plain dict, or the serialized envelope; every read of `state["claim"]`
 in `nodes.py` and `tools.py` goes through it. This only reproduces against real Redis, which is why
-`app/integrations/tests/test_checkpointer_integration.py` exists separately from the in-memory graph tests.
+`src/app/integrations/tests/test_checkpointer_integration.py` exists separately from the in-memory graph tests.
 
-### Thread reset (`app/api/routes/chat.py`)
+### Thread reset (`src/app/api/routes/chat.py`)
 
 `DELETE /threads/{thread_id}` calls `checkpointer.delete_thread(...)` in a worker thread and returns
 `ThreadResetResponse`. The next message on that thread starts with empty state.
 
-### Refusing to disambiguate a distance (`app/agent/nodes.py`)
+### Refusing to disambiguate a distance (`src/app/agent/nodes.py`)
 
 `CurrentRequest.was_already_asked(question)` looks for the same fixed clarification string earlier in
 the thread. When `ask_clarification` is about to repeat itself and `distance_is_one_way` is the only
@@ -78,14 +78,14 @@ can still resolve it, but the turn ends with a useful amount either way.
 
 | File | Responsibility |
 | --- | --- |
-| `app/agent/calculator.py` | commuting mode dispatch, pass/ticket/vehicle formulas, `calculate_both_directions` |
-| `app/agent/slots.py` | mode-aware commuting slot resolution |
-| `app/agent/model.py` | `ExpenseClaim.from_state` checkpoint coercion |
-| `app/agent/current_request.py` | `was_already_asked` |
-| `app/agent/nodes.py` | conditional-outcome path, claim coercion at every state read |
-| `app/agent/rule_checker.py` | minimum distance reported `not_applicable` for pass/ticket claims |
-| `app/integrations/checkpointer.py` | `RedisSaver` with the 24 h TTL and `checkpoint:*` namespace |
-| `app/api/routes/chat.py` | `DELETE /threads/{thread_id}` |
+| `src/app/agent/calculator.py` | commuting mode dispatch, pass/ticket/vehicle formulas, `calculate_both_directions` |
+| `src/app/agent/slots.py` | mode-aware commuting slot resolution |
+| `src/app/agent/model.py` | `ExpenseClaim.from_state` checkpoint coercion |
+| `src/app/agent/current_request.py` | `was_already_asked` |
+| `src/app/agent/nodes.py` | conditional-outcome path, claim coercion at every state read |
+| `src/app/agent/rule_checker.py` | minimum distance reported `not_applicable` for pass/ticket claims |
+| `src/app/integrations/checkpointer.py` | `RedisSaver` with the 24 h TTL and `checkpoint:*` namespace |
+| `src/app/api/routes/chat.py` | `DELETE /threads/{thread_id}` |
 | `tests/journeys/test_commuting_and_mileage_journeys.py` | clarification, two-turn resume, category switch, refusal |
-| `app/integrations/tests/test_checkpointer_integration.py` | restart persistence, TTL/namespace, reset, two workers on one thread |
+| `src/app/integrations/tests/test_checkpointer_integration.py` | restart persistence, TTL/namespace, reset, two workers on one thread |
 | `tests/journeys/test_commuting_rule_document_consistency.py` | every commuting/mileage number traced verbatim to the corpus |

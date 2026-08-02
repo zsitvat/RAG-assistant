@@ -12,7 +12,7 @@ graph, and application logs work identically whether or not Langfuse is configur
 
 ## How it works
 
-### Tracing (`app/integrations/langfuse.py`)
+### Tracing (`src/app/integrations/langfuse.py`)
 
 `Observability.build(settings)` degrades to a disabled adapter (`client=None`) on any setup problem
 — `langfuse_enabled=False`, missing `langfuse_public_key`/`langfuse_secret_key`, or the `Langfuse()`
@@ -24,10 +24,10 @@ becomes a linked observation in one trace — no tracing calls live inside graph
 `AgentService._project()` calls `Observability.update_trace(thread_id=..., intent=..., category=...,
 decision=...)` once per turn so the trace also carries the turn's classified/derived outcome.
 
-### Prompt resolution (`app/agent/prompt_library.py`)
+### Prompt resolution (`src/app/agent/prompt_library.py`)
 
 `PromptLibrary.get(name)` tries the `production`-labelled Langfuse prompt first, validates it, and
-falls back to the embedded `ChatPromptTemplate` (`app/agent/prompts.py`) on any failure — missing
+falls back to the embedded `ChatPromptTemplate` (`src/app/agent/prompts.py`) on any failure — missing
 prompt, invalid content, or Langfuse unreachable — logging one warning, never the prompt text
 itself. Resolution is cached per `PromptLibrary` instance (one per process), so a disabled or
 unreachable Langfuse causes at most one resolution attempt per prompt name, not a retry per turn.
@@ -42,7 +42,7 @@ already in use), and the two prompt-specific requirements. Writing this validato
 fabricate" like the other three — a real wording inconsistency the check now tolerates explicitly
 rather than silently passing by accident.
 
-### Structured logging (`app/logging/config.py`, unchanged this task)
+### Structured logging (`src/app/logging/config.py`, unchanged this task)
 
 Already JSON, UTC, stdout + `TimedRotatingFileHandler` (midnight UTC, 7-day `backupCount`) from
 task 1. No application log call passes prompt text, claim data, retrieved context, or answers —
@@ -64,14 +64,14 @@ of shipping.
 
 | File | Responsibility |
 | --- | --- |
-| `app/integrations/langfuse.py` | `Observability` — client lifecycle, trace config, trace updates |
-| `app/agent/prompt_library.py` | `PromptLibrary`, `PromptSpec`, shared validation, `ResolvedPrompt` |
-| `app/agent/nodes.py` | resolves each of the four prompts through `PromptLibrary` instead of the static import |
-| `app/agent/service.py` | attaches the trace config per turn, updates trace outcome attributes |
-| `app/dependencies.py` | builds `Observability` and `PromptLibrary` once at startup |
-| `app/integrations/tests/test_observability.py` | disabled/enabled paths, degrade-on-failure, trace config shape |
-| `app/agent/tests/test_prompt_library.py` | every embedded prompt validates, remote resolution, remote-invalid and remote-unreachable fallback, caching |
-| `app/logging/tests/test_config.py` | payload-exclusion AST guard |
+| `src/app/integrations/langfuse.py` | `Observability` — client lifecycle, trace config, trace updates |
+| `src/app/agent/prompt_library.py` | `PromptLibrary`, `PromptSpec`, shared validation, `ResolvedPrompt` |
+| `src/app/agent/nodes.py` | resolves each of the four prompts through `PromptLibrary` instead of the static import |
+| `src/app/agent/service.py` | attaches the trace config per turn, updates trace outcome attributes |
+| `src/app/dependencies.py` | builds `Observability` and `PromptLibrary` once at startup |
+| `src/app/integrations/tests/test_observability.py` | disabled/enabled paths, degrade-on-failure, trace config shape |
+| `src/app/agent/tests/test_prompt_library.py` | every embedded prompt validates, remote resolution, remote-invalid and remote-unreachable fallback, caching |
+| `src/app/logging/tests/test_config.py` | payload-exclusion AST guard |
 
 ## A test-isolation issue this task surfaced
 

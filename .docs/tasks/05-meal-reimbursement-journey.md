@@ -18,7 +18,7 @@
 - Select numeric policy values from the validated catalogue, not from retrieved prose or model arguments; retrieval supplies evidence and citations while deterministic tools supply authoritative calculation inputs.
 
 - [x] The reimbursement calculator is a deep module whose interface accepts a validated expense claim and whose rule catalogue dependency is supplied at construction.
-- [x] `CalculationResult` lives in `app/agent/model.py` and contains only `amount_huf`, `cap_huf`, `excess_huf`, and `warnings`.
+- [x] `CalculationResult` lives in `src/app/agent/model.py` and contains only `amount_huf`, `cap_huf`, `excess_huf`, and `warnings`.
 - [x] A missing cap is represented by `None`, and excess is zero when no cap applies.
 - [x] Meal calculation applies the per-person limit, headcount, excluded-item amount, policy cap, amount-over-cap calculation, integer-HUF convention, and half-up rounding exactly as documented.
 - [x] Explicitly excluded items such as alcohol and minibar are distinguished from otherwise eligible amounts above the policy cap.

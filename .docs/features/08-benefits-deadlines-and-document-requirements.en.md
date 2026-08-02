@@ -13,7 +13,7 @@ categories — this task is entirely about the rule checker and the claim model.
 
 ## How it works
 
-### Tenure (`app/agent/model.py`, `app/agent/rule_checker.py::RuleChecker._check_tenure`)
+### Tenure (`src/app/agent/model.py`, `src/app/agent/rule_checker.py::RuleChecker._check_tenure`)
 
 `ExpenseClaim.tenure_months: int | None` is new. `RequiredSlotTable` now requires it for
 `("expense_check", "benefits")` alongside `expense_type`/`amount_huf`/`annual_budget_used_huf`, so
@@ -37,7 +37,7 @@ The dedicated `R-BEN-CARRY-OVER` rule stores `carry_over: false` with its eligib
 reference (§2: "An unused annual allowance may not be carried forward to the next year"). Its
 `pass` finding states the applied policy explicitly without duplicating an ID or `doc_ref` in Python.
 
-### Deadline boundary (`app/agent/deadline.py`, unchanged; tests added)
+### Deadline boundary (`src/app/agent/deadline.py`, unchanged; tests added)
 
 `DeadlineChecker` was already correct; this task adds explicit day-29/30/31 tests locking in that
 day 30 (the last day within the 30-day window) is `due_soon` (a warning, not a rejection — it is
@@ -70,12 +70,12 @@ requirement IDs and references live in `rules.yaml`.
 
 | File | Responsibility |
 | --- | --- |
-| `app/agent/model.py` | tenure, provided documents, and source-linked `Finding` schema |
-| `app/agent/slots.py` | benefits now requires `tenure_months` |
-| `app/agent/rule_checker.py` | focused eligibility, document, approval, and deadline checkers |
-| `app/agent/tests/test_calculator.py` | unused and exhausted benefit budget |
-| `app/agent/tests/test_deadline.py` | day 29/30/31 boundary |
-| `app/agent/tests/test_rule_checker.py` | tenure warning/fail/pass, carry-over surfaced |
-| `app/agent/tests/test_slots.py` | benefits required-slot coverage including tenure |
+| `src/app/agent/model.py` | tenure, provided documents, and source-linked `Finding` schema |
+| `src/app/agent/slots.py` | benefits now requires `tenure_months` |
+| `src/app/agent/rule_checker.py` | focused eligibility, document, approval, and deadline checkers |
+| `src/app/agent/tests/test_calculator.py` | unused and exhausted benefit budget |
+| `src/app/agent/tests/test_deadline.py` | day 29/30/31 boundary |
+| `src/app/agent/tests/test_rule_checker.py` | tenure warning/fail/pass, carry-over surfaced |
+| `src/app/agent/tests/test_slots.py` | benefits required-slot coverage including tenure |
 | `tests/journeys/test_benefits_deadline_document_journeys.py` | benefit, deadline-only, and document-only graph journeys |
 | `tests/journeys/test_benefits_rule_document_consistency.py` | benefit rule `doc_ref`s resolve; annual allowances, the six-month tenure rule, and the no-carry-over rule appear verbatim in the referenced policy document |

@@ -10,13 +10,13 @@ settings, structured logging, request correlation, and a LangChain-compatible LL
 
 ## How it works
 
-- **Settings** (`app/core/config.py`): a `pydantic-settings` `Settings` model validated once at
+- **Settings** (`src/app/core/config.py`): a `pydantic-settings` `Settings` model validated once at
   startup, cached via `get_settings()`. Fields match the technical design's configuration table
   (`LLM_BACKEND`, `OLLAMA_BASE_URL`, `LLM_MODEL`, `API_BASE_URL`, `REDIS_URL`, `LANGFUSE_*`,
   `LOG_LEVEL`); Langfuse credentials are optional so offline/dummy development needs no secrets.
   `Settings` reads `.env`; `.env.example` is the committed Compose-oriented template, while the
   ignored local `.env` selects dummy mode, loopback service URLs and disabled Langfuse.
-- **Logging** (`app/logging/config.py`): `configure_logging()` attaches one JSON formatter to a
+- **Logging** (`src/app/logging/config.py`): `configure_logging()` attaches one JSON formatter to a
   stdout handler and a stdlib `TimedRotatingFileHandler` (UTC midnight, `backupCount=7`) writing
   under `./logs` — the handler's own count-based retention is enough for a daily-rotating file, so
   no custom retention helper was needed. Uvicorn, FastAPI and Streamlit loggers are redirected
@@ -28,19 +28,19 @@ settings, structured logging, request correlation, and a LangChain-compatible LL
   logged by Uvicorn's default error logging. `debug=False` (FastAPI's default) already guarantees
   no traceback reaches the client — a custom problem-details wrapper was considered and dropped as
   unnecessary complexity for what the design actually needs (see deviation note below).
-- **LLM backend factory** (`app/integrations/llm.py`): `build_chat_model(settings)` returns a
+- **LLM backend factory** (`src/app/integrations/llm.py`): `build_chat_model(settings)` returns a
   LangChain `BaseChatModel` — `ChatOllama` for `LLM_BACKEND=ollama`, or LangChain's own
   `FakeListChatModel` (cycles canned responses, never raises) for `LLM_BACKEND=dummy`. No custom
   chat-model class was written; LangChain's framework-native fakes
   (`FakeListChatModel`, `GenericFakeChatModel`) cover both the runtime dummy backend and scripted
   tool-call tests, consistent with the design's "no second model client" boundary.
-- **FastAPI shell** (`app/main.py`, `app/dependencies.py`, `app/api/`): the lifespan loads settings,
+- **FastAPI shell** (`src/app/main.py`, `src/app/dependencies.py`, `src/app/api/`): the lifespan loads settings,
   configures logging and builds the chat model once, stored on `app.state`. The lifespan is an
   `asynccontextmanager` annotated as `AsyncGenerator[None, None]`; route modules only
-  depend on `app/dependencies.py` providers. `GET /health` reports liveness; `GET /ready` reports
+  depend on `src/app/dependencies.py` providers. `GET /health` reports liveness; `GET /ready` reports
   one status per dependency (`llm`, `redis`) — `redis` is always `not_configured` until task 2 wires
   it in.
-- **Streamlit shell** (`app/ui.py`): a thin HTTP client — no graph or domain imports — that calls
+- **Streamlit shell** (`src/app/ui.py`): a thin HTTP client — no graph or domain imports — that calls
   `GET /ready` and renders the per-dependency status, or a connection error if the API is
   unreachable.
 
@@ -51,7 +51,7 @@ uv sync --dev
 cp .env.example .env
 # Set LLM_BACKEND=dummy, LANGFUSE_ENABLED=false and loopback URLs in .env.
 uv run uvicorn app.main:app --port 8000
-uv run streamlit run app/ui.py
+uv run streamlit run src/app/ui.py
 ```
 
 `make check` runs the full local quality gate (ruff lint + format check, bandit, pytest + coverage).
@@ -68,15 +68,15 @@ scanner and waits for the SonarQube Cloud quality gate.
 | `pyproject.toml`, `uv.lock` | dependency declarations and reproducible lock |
 | `Makefile` | local quality, Sonar and run commands |
 | `sonar-project.properties` | SonarQube Cloud project, scope, coverage and gate settings |
-| `app/settings.py` | `Settings`, `get_settings()` |
-| `app/logging/config.py` | JSON logging, retention |
-| `app/integrations/llm.py` | chat-model backend factory |
-| `app/dependencies.py` | FastAPI dependency providers |
-| `app/api/schemas.py` | `HealthResponse`, `ReadyResponse` |
-| `app/api/routes/health.py` | `/health`, `/ready` |
-| `app/main.py` | app assembly, lifespan |
-| `app/ui.py` | Streamlit shell |
-| `tests/api/test_api.py`, `app/integrations/tests/test_llm.py`, `app/logging/tests/test_config.py` | focused tests |
+| `src/app/settings.py` | `Settings`, `get_settings()` |
+| `src/app/logging/config.py` | JSON logging, retention |
+| `src/app/integrations/llm.py` | chat-model backend factory |
+| `src/app/dependencies.py` | FastAPI dependency providers |
+| `src/app/api/schemas.py` | `HealthResponse`, `ReadyResponse` |
+| `src/app/api/routes/health.py` | `/health`, `/ready` |
+| `src/app/main.py` | app assembly, lifespan |
+| `src/app/ui.py` | Streamlit shell |
+| `tests/api/test_api.py`, `src/app/integrations/tests/test_llm.py`, `src/app/logging/tests/test_config.py` | focused tests |
 
 ## Deliberate deviation from the technical design
 

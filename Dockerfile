@@ -11,7 +11,7 @@ COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
-COPY app ./app
+COPY src/app ./app
 
 # Bake embedding weights into the image so startup never fetches them on the first request.
 ENV HF_HOME=/app/.cache/huggingface
@@ -31,7 +31,7 @@ ENV PATH=/app/.venv/bin:$PATH \
 
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --from=builder --chown=app:app /app/.cache /app/.cache
-COPY --chown=app:app app ./app
+COPY --chown=app:app src/app ./app
 COPY --chown=app:app config ./config
 COPY --chown=app:app .docs/sources ./.docs/sources
 COPY --chown=app:app docker/entrypoint.sh /usr/local/bin/entrypoint.sh

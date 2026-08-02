@@ -19,7 +19,7 @@ LangChain + LangGraph, a local open-source LLM (Ollama), Redis 8, FastAPI and St
 8. [Evaluation method](#8-evaluation-method)
 9. [Load test method](#9-load-test-method)
 10. [PoC boundaries (deliberately out of scope)](#10-poc-boundaries-deliberately-out-of-scope)
-11. [Production recommendations (not implemented)](#11-production-recommendations-not-implemented)
+11. [Recommendations and ideas (not implemented)](#11-recommendations-and-ideas-not-implemented)
 12. [Key design decisions](#12-key-design-decisions)
 13. [What's committed, what isn't](#13-whats-committed-what-isnt)
 
@@ -207,7 +207,7 @@ uv sync --dev
 cp .env.example .env
 ```
 
-`Settings` (`app/settings.py`) loads `.env` automatically; the committed `.env.example` documents
+`Settings` (`src/app/settings.py`) loads `.env` automatically; the committed `.env.example` documents
 every setting and contains no credentials.
 
 ### Clean-start containerised runtime (recommended)
@@ -229,9 +229,9 @@ match, then serves) and the Streamlit UI. Once `api` reports healthy:
 
 ```bash
 docker compose up -d redis redisinsight
-LLM_BACKEND=dummy uv run uvicorn app.main:app --port 8000
+LLM_BACKEND=dummy PYTHONPATH=src uv run uvicorn app.main:app --port 8000
 # in a second terminal
-API_BASE_URL=http://127.0.0.1:8000 uv run streamlit run app/ui.py
+API_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src uv run streamlit run src/app/ui.py
 ```
 
 ### Quality gate
@@ -239,7 +239,7 @@ API_BASE_URL=http://127.0.0.1:8000 uv run streamlit run app/ui.py
 ```bash
 uv run ruff check .
 uv run ruff format --check .
-uv run bandit -c pyproject.toml -r app
+uv run bandit -c pyproject.toml -r src/app load_test
 uv run pytest --cov=app --cov-report=term-missing --cov-report=xml
 ```
 
@@ -334,7 +334,7 @@ None of these change the graph, the tools or the retrieval path — each is an i
 operational concern layered around the same seams (`ExpenseClaim` as the tools' single input
 contract, `rules.yaml` as the single source of numbers, the API as the single entry point).
 
-## 11. Production recommendations (not implemented)
+## 11. Recommendations and ideas (not implemented)
 
 **Personal data and content safety.** A production system should add a PII detection and redaction
 layer before prompts, persistence and observability, with controlled re-identification only where the

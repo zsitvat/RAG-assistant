@@ -97,5 +97,5 @@ traces are where to confirm this against actual per-node/generation timings, not
 | File | Responsibility |
 | --- | --- |
 | `load_test/load.py` | `LoadTestRunner`, `LoadTestResult`, `LoadTestValidationError`, CLI `main()` |
-| `app/dependencies.py` | `ApplicationDependencies.build()` — reused directly, not duplicated |
+| `src/app/dependencies.py` | `ApplicationDependencies.build()` — reused directly, not duplicated |
 | `load_test/test_load.py` | `LoadTestRunner` unit tests against a fake Langfuse dataset |

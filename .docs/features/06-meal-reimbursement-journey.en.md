@@ -13,7 +13,7 @@ both against the real policy corpus and a full scripted conversation.
 
 ## How it works
 
-### Meal calculation (`app/agent/calculator.py::ReimbursementCalculator._calculate_meal`)
+### Meal calculation (`src/app/agent/calculator.py::ReimbursementCalculator._calculate_meal`)
 
 Unchanged formula (`min(amount_huf - non_reimbursable_amount, limit_per_person_huf * headcount)`,
 half-up rounding), with two additions:
@@ -28,7 +28,7 @@ half-up rounding), with two additions:
   eligible submitted amount with `cap_huf=None` and a warning instead of inventing a number or
   raising an unhandled `StopIteration`.
 
-### Required documents (`app/agent/rule_checker.py::RuleChecker._check_required_documents`)
+### Required documents (`src/app/agent/rule_checker.py::RuleChecker._check_required_documents`)
 
 Every category in `config/rules.yaml` declares `required_documents` (e.g. meal:
 `[invoice, business_purpose_note, participant_list]`), but nothing read that list before this task.
@@ -55,10 +55,10 @@ inside the existing `POST /chat` journey from task 4. A meal expense_check reque
 
 | File | Responsibility |
 | --- | --- |
-| `app/agent/calculator.py` | `_calculate_meal`, `_meal_limit_rule` |
-| `app/agent/rule_checker.py` | focused document, approval, eligibility and deadline checkers |
+| `src/app/agent/calculator.py` | `_calculate_meal`, `_meal_limit_rule` |
+| `src/app/agent/rule_checker.py` | focused document, approval, eligibility and deadline checkers |
 | `config/rules.yaml` | `R-MEAL-02` excluded-items fix |
-| `app/agent/tests/test_calculator.py` | below-cap, exactly-at-cap, excluded-item warning, half-up rounding, missing-catalogue-limit |
-| `app/agent/tests/test_rule_checker.py` | required-documents finding |
+| `src/app/agent/tests/test_calculator.py` | below-cap, exactly-at-cap, excluded-item warning, half-up rounding, missing-catalogue-limit |
+| `src/app/agent/tests/test_rule_checker.py` | required-documents finding |
 | `tests/journeys/test_meal_reimbursement_journey.py` | compiled-graph integration journey for the scripted "reference dinner" request |
 | `tests/journeys/test_meal_rule_document_consistency.py` | proves every meal rule's `doc_ref` resolves to an indexed section, and that the per-person limit and excluded items appear verbatim in the referenced policy document |
