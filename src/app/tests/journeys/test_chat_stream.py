@@ -111,7 +111,7 @@ async def test_step_and_source_events_arrive_before_the_final_result():
 async def test_streamed_result_matches_the_blocking_endpoint():
     streamed_events = await _collect(_service(_grounded_model()), "parity-a", "meal limit?")
     streamed = streamed_events[-1].data
-    blocking = _service(_grounded_model()).respond("parity-b", "meal limit?")
+    blocking = _service(_grounded_model()).invoke_graph("parity-b", "meal limit?")
 
     assert streamed.answer == blocking.answer
     assert streamed.steps == blocking.steps

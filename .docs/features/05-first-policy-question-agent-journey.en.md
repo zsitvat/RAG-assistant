@@ -139,7 +139,7 @@ rule findings, `decision=None` because a pure policy question has no eligibility
 
 ### HTTP surface (`src/app/agent/service.py`, `src/app/api/routes/chat.py`, `src/app/api/schemas.py`)
 
-`AgentService.respond(thread_id, message)` invokes the compiled graph (`recursion_limit=20`),
+`AgentService.invoke_graph(thread_id, message)` invokes the compiled graph (`recursion_limit=20`),
 times the call, and projects the result into `ChatResponse` (`answer` = `messages[-1]`,
 `generated_at` UTC, `response_time_ms`, the deterministic `decision`, deduplicated `sources` built from every current-request
 `search_policies` `ToolMessage`'s `RagResult.citations`, and stable `steps` labels — "Request
@@ -183,11 +183,12 @@ curl -X POST http://127.0.0.1:8000/chat \
 | `src/app/agent/nodes.py` | `AgentNodes` — all custom nodes and routing functions |
 | `src/app/agent/static_texts.py` | fixed clarification/refusal/system-state strings, kept deterministic mainly because the current chat model is small |
 | `src/app/agent/graph.py` | `build_agent_graph` |
-| `src/app/agent/service.py` | `AgentService` — graph output → `ChatResponse` |
+| `src/app/agent/service.py` | `AgentService` — orchestrates a turn, delegates projection |
+| `src/app/agent/projection.py` | `TurnProjector` — graph output → `ChatResponse`/`EvaluationResponse` |
 | `src/app/api/routes/chat.py` | `POST /chat` |
 | `src/app/api/schemas.py` | `ChatRequest`, `ChatResponse`, `ChatSource` (added to the existing file) |
 | `src/app/dependencies.py` | `ApplicationDependencies` — all application wiring |
-| `tests/fakes.py` | `ScriptedChatModel` — test double supporting `bind_tools`/`with_structured_output` |
+| `src/app/tests/fakes.py` | `ScriptedChatModel` — test double supporting `bind_tools`/`with_structured_output` |
 | `src/app/agent/tests/test_graph.py` | full-graph journeys: happy path, unsupported, clarification, loop budget, duplicate reuse, tool-error disabling, no-artifact refusal, LLM-unavailable |
 | `src/app/agent/tests/test_calculator.py`, `src/app/agent/tests/test_rule_checker.py`, `src/app/agent/tests/test_deadline.py` | per-category arithmetic and rule-check unit tests |
 | `src/app/agent/tests/test_slots.py`, `src/app/agent/tests/test_message_history.py`, `src/app/agent/tests/test_nodes_model_context.py`, `src/app/agent/tests/test_structured.py`, `src/app/agent/tests/test_tools.py`, `src/app/agent/tests/test_service.py` | focused unit tests for each supporting module |

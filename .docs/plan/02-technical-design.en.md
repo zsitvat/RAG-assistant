@@ -140,6 +140,8 @@ src/
         evaluation.py              # internal single-turn evaluation endpoint used by llm_eval/run_eval.py
     agent/
       service.py                 # invoke, stream and reset use cases exposed to the API
+      projection.py               # graph state -> ChatResponse/EvaluationResponse
+      streaming.py                # graph node updates -> public SSE step/source/token events
       graph.py                   # node/routing assembly and compilation
       nodes.py                   # node callbacks, including classify_intent
       state.py                   # LangGraph AgentState contract
@@ -153,7 +155,7 @@ src/
       structured.py               # structured-output value + fallback-used flag
       tools.py                    # LangChain tool adapters over calculator/deadline/rule_checker
       prompts.py                  # embedded PoC prompt templates
-      prompt_library.py           # Langfuse-resolved-vs-embedded prompt resolution and validation
+      prompt_library.py           # Langfuse-resolved-vs-embedded prompt resolution
       tests/                      # co-located unit tests for this package
     integrations/
       llm.py                     # ChatOllama/FakeListChatModel factory

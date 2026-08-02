@@ -28,7 +28,7 @@ def test_respond_projects_answer_sources_and_steps():
     graph = _FakeGraph([tool_message, AIMessage(content="The limit is 15,000 HUF [S1].")])
     service = AgentService(graph)
 
-    response = service.respond("t1", "What is the meal limit?")
+    response = service.invoke_graph("t1", "What is the meal limit?")
 
     assert response.thread_id == "t1"
     assert response.answer == "The limit is 15,000 HUF [S1]."
@@ -67,7 +67,7 @@ def test_respond_deduplicates_sources_across_multiple_search_calls():
     )
     service = AgentService(graph)
 
-    response = service.respond("t1", "question")
+    response = service.invoke_graph("t1", "question")
 
     assert len(response.sources) == 1
 
@@ -86,7 +86,7 @@ def test_respond_only_considers_messages_from_the_current_request():
     )
     service = AgentService(graph)
 
-    response = service.respond("t1", "new question")
+    response = service.invoke_graph("t1", "new question")
 
     assert response.sources == []
     assert response.steps == ["Request understood", "Information extracted", "Answer prepared"]

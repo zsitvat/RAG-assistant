@@ -19,7 +19,7 @@ async def chat(
     agent_service: Annotated[AgentService, Depends(get_agent_service)],
 ) -> ChatResponse:
     """Runs a chat message through the agent and returns the resulting reply."""
-    return await run_in_threadpool(agent_service.respond, request.thread_id, request.message)
+    return await run_in_threadpool(agent_service.invoke_graph, request.thread_id, request.message)
 
 
 @router.post("/chat/stream")

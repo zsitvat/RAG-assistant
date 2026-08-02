@@ -39,11 +39,18 @@ def test_configure_logging_rejects_path_that_is_not_a_directory(tmp_path):
         configure_logging(service="test-service", log_level="INFO", log_dir=log_dir)
 
 
-def test_configure_logging_quiets_noisy_third_party_loggers(tmp_path):
+def test_configure_logging_leaves_unlisted_loggers_at_the_warning_default(tmp_path):
     configure_logging(service="test-service", log_level="DEBUG", log_dir=tmp_path)
 
     assert logging.getLogger("httpcore").getEffectiveLevel() == logging.WARNING
     assert logging.getLogger("sentence_transformers").getEffectiveLevel() == logging.WARNING
+
+
+def test_configure_logging_applies_configured_level_to_the_app_logger(tmp_path):
+    configure_logging(service="test-service", log_level="DEBUG", log_dir=tmp_path)
+
+    assert logging.getLogger("app").getEffectiveLevel() == logging.DEBUG
+    assert logging.getLogger("app.some.module").getEffectiveLevel() == logging.DEBUG
 
 
 def test_cleanup_expired_archives_removes_files_outside_retention_window(tmp_path):

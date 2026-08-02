@@ -40,8 +40,9 @@ metadata (`Observability.trace_config` now accepts `tags` and arbitrary extra me
 for cross-referencing; the SDK's own experiment-item span (see below) is what Langfuse actually links
 to the dataset run.
 
-`AgentService.evaluate()` mirrors `respond()`/`stream()` but projects graph state into
-`EvaluationResponse` instead of `ChatResponse`: `intent`, `category`, `decision`, `claim`,
+`AgentService.evaluate()` mirrors `invoke_graph()`/`stream()` but delegates to
+`TurnProjector.project_evaluation()`, which projects graph state into `EvaluationResponse` instead of
+`ChatResponse`: `intent`, `category`, `decision`, `claim`,
 `missing_slots` (via `RequiredSlotTable`, same table `route_after_extraction` uses),
 `tool_calls` (ordered names from the current turn's `AIMessage.tool_calls`), `calculation`,
 `findings`, `retrieved_doc_ids` (raw top-k `search_policies` hits, for retrieval hit@4),
@@ -143,7 +144,8 @@ uv run python -m llm_eval.run_eval --node intent
 | `src/app/integrations/llm.py` | `build_chat_model(settings, model=None)` — optional model-name override |
 | `src/app/api/routes/evaluation.py` | `POST /admin/eval` |
 | `src/app/api/schemas.py` | `EvaluationRequest`, `EvaluationResponse` (including `answer`) |
-| `src/app/agent/service.py` | `AgentService.evaluate()` and its projection helpers |
+| `src/app/agent/service.py` | `AgentService.evaluate()` |
+| `src/app/agent/projection.py` | `TurnProjector.project_evaluation()` |
 | `src/app/agent/state.py` | `AgentState["reference_date"]`, `AgentState["degraded"]` |
 | `src/app/agent/structured.py` | `StructuredResult` — `(value, degraded)` from `StructuredOutputRunner.run()` |
 

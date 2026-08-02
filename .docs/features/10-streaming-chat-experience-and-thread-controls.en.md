@@ -11,10 +11,10 @@ real chat that shows live progress, streams the answer, and can reset the server
 
 ## How it works
 
-### The public event vocabulary (`src/app/agent/service.py`)
+### The public event vocabulary (`src/app/agent/streaming.py`)
 
 `AgentService.stream()` consumes `graph.astream(..., stream_mode=["updates", "messages"])` and
-translates it; no LangGraph object reaches the client.
+delegates translation to `StreamEventMapper`; no LangGraph object reaches the client.
 
 | Source | Event | Rule |
 | --- | --- | --- |
@@ -35,9 +35,10 @@ their text arrives in the final `result`.
 
 ### Parity with the blocking endpoint
 
-Both endpoints end in the same `_project(thread_id, state, start)` method, so `/chat` and the
-`result` event of `/chat/stream` cannot drift. `respond()` projects `invoke()`'s return value;
-`stream()` projects `graph.get_state(config).values` once the stream is exhausted.
+Both endpoints end in the same `AgentService._project(thread_id, state, start)` method, which
+updates the trace and delegates to `TurnProjector.project_chat()`, so `/chat` and the `result` event
+of `/chat/stream` cannot drift. `invoke_graph()` projects `invoke()`'s return value; `stream()` projects
+`graph.get_state(config).values` once the stream is exhausted.
 
 **A checkpoint round-trip flattens tool artifacts.** `get_state()` returns *serialized* channel
 values, so a `search_policies` `ToolMessage.artifact` is a plain `dict`, not a `RagResult` — the
@@ -65,13 +66,15 @@ intact, so the next message retries on the same thread.
 
 | File | Responsibility |
 | --- | --- |
-| `src/app/agent/service.py` | `stream()`, the event allow-lists, shared `_project` |
+| `src/app/agent/service.py` | `AgentService.stream()`, shared `_project` |
+| `src/app/agent/streaming.py` | `StreamEventMapper` — the event allow-lists |
+| `src/app/agent/projection.py` | `TurnProjector` — shared `project_chat()` |
 | `src/app/api/schemas.py` | `StreamEvent` and its `to_sse()` wire rendering |
 | `src/app/api/routes/chat.py` | `POST /chat/stream` as a `StreamingResponse` |
 | `src/app/rag/model.py` | `RagResult.from_artifact` |
 | `src/app/ui.py` | `ChatApiClient` and the chat page |
 | `src/app/main.py`, `src/app/settings.py` | UI-origin CORS |
-| `tests/journeys/test_chat_stream.py` | event vocabulary, allow-listing, dedup, token filtering, blocking parity, no-token turns, SSE wire format, HTTP contract |
+| `src/app/tests/journeys/test_chat_stream.py` | event vocabulary, allow-listing, dedup, token filtering, blocking parity, no-token turns, SSE wire format, HTTP contract |
 
 ## Related restructuring
 

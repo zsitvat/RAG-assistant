@@ -10,18 +10,9 @@ LOG_RETENTION_DAYS = 7
 DEFAULT_LOG_DIR = Path("logs")
 _ARCHIVE_SUFFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _CAPTURED_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi", "streamlit")
-_NOISY_THIRD_PARTY_LOGGERS = (
-    "httpcore",
-    "httpx",
-    "httpx2",
-    "urllib3",
-    "asyncio",
-    "sentence_transformers",
-    "transformers",
-    "redisvl",
-    "huggingface_hub",
-    "filelock",
-)
+# Only these get the configured verbosity; every other logger (any third-party library)
+# falls back to the root's WARNING default, so new noisy dependencies need no extra listing.
+_VERBOSE_LOGGERS = ("app", *_CAPTURED_LOGGERS)
 
 
 class _JsonFormatter(logging.Formatter):
@@ -92,7 +83,7 @@ def configure_logging(service: str, log_level: str, log_dir: Path = DEFAULT_LOG_
 
     root = logging.getLogger()
     root.handlers.clear()
-    root.setLevel(log_level)
+    root.setLevel(logging.WARNING)
     root.addHandler(stdout_handler)
     root.addHandler(file_handler)
 
@@ -101,5 +92,5 @@ def configure_logging(service: str, log_level: str, log_dir: Path = DEFAULT_LOG_
         captured_logger.handlers.clear()
         captured_logger.propagate = True
 
-    for logger_name in _NOISY_THIRD_PARTY_LOGGERS:
-        logging.getLogger(logger_name).setLevel(logging.WARNING)
+    for logger_name in _VERBOSE_LOGGERS:
+        logging.getLogger(logger_name).setLevel(log_level)

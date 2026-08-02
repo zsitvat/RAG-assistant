@@ -1,36 +1,15 @@
 import time
 from collections.abc import AsyncIterator
-from datetime import UTC, date, datetime
+from datetime import date
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
+from langchain_core.messages import HumanMessage
 from langgraph.graph.state import CompiledStateGraph
 
-from app.agent.message_history import MessageHistory
-from app.agent.model import CalculationResult, ExpenseClaim, Finding
-from app.agent.slots import RequiredSlotTable
+from app.agent.projection import TurnProjector
 from app.agent.state import RECURSION_LIMIT
-from app.api.schemas import ChatResponse, ChatSource, EvaluationResponse, StreamEvent
+from app.agent.streaming import StreamEventMapper
+from app.api.schemas import ChatResponse, EvaluationResponse, StreamEvent
 from app.integrations.langfuse import Observability
-from app.rag.model import RagResult
-
-STEP_LABELS = {
-    "search_policies": "Policies searched",
-    "check_rules": "Rules checked",
-    "calculate": "Amount calculated",
-}
-UNDERSTOOD_STEP = "Request understood"
-EXTRACTED_STEP = "Information extracted"
-FINAL_STEP = "Answer prepared"
-NODE_STEP_LABELS = {
-    "classify_intent": UNDERSTOOD_STEP,
-    "extract_information": EXTRACTED_STEP,
-    "generate_response": FINAL_STEP,
-    "ask_clarification": FINAL_STEP,
-    "out_of_scope": FINAL_STEP,
-}
-ANSWER_NODE = "generate_response"
-TOOL_NODE = "execute_tools"
-ALWAYS_FIRST_STEPS = [UNDERSTOOD_STEP, EXTRACTED_STEP]
 
 
 class AgentService:
@@ -42,9 +21,10 @@ class AgentService:
         """Stores the compiled agent graph and the observability adapter used to trace turns."""
         self._graph = graph
         self._observability = observability or Observability(None)
-        self._slots = RequiredSlotTable()
+        self._projector = TurnProjector()
+        self._streaming = StreamEventMapper()
 
-    def respond(self, thread_id: str, message: str) -> ChatResponse:
+    def invoke_graph(self, thread_id: str, message: str) -> ChatResponse:
         """Runs the user's message through the agent graph and projects the result into a reply."""
         start = time.monotonic()
         result = self._graph.invoke(self._input(message), config=self._config(thread_id))
@@ -62,10 +42,13 @@ class AgentService:
         ):
             if mode == "updates":
                 for node, update in payload.items():
-                    for event in self._node_events(node, update, emitted_steps, emitted_sources):
+                    events = self._streaming.node_events(
+                        node, update, emitted_steps, emitted_sources
+                    )
+                    for event in events:
                         yield event
             elif mode == "messages":
-                token = self._answer_token(payload)
+                token = self._streaming.answer_token(payload)
                 if token is not None:
                     yield token
 
@@ -88,7 +71,7 @@ class AgentService:
             experiment_name=experiment_name,
         )
         result = self._graph.invoke(self._input(message, reference_date), config=config)
-        return self._project_evaluation(thread_id, result)
+        return self._projector.project_evaluation(thread_id, result)
 
     @staticmethod
     def _input(message: str, reference_date: date | None = None) -> dict:
@@ -104,8 +87,7 @@ class AgentService:
         return config | self._observability.trace_config(thread_id, **trace_kwargs)
 
     def _project(self, thread_id: str, state: dict, start: float) -> ChatResponse:
-        """Builds the public reply from final graph state, shared by both endpoints."""
-        request_messages = MessageHistory(state["messages"]).messages()
+        """Updates the trace with this turn's outcome and projects the final reply."""
         self._observability.update_trace(
             thread_id=thread_id,
             intent=state.get("intent"),
@@ -113,177 +95,4 @@ class AgentService:
             decision=state.get("decision"),
             degraded=state.get("degraded", False),
         )
-        return ChatResponse(
-            thread_id=thread_id,
-            answer=state["messages"][-1].content,
-            generated_at=datetime.now(UTC),
-            response_time_ms=round((time.monotonic() - start) * 1000),
-            decision=state.get("decision"),
-            sources=self._collect_cited_sources(request_messages),
-            steps=self._collect_step_labels(request_messages),
-        )
-
-    def _project_evaluation(self, thread_id: str, state: dict) -> EvaluationResponse:
-        """Builds the internal evaluation contract from final graph state."""
-        request_messages = MessageHistory(state["messages"]).messages()
-        claim = ExpenseClaim.from_state(state.get("claim"))
-        intent = state["intent"]
-        category = state.get("category")
-        return EvaluationResponse(
-            thread_id=thread_id,
-            intent=intent,
-            category=category,
-            decision=state.get("decision"),
-            claim=claim,
-            missing_slots=self._slots.missing(intent, category, claim),
-            tool_calls=self._collect_tool_calls(request_messages),
-            calculation=self._collect_calculation(request_messages),
-            findings=self._collect_findings(request_messages),
-            retrieved_doc_ids=self._collect_retrieved_doc_ids(request_messages),
-            cited_doc_ids=self._collect_cited_doc_ids(request_messages),
-            degraded=state.get("degraded", False),
-            answer=state["messages"][-1].content,
-        )
-
-    def _node_events(
-        self,
-        node: str,
-        update: dict,
-        emitted_steps: set[str],
-        emitted_sources: set[tuple[str, str]],
-    ) -> list[StreamEvent]:
-        """Maps one finished node update to its deduplicated public step and source events."""
-        messages = (update or {}).get("messages") or []
-        events: list[StreamEvent] = []
-
-        for source in self._collect_cited_sources(messages):
-            key = (source.doc_id, source.section)
-            if key not in emitted_sources:
-                emitted_sources.add(key)
-                events.append(StreamEvent(event="source", data=source))
-
-        for label in self._node_step_labels(node, messages):
-            if label not in emitted_steps:
-                emitted_steps.add(label)
-                events.append(StreamEvent(event="step", data=label))
-        return events
-
-    @staticmethod
-    def _node_step_labels(node: str, messages: list[BaseMessage]) -> list[str]:
-        """Returns the allow-listed public labels a finished node may announce."""
-        if node == TOOL_NODE:
-            return [
-                STEP_LABELS[message.name]
-                for message in messages
-                if isinstance(message, ToolMessage) and message.name in STEP_LABELS
-            ]
-        label = NODE_STEP_LABELS.get(node)
-        return [label] if label else []
-
-    @staticmethod
-    def _answer_token(payload: tuple) -> StreamEvent | None:
-        """Returns a token event only for chunks produced by the final-answer node."""
-        chunk, metadata = payload
-        if metadata.get("langgraph_node") != ANSWER_NODE:
-            return None
-        return StreamEvent(event="token", data=chunk.content) if chunk.content else None
-
-    @staticmethod
-    def _collect_cited_sources(request_messages: list[BaseMessage]) -> list[ChatSource]:
-        """Collects deduplicated cited sources from policy-search tool messages."""
-        sources: list[ChatSource] = []
-        seen: set[tuple[str, str]] = set()
-        for message in request_messages:
-            if not (isinstance(message, ToolMessage) and message.name == "search_policies"):
-                continue
-            artifact = RagResult.from_artifact(message.artifact)
-            for citation in artifact.citations:
-                key = (citation.doc_id, citation.section or "")
-                if key in seen:
-                    continue
-                seen.add(key)
-                sources.append(
-                    ChatSource(
-                        source_id=citation.marker,
-                        doc_id=citation.doc_id,
-                        title=citation.doc_title,
-                        section=citation.section or "",
-                    )
-                )
-        return sources
-
-    @staticmethod
-    def _collect_step_labels(request_messages: list[BaseMessage]) -> list[str]:
-        """Collects stable public step labels from the completed request."""
-        steps = list(ALWAYS_FIRST_STEPS)
-        for message in request_messages:
-            if not isinstance(message, ToolMessage):
-                continue
-            label = STEP_LABELS.get(message.name)
-            if label and label not in steps:
-                steps.append(label)
-        if isinstance(request_messages[-1], AIMessage):
-            steps.append(FINAL_STEP)
-        return steps
-
-    @staticmethod
-    def _collect_tool_calls(request_messages: list[BaseMessage]) -> list[str]:
-        """Collects the ordered tool-call names issued during the current request."""
-        return [
-            call["name"]
-            for message in request_messages
-            if isinstance(message, AIMessage)
-            for call in message.tool_calls
-        ]
-
-    @staticmethod
-    def _collect_calculation(request_messages: list[BaseMessage]) -> CalculationResult | None:
-        """Returns the last calculation result from the current request, if the tool ran."""
-        return next(
-            (
-                message.artifact
-                for message in reversed(request_messages)
-                if isinstance(message, ToolMessage)
-                and message.name == "calculate"
-                and isinstance(message.artifact, CalculationResult)
-            ),
-            None,
-        )
-
-    @staticmethod
-    def _collect_findings(request_messages: list[BaseMessage]) -> list[Finding]:
-        """Returns the last rule-check findings from the current request, if the tool ran."""
-        return next(
-            (
-                message.artifact
-                for message in reversed(request_messages)
-                if isinstance(message, ToolMessage)
-                and message.name == "check_rules"
-                and isinstance(message.artifact, list)
-            ),
-            [],
-        )
-
-    @staticmethod
-    def _collect_retrieved_doc_ids(request_messages: list[BaseMessage]) -> list[str]:
-        """Collects deduplicated doc ids retrieved by policy-search tool calls, before budgeting."""
-        doc_ids: list[str] = []
-        for message in request_messages:
-            if not (isinstance(message, ToolMessage) and message.name == "search_policies"):
-                continue
-            for result in RagResult.from_artifact(message.artifact).results:
-                if result.doc_id not in doc_ids:
-                    doc_ids.append(result.doc_id)
-        return doc_ids
-
-    @staticmethod
-    def _collect_cited_doc_ids(request_messages: list[BaseMessage]) -> list[str]:
-        """Collects deduplicated doc ids actually placed in the answer's citation context."""
-        doc_ids: list[str] = []
-        for message in request_messages:
-            if not (isinstance(message, ToolMessage) and message.name == "search_policies"):
-                continue
-            for citation in RagResult.from_artifact(message.artifact).citations:
-                if citation.doc_id not in doc_ids:
-                    doc_ids.append(citation.doc_id)
-        return doc_ids
+        return self._projector.project_chat(thread_id, state, start)
