@@ -53,12 +53,12 @@ of shipping.
 | File | Responsibility |
 | --- | --- |
 | `src/app/integrations/langfuse.py` | `Observability` — client lifecycle, trace config, trace updates |
-| `src/app/agent/prompt_library.py` | `PromptLibrary`, `PromptSpec`, shared validation, `ResolvedPrompt` |
+| `src/app/agent/prompt_library.py` | `PromptLibrary`, `ResolvedPrompt` |
 | `src/app/agent/nodes.py` | resolves each of the four prompts through `PromptLibrary` instead of the static import |
 | `src/app/agent/service.py` | attaches the trace config per turn, updates trace outcome attributes |
 | `src/app/dependencies.py` | builds `Observability` and `PromptLibrary` once at startup |
 | `src/app/integrations/tests/test_observability.py` | disabled/enabled paths, degrade-on-failure, trace config shape |
-| `src/app/agent/tests/test_prompt_library.py` | every embedded prompt validates, remote resolution, remote-invalid and remote-unreachable fallback, caching |
+| `src/app/agent/tests/test_prompt_library.py` | every embedded prompt resolves, production-labelled remote resolution, remote-unreachable fallback, caching |
 | `src/app/logging/tests/test_config.py` | payload-exclusion AST guard |
 
 ## A test-isolation issue this task surfaced

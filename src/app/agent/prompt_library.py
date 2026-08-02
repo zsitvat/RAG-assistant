@@ -13,8 +13,6 @@ from app.integrations.langfuse import PRODUCTION_LABEL, Observability
 
 logger = logging.getLogger(__name__)
 
-MESSAGES_VARIABLE = "messages"
-
 EMBEDDED_PROMPTS = {
     "classify_intent": CLASSIFY_INTENT_PROMPT,
     "extract_information": EXTRACT_INFORMATION_PROMPT,
@@ -25,8 +23,6 @@ EMBEDDED_PROMPTS = {
 
 class ResolvedPrompt(BaseModel):
     """A chat prompt template together with the identity of the version that produced it."""
-
-    model_config = {"arbitrary_types_allowed": True}
 
     name: str
     template: ChatPromptTemplate
@@ -73,4 +69,4 @@ class PromptLibrary:
     @staticmethod
     def _to_template(messages: list) -> ChatPromptTemplate:
         """Builds a chat template from Langfuse messages, appending the conversation placeholder."""
-        return ChatPromptTemplate.from_messages([*messages, MessagesPlaceholder(MESSAGES_VARIABLE)])
+        return ChatPromptTemplate.from_messages([*messages, MessagesPlaceholder("messages")])

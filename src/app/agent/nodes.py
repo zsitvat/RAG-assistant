@@ -25,8 +25,6 @@ from app.integrations.langfuse import Observability
 
 logger = logging.getLogger(__name__)
 
-DISTANCE_DIRECTION_SLOT = "distance_is_one_way"
-
 
 class AgentNodes:
     """Implements the LangGraph node callbacks that drive the agent's conversation flow."""
@@ -121,7 +119,7 @@ class AgentNodes:
         self, state: AgentState, missing: list[str]
     ) -> AgentState | None:
         """Answers with both distance readings once the user has declined to disambiguate."""
-        if missing != [DISTANCE_DIRECTION_SLOT]:
+        if missing != ["distance_is_one_way"]:
             return None
         try:
             outcomes = self._calculator.calculate_both_directions(
