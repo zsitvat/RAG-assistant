@@ -1,4 +1,6 @@
 import logging
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 
 from langfuse import Langfuse
 
@@ -7,6 +9,11 @@ from app.settings import Settings
 logger = logging.getLogger(__name__)
 
 PRODUCTION_LABEL = "production"
+TURN_SPAN_NAME = "chat_turn"
+
+
+def _noop_update(**_attributes: object) -> None:
+    """Discards outcome attributes when tracing is disabled."""
 
 
 class Observability:
@@ -46,23 +53,34 @@ class Observability:
         """Returns the Langfuse client when tracing is enabled."""
         return self._client
 
-    def trace_config(
+    @contextmanager
+    def traced_turn(
         self, thread_id: str, *, tags: tuple[str, ...] = ("chat",), **metadata: object
-    ) -> dict:
-        """Builds the LangChain config fragment that attaches one trace to a turn."""
+    ) -> Generator[tuple[dict, Callable[..., None]], None, None]:
+        """Opens one trace span for a turn.
+
+        Yields the LangChain config fragment to attach to the graph call, and an
+        `update(**attributes)` callback for recording turn-level outcome attributes
+        once they're known. Langfuse's OTEL-based SDK has no way to patch a trace
+        after its root span ends, so the span is kept open for the caller's `with`
+        block instead of being closed as soon as the config is built.
+        """
         if self._client is None:
-            return {}
+            yield {}, _noop_update
+            return
+
         from langfuse.langchain import CallbackHandler
 
         trace_metadata = {"langfuse_session_id": thread_id, "langfuse_tags": list(tags)}
         trace_metadata.update({key: value for key, value in metadata.items() if value is not None})
-        return {"callbacks": [CallbackHandler()], "metadata": trace_metadata}
+        config = {"callbacks": [CallbackHandler()], "metadata": trace_metadata}
 
-    def update_trace(self, **attributes: object) -> None:
-        """Records turn-level outcome attributes on the active trace."""
-        if self._client is None:
-            return
-        try:
-            self._client.update_current_trace(metadata=attributes)
-        except Exception as e:
-            logger.warning(f"langfuse trace update failed: {type(e).__name__}: {e}")
+        with self._client.start_as_current_observation(name=TURN_SPAN_NAME) as span:
+
+            def update(**attributes: object) -> None:
+                try:
+                    span.update(metadata=attributes)
+                except Exception as e:
+                    logger.warning(f"langfuse trace update failed: {type(e).__name__}: {e}")
+
+            yield config, update
