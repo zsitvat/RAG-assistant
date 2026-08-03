@@ -1,7 +1,7 @@
 {
-  "run_name": "functional-full-20260803-192341 - 2026-08-03T19:23:41.567238Z",
+  "run_name": "functional-full-20260803-212603 - 2026-08-03T21:26:03.620375Z",
   "model": "qwen2.5:7b-instruct-q4_K_M",
-  "dataset_run_url": "https://cloud.langfuse.com/project/cms7txjr50008ad0jxqp7myo0/datasets/cmsdk2yov00ylad0i0gzla6ih/runs/eb521b28-0baf-4a72-97fd-5f0246984cc9",
+  "dataset_run_url": "https://cloud.langfuse.com/project/cms7txjr50008ad0jxqp7myo0/datasets/cmsdpg79102ilad0dfo9be0dv/runs/a789c131-51d7-41a3-b08f-3797d5577275",
   "case_count": 20,
   "aggregates": {
     "classification_accuracy": {
@@ -9,73 +9,61 @@
       "scored_cases": 20
     },
     "slot_accuracy": {
-      "percent": 37.2,
+      "percent": 76.1,
       "scored_cases": 17
     },
     "retrieval_hit_at_4": {
-      "percent": 0.0,
+      "percent": 22.2,
       "scored_cases": 18
     },
     "tool_selection_accuracy": {
-      "percent": 10.0,
-      "scored_cases": 20
-    },
-    "outcome_accuracy": {
       "percent": 15.0,
       "scored_cases": 20
     },
+    "outcome_accuracy": {
+      "percent": 25.0,
+      "scored_cases": 20
+    },
     "citation_accuracy": {
-      "percent": 0.0,
+      "percent": 22.2,
       "scored_cases": 18
     },
     "answer_quality": {
-      "percent": null,
-      "scored_cases": 0
+      "percent": 10.0,
+      "scored_cases": 20
     }
   },
   "cases": [
     {
       "id": "unsupported-01",
-      "trace_id": "80f9cb570137c88cdd10e575f23e832f",
+      "trace_id": "fe337f91fb6e7b343ad01adae2413eca",
       "failed": false,
       "error": null,
       "scores": {
         "classification_accuracy": true,
         "tool_selection_accuracy": true,
-        "outcome_accuracy": true
+        "outcome_accuracy": true,
+        "answer_quality": true
       }
     },
     {
       "id": "document-01",
-      "trace_id": "8d7f9ee1b6b44ef5e5ebc6ec1081ed3f",
+      "trace_id": "f421aa2f981bb46e06f589e99e86a81a",
       "failed": false,
       "error": null,
       "scores": {
         "classification_accuracy": true,
-        "slot_accuracy": 0.4,
+        "slot_accuracy": 0.6,
         "retrieval_hit_at_4": false,
         "tool_selection_accuracy": false,
         "outcome_accuracy": false,
-        "citation_accuracy": false
+        "citation_accuracy": false,
+        "answer_quality": false
       }
     },
     {
       "id": "deadline-02",
-      "trace_id": "93bb9d159ed2def595ab3939c5889655",
-      "failed": false,
-      "error": null,
-      "scores": {
-        "classification_accuracy": true,
-        "slot_accuracy": 0.0,
-        "retrieval_hit_at_4": false,
-        "tool_selection_accuracy": false,
-        "outcome_accuracy": false,
-        "citation_accuracy": false
-      }
-    },
-    {
-      "id": "deadline-01",
-      "trace_id": "58f190ba8238f06679f6532c80bffbd5",
+      "trace_id": "760122e65a2482a2f7af32690c8b0d2f",
       "failed": false,
       "error": null,
       "scores": {
@@ -84,68 +72,88 @@
         "retrieval_hit_at_4": false,
         "tool_selection_accuracy": false,
         "outcome_accuracy": true,
-        "citation_accuracy": false
+        "citation_accuracy": false,
+        "answer_quality": false
+      }
+    },
+    {
+      "id": "deadline-01",
+      "trace_id": "2e14aab09d4fc215de86582184ce3a95",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 1.0,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": true,
+        "citation_accuracy": false,
+        "answer_quality": false
       }
     },
     {
       "id": "benefits-02",
-      "trace_id": "9658589922d15a12edcea6758f3b80e7",
+      "trace_id": "868ea69d8c60e9e4a7e620696e804e18",
       "failed": false,
       "error": null,
       "scores": {
         "classification_accuracy": true,
-        "slot_accuracy": 0.5,
+        "slot_accuracy": 0.75,
         "retrieval_hit_at_4": false,
         "tool_selection_accuracy": false,
         "outcome_accuracy": false,
-        "citation_accuracy": false
+        "citation_accuracy": false,
+        "answer_quality": false
       }
     },
     {
       "id": "benefits-01",
-      "trace_id": "12a8b39e923e53e72ca8860798dbb0b6",
+      "trace_id": "8442a5f9f59eb7f75c9eb20ce19dfaaa",
       "failed": false,
       "error": null,
       "scores": {
         "classification_accuracy": true,
-        "slot_accuracy": 0.5,
+        "slot_accuracy": 1.0,
         "retrieval_hit_at_4": false,
         "tool_selection_accuracy": false,
         "outcome_accuracy": false,
-        "citation_accuracy": false
+        "citation_accuracy": false,
+        "answer_quality": false
       }
     },
     {
       "id": "equipment-02",
-      "trace_id": "aa5f2abbeb73c630985cd5f2fd3de65d",
+      "trace_id": "416fda146fbcd722ece7e5f86ced5a54",
       "failed": false,
       "error": null,
       "scores": {
         "classification_accuracy": true,
-        "slot_accuracy": 0.3333333333333333,
+        "slot_accuracy": 0.6666666666666666,
         "retrieval_hit_at_4": false,
         "tool_selection_accuracy": false,
         "outcome_accuracy": false,
-        "citation_accuracy": false
+        "citation_accuracy": false,
+        "answer_quality": false
       }
     },
     {
       "id": "equipment-01",
-      "trace_id": "40b6473a74b7e78716969e199c1ccbb1",
+      "trace_id": "558a1571166b8d5a2271d904b3607491",
       "failed": false,
       "error": null,
       "scores": {
         "classification_accuracy": true,
-        "slot_accuracy": 0.5,
+        "slot_accuracy": 1.0,
         "retrieval_hit_at_4": false,
         "tool_selection_accuracy": false,
         "outcome_accuracy": false,
-        "citation_accuracy": false
+        "citation_accuracy": false,
+        "answer_quality": false
       }
     },
     {
       "id": "mileage-01",
-      "trace_id": "0af81d2c5600e6eb3df30d4cf80f2ad8",
+      "trace_id": "b10e7aa45b9cff15d411567ac7dd2f32",
       "failed": false,
       "error": null,
       "scores": {
@@ -154,157 +162,169 @@
         "retrieval_hit_at_4": false,
         "tool_selection_accuracy": false,
         "outcome_accuracy": false,
-        "citation_accuracy": false
+        "citation_accuracy": false,
+        "answer_quality": false
       }
     },
     {
       "id": "commuting-03",
-      "trace_id": "f44b90b73293587fa61df48eb11d6768",
+      "trace_id": "308cb8ecb84bfa37cdfcc770ac563f3d",
       "failed": false,
       "error": null,
       "scores": {
         "classification_accuracy": true,
-        "slot_accuracy": 0.0,
+        "slot_accuracy": 1.0,
         "tool_selection_accuracy": true,
-        "outcome_accuracy": true
+        "outcome_accuracy": true,
+        "answer_quality": true
       }
     },
     {
       "id": "commuting-02",
-      "trace_id": "a536d24c54e78ee894f2880cdf00654e",
+      "trace_id": "6f74a28c913b452b21bd526b9dae8208",
       "failed": false,
       "error": null,
       "scores": {
         "classification_accuracy": false,
-        "slot_accuracy": 0.0,
-        "retrieval_hit_at_4": false,
-        "tool_selection_accuracy": false,
-        "outcome_accuracy": false,
-        "citation_accuracy": false
-      }
-    },
-    {
-      "id": "commuting-01",
-      "trace_id": "636c8fb53b7332f185c577ed4e72ad2a",
-      "failed": false,
-      "error": null,
-      "scores": {
-        "classification_accuracy": true,
-        "slot_accuracy": 0.0,
-        "retrieval_hit_at_4": false,
-        "tool_selection_accuracy": false,
-        "outcome_accuracy": false,
-        "citation_accuracy": false
-      }
-    },
-    {
-      "id": "travel-03",
-      "trace_id": "fd5d81e75a1d5f8e7b9378d25dfa0c28",
-      "failed": false,
-      "error": null,
-      "scores": {
-        "classification_accuracy": true,
-        "slot_accuracy": 0.5,
-        "retrieval_hit_at_4": false,
-        "tool_selection_accuracy": false,
-        "outcome_accuracy": false,
-        "citation_accuracy": false
-      }
-    },
-    {
-      "id": "travel-02",
-      "trace_id": "a30ade181b1120478a99261a5f3c4e96",
-      "failed": false,
-      "error": null,
-      "scores": {
-        "classification_accuracy": false,
-        "slot_accuracy": 0.6666666666666666,
-        "retrieval_hit_at_4": false,
-        "tool_selection_accuracy": false,
-        "outcome_accuracy": false,
-        "citation_accuracy": false
-      }
-    },
-    {
-      "id": "travel-01",
-      "trace_id": "e54cd9c9b6df811e6fa7af102a87749f",
-      "failed": false,
-      "error": null,
-      "scores": {
-        "classification_accuracy": true,
-        "slot_accuracy": 0.6666666666666666,
-        "retrieval_hit_at_4": false,
-        "tool_selection_accuracy": false,
-        "outcome_accuracy": false,
-        "citation_accuracy": false
-      }
-    },
-    {
-      "id": "meal-03",
-      "trace_id": "0dac28d8623651ab9a3b0ea8be15716c",
-      "failed": false,
-      "error": null,
-      "scores": {
-        "classification_accuracy": true,
         "slot_accuracy": 0.25,
         "retrieval_hit_at_4": false,
         "tool_selection_accuracy": false,
         "outcome_accuracy": false,
-        "citation_accuracy": false
+        "citation_accuracy": false,
+        "answer_quality": false
+      }
+    },
+    {
+      "id": "commuting-01",
+      "trace_id": "918755783877def4859e035e938af159",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 1.0,
+        "retrieval_hit_at_4": true,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": true,
+        "answer_quality": false
+      }
+    },
+    {
+      "id": "travel-03",
+      "trace_id": "c267fc4af0b3db883a76d773a35f6e62",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 0.75,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": false,
+        "answer_quality": false
+      }
+    },
+    {
+      "id": "travel-02",
+      "trace_id": "596805fc4a1cc90c34d3bfa14dd46be4",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": false,
+        "slot_accuracy": 0.6666666666666666,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": false,
+        "answer_quality": false
+      }
+    },
+    {
+      "id": "travel-01",
+      "trace_id": "ae234b6bb0cc7d66d8e50dabf2902708",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 1.0,
+        "retrieval_hit_at_4": true,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": true,
+        "answer_quality": false
+      }
+    },
+    {
+      "id": "meal-03",
+      "trace_id": "764bc66e082acd6e51ee52a684e0fdf0",
+      "failed": false,
+      "error": null,
+      "scores": {
+        "classification_accuracy": true,
+        "slot_accuracy": 0.75,
+        "retrieval_hit_at_4": false,
+        "tool_selection_accuracy": false,
+        "outcome_accuracy": false,
+        "citation_accuracy": false,
+        "answer_quality": false
       }
     },
     {
       "id": "meal-02",
-      "trace_id": "c0a588cbf91d9d06808a5e55732ccabf",
+      "trace_id": "a210893dbbfb1556e69a11b6236b919b",
       "failed": false,
       "error": null,
       "scores": {
         "classification_accuracy": true,
-        "slot_accuracy": 0.5,
+        "slot_accuracy": 0.75,
         "retrieval_hit_at_4": false,
         "tool_selection_accuracy": false,
         "outcome_accuracy": false,
-        "citation_accuracy": false
+        "citation_accuracy": false,
+        "answer_quality": false
       }
     },
     {
       "id": "meal-01",
-      "trace_id": "528d75a6aaddf6d62294256f33e7c7da",
+      "trace_id": "1db70a7792165ade59c8f8c87a3de457",
       "failed": false,
       "error": null,
       "scores": {
         "classification_accuracy": true,
-        "slot_accuracy": 0.5,
+        "slot_accuracy": 0.75,
         "retrieval_hit_at_4": false,
         "tool_selection_accuracy": false,
         "outcome_accuracy": false,
-        "citation_accuracy": false
+        "citation_accuracy": false,
+        "answer_quality": false
       }
     },
     {
       "id": "general-02",
-      "trace_id": "a6e11c7c0182e7733e088c1f079e50c4",
+      "trace_id": "294e229a488180fef342c69ddfd65330",
       "failed": false,
       "error": null,
       "scores": {
         "classification_accuracy": true,
-        "retrieval_hit_at_4": false,
+        "retrieval_hit_at_4": true,
         "tool_selection_accuracy": false,
         "outcome_accuracy": false,
-        "citation_accuracy": false
+        "citation_accuracy": true,
+        "answer_quality": false
       }
     },
     {
       "id": "general-01",
-      "trace_id": "90f0ef150fdbd4a6b7234f7c2531f014",
+      "trace_id": "57f9e5371a23fadc5217763505fc4fa9",
       "failed": false,
       "error": null,
       "scores": {
         "classification_accuracy": true,
-        "retrieval_hit_at_4": false,
-        "tool_selection_accuracy": false,
-        "outcome_accuracy": false,
-        "citation_accuracy": false
+        "retrieval_hit_at_4": true,
+        "tool_selection_accuracy": true,
+        "outcome_accuracy": true,
+        "citation_accuracy": true,
+        "answer_quality": false
       }
     }
   ]
