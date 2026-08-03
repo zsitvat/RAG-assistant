@@ -61,7 +61,7 @@ async def test_chat_returns_a_typed_response_even_without_a_real_llm(client):
     assert isinstance(body["response_time_ms"], int)
     assert body["decision"] is None
     assert body["sources"] == []
-    assert "Intent classified" in body["steps"]
+    assert "Intent classified — policy_question" in body["steps"]
     assert "Answer generated" in body["steps"]
     assert body["degraded"] is True
 
