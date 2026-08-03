@@ -246,6 +246,20 @@ matches. Once `api` reports healthy:
 - API + Swagger docs: <http://127.0.0.1:8000/docs>
 - `GET /health` — liveness; `GET /ready` — Redis reachable + index dimension match, LLM responding.
 
+### GPU acceleration (optional)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
+```
+
+[`docker-compose.gpu.yml`](docker-compose.gpu.yml) adds an NVIDIA GPU device reservation to the
+`ollama` service; Ollama then offloads model layers to the GPU automatically (a
+`qwen2.5:7b-instruct-q4_K_M` generation drops from tens of seconds to well under a second on an 8 GB
+card). This requires a host with an NVIDIA GPU, driver and `nvidia-container-toolkit` installed —
+without them, starting `ollama` with this override fails outright (Docker cannot satisfy the device
+reservation), so it is kept out of the default `docker-compose.yml` and applied only when explicitly
+requested.
+
 ### Local development (dummy backend, no Ollama)
 
 ```bash
