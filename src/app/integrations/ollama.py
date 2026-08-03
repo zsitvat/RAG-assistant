@@ -17,8 +17,8 @@ def check_ollama_ready(base_url: str, model: str) -> OllamaCheckResult:
     try:
         response = httpx2.get(f"{base_url}/api/tags", timeout=TAGS_TIMEOUT_SECONDS)
         response.raise_for_status()
-    except httpx2.HTTPError as exc:
-        return OllamaCheckResult(False, f"Ollama at {base_url} is unreachable: {exc}")
+    except httpx2.HTTPError as e:
+        return OllamaCheckResult(False, f"Ollama at {base_url} is unreachable: {e}")
 
     available = {entry["name"] for entry in response.json().get("models", [])}
     if model in available or _base_tag(model) in {_base_tag(name) for name in available}:

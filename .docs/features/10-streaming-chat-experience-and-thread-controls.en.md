@@ -58,11 +58,6 @@ local `thread_id`) and read-only index stats — no model or retrieval tuning co
 failure surfaces the backend detail via `st.error` and leaves the visible conversation and thread id
 intact, so the next message retries on the same thread.
 
-### CORS
-
-`create_app()` installs `CORSMiddleware` restricted to the configured `ui_origin`
-(`Settings.ui_origin`, default `http://localhost:8501`).
-
 ## Key files
 
 | File | Responsibility |
@@ -74,7 +69,6 @@ intact, so the next message retries on the same thread.
 | `src/app/api/routes/chat.py` | `POST /chat/stream` as a `StreamingResponse` |
 | `src/app/rag/model.py` | `RagResult.from_artifact` |
 | `src/app/ui.py` | `ChatApiClient` and the chat page |
-| `src/app/main.py`, `src/app/settings.py` | UI-origin CORS |
 | `src/app/tests/journeys/test_chat_stream.py` | event vocabulary, allow-listing, dedup, token filtering, blocking parity, no-token turns, SSE wire format, HTTP contract |
 
 ## Related restructuring

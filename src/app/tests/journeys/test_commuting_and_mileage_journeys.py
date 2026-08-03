@@ -49,6 +49,7 @@ def _search_then_calculate_then_answer(answer: str) -> list[AIMessage]:
 
 
 async def test_missing_distance_direction_ends_the_turn_with_a_focused_question():
+    # Arrange
     model = ScriptedChatModel(
         chat_responses=iter([]),
         structured_responses=iter(
@@ -64,17 +65,20 @@ async def test_missing_distance_direction_ends_the_turn_with_a_focused_question(
         ),
     )
 
+    # Act
     result = await _graph(model).ainvoke(
         {"messages": [("human", "I drive 18 km to the office on 10 days a month.")]},
         config=_config("commute-clarify"),
     )
 
+    # Assert
     assert result["decision"] == "needs_info"
     assert result["messages"][-1].content == CLARIFICATION_QUESTIONS["distance_is_one_way"]
     assert result["claim"].distance_km == 18
 
 
 async def test_clarification_answer_resumes_the_same_thread_and_completes_the_claim():
+    # Arrange
     model = ScriptedChatModel(
         chat_responses=iter([]),
         structured_responses=iter(
@@ -115,8 +119,10 @@ async def test_clarification_answer_resumes_the_same_thread_and_completes_the_cl
         graph.checkpointer,
     )
 
+    # Act
     result = await resumed.ainvoke({"messages": [("human", "one-way")]}, config=config)
 
+    # Assert
     assert result["claim"].distance_km == 18
     assert result["claim"].commute_days_per_month == 10
     assert result["claim"].distance_is_one_way is True
@@ -124,6 +130,7 @@ async def test_clarification_answer_resumes_the_same_thread_and_completes_the_cl
 
 
 async def test_a_new_expense_in_the_same_thread_does_not_inherit_the_previous_claim():
+    # Arrange
     model = ScriptedChatModel(
         chat_responses=iter([]),
         structured_responses=iter(
@@ -161,17 +168,20 @@ async def test_a_new_expense_in_the_same_thread_does_not_inherit_the_previous_cl
         graph.checkpointer,
     )
 
+    # Act
     result = await follow_up.ainvoke(
         {"messages": [("human", "Separately, I drove 250 km round trip to a client.")]},
         config=config,
     )
 
+    # Assert
     assert result["claim"].category == "mileage"
     assert result["claim"].commute_days_per_month is None
     assert tool_message(result, "calculate").artifact.amount_huf == 11250
 
 
 async def test_refusing_to_disambiguate_the_distance_returns_both_conditional_outcomes():
+    # Arrange
     model = ScriptedChatModel(
         chat_responses=iter([]),
         structured_responses=iter(
@@ -209,8 +219,10 @@ async def test_refusing_to_disambiguate_the_distance_returns_both_conditional_ou
         graph.checkpointer,
     )
 
+    # Act
     result = await refused.ainvoke({"messages": [("human", "I do not know.")]}, config=config)
 
+    # Assert
     answer = result["messages"][-1].content
     assert "10800" in answer
     assert "5400" in answer

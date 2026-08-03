@@ -67,6 +67,7 @@ asyncio_mode = "auto"
 source = ["app"]
 omit = [
     "src/app/ui.py",
+    "src/app/api/tests/*",
     "src/app/agent/tests/*",
     "src/app/rag/tests/*",
     "src/app/rag/ingest/tests/*",

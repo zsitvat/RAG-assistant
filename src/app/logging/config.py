@@ -66,8 +66,8 @@ def configure_logging(service: str, log_level: str, log_dir: Path = DEFAULT_LOG_
     """
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        raise RuntimeError(f"Log directory '{log_dir.resolve()}' is not writable: {exc}") from exc
+    except OSError as e:
+        raise RuntimeError(f"Log directory '{log_dir.resolve()}' is not writable: {e}") from e
 
     cleanup_expired_archives(log_dir, service)
 

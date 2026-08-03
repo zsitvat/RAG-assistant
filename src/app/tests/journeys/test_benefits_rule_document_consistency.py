@@ -17,8 +17,10 @@ def test_benefits_rule_doc_refs_resolve_to_indexed_sections():
 
 
 def test_benefits_annual_allowances_appear_verbatim_in_their_section():
+    # Arrange
     markdown = _document_markdown("05")
 
+    # Assert
     for rule in CATALOGUE.categories["benefits"].rules:
         if rule.annual_budget_huf is None:
             continue
@@ -26,6 +28,7 @@ def test_benefits_annual_allowances_appear_verbatim_in_their_section():
 
 
 def test_benefits_tenure_requirement_appears_in_the_eligibility_section():
+    # Arrange
     markdown = _document_markdown("05").lower()
 
     tenure_rule = next(
@@ -33,15 +36,20 @@ def test_benefits_tenure_requirement_appears_in_the_eligibility_section():
         for rule in CATALOGUE.categories["benefits"].rules
         if rule.eligible_after_months is not None
     )
+
+    # Assert
     assert tenure_rule.eligible_after_months == 6
     assert "six months" in markdown
 
 
 def test_benefits_no_carry_over_rule_appears_in_the_eligibility_section():
+    # Arrange
     markdown = _document_markdown("05").lower()
 
     carry_over_rule = next(
         rule for rule in CATALOGUE.categories["benefits"].rules if rule.carry_over is not None
     )
+
+    # Assert
     assert carry_over_rule.carry_over is False
     assert "not be carried forward" in markdown

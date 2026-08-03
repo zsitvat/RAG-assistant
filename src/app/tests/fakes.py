@@ -10,7 +10,7 @@ from langchain_core.runnables import Runnable
 from pydantic import ConfigDict, Field
 
 from app.agent.calculator import ReimbursementCalculator
-from app.agent.deadline import DeadlineChecker
+from app.agent.deadline_check import DeadlineChecker
 from app.agent.rule_checker import RuleChecker
 from app.agent.tools import build_tools
 from app.rag.graph import build_rag_graph

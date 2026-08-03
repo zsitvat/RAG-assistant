@@ -19,6 +19,7 @@ CALCULATOR = ReimbursementCalculator(CATALOGUE)
 
 
 async def test_domestic_accommodation_within_threshold_is_deterministically_approved():
+    # Arrange
     document = policy_document(
         "02",
         "3. Accommodation",
@@ -74,6 +75,7 @@ async def test_domestic_accommodation_within_threshold_is_deterministically_appr
     nodes = AgentNodes(model, model, tools, CALCULATOR)
     graph = build_agent_graph(nodes)
 
+    # Act
     result = await graph.ainvoke(
         {
             "messages": [
@@ -86,6 +88,7 @@ async def test_domestic_accommodation_within_threshold_is_deterministically_appr
         config={"configurable": {"thread_id": "travel-1"}, "recursion_limit": 20},
     )
 
+    # Assert
     calculate_message = tool_message(result, "calculate")
     assert calculate_message.artifact.amount_huf == 45000
     assert calculate_message.artifact.cap_huf == 45000
@@ -107,6 +110,7 @@ async def test_domestic_accommodation_within_threshold_is_deterministically_appr
 
 
 async def test_equipment_above_threshold_without_approval_is_rejected():
+    # Arrange
     document = policy_document(
         "01",
         "5. Work equipment and minor purchases",
@@ -156,11 +160,13 @@ async def test_equipment_above_threshold_without_approval_is_rejected():
     nodes = AgentNodes(model, model, tools, CALCULATOR)
     graph = build_agent_graph(nodes)
 
+    # Act
     result = await graph.ainvoke(
         {"messages": [("human", "I bought an 80000 HUF monitor without prior approval.")]},
         config={"configurable": {"thread_id": "equipment-1"}, "recursion_limit": 20},
     )
 
+    # Assert
     calculate_message = tool_message(result, "calculate")
     assert calculate_message.artifact.amount_huf == 80000
 
@@ -172,6 +178,7 @@ async def test_equipment_above_threshold_without_approval_is_rejected():
 
 
 async def test_travel_journey_is_exposed_through_the_chat_endpoint():
+    # Arrange
     document = policy_document(
         "02",
         "3. Accommodation",
@@ -233,12 +240,15 @@ async def test_travel_journey_is_exposed_through_the_chat_endpoint():
     test_app.dependency_overrides[get_agent_service] = provide_agent_service
 
     transport = ASGITransport(app=test_app)
+
+    # Act
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         response = await client.post(
             "/chat",
             json={"thread_id": "travel-api-1", "message": "Can I claim my domestic hotel?"},
         )
 
+    # Assert
     assert response.status_code == 200
     body = response.json()
     assert body["decision"] == "partially_eligible"

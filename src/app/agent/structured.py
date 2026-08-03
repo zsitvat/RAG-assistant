@@ -37,10 +37,10 @@ class StructuredOutputRunner[SchemaT: BaseModel]:
 
         try:
             return StructuredResult(await runnable.ainvoke({"messages": messages}), degraded=False)
-        except Exception as exc:
+        except Exception as e:
             logger.warning(
                 f"structured output for {self._schema.__name__} failed; retrying once: "
-                f"{type(exc).__name__}: {exc}"
+                f"{type(e).__name__}: {e}"
             )
 
         repair_messages = [
@@ -50,10 +50,10 @@ class StructuredOutputRunner[SchemaT: BaseModel]:
         try:
             result = await runnable.ainvoke({"messages": repair_messages})
             return StructuredResult(result, degraded=False)
-        except Exception as exc:
+        except Exception as e:
             logger.warning(
                 f"structured output for {self._schema.__name__} degraded to fallback after "
-                f"repair retry: {type(exc).__name__}: {exc}"
+                f"repair retry: {type(e).__name__}: {e}"
             )
             return StructuredResult(fallback, degraded=True)
 
@@ -61,9 +61,9 @@ class StructuredOutputRunner[SchemaT: BaseModel]:
         """Builds the structured-output runnable when supported by the model."""
         try:
             return self._prompt | self._chat_model.with_structured_output(self._schema)
-        except Exception as exc:
+        except Exception as e:
             logger.warning(
                 f"structured output unsupported for {self._schema.__name__} on this chat model; "
-                f"using fallback: {type(exc).__name__}: {exc}"
+                f"using fallback: {type(e).__name__}: {e}"
             )
             return None

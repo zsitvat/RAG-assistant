@@ -1,5 +1,3 @@
-import os
-
 import pytest
 import redis as redis_lib
 
@@ -10,6 +8,7 @@ from app.rag.ingest.pipeline import CorpusIngestor
 from app.rag.retriever import Retriever
 from app.rag.store import build_embeddings, build_vector_store
 from app.rules.loader import load_rule_catalogue
+from app.tests.redis_availability import TEST_REDIS_URL, redis_available
 
 CATEGORY_QUESTIONS = {
     "general": "how many days do I have to submit an expense claim",
@@ -21,18 +20,7 @@ CATEGORY_QUESTIONS = {
     "benefits": "what is the annual recreational benefit budget",
 }
 
-TEST_REDIS_URL = os.environ.get("TEST_REDIS_URL", "redis://127.0.0.1:6379/0")
-
-
-def _redis_available() -> bool:
-    try:
-        redis_lib.Redis.from_url(TEST_REDIS_URL).ping()
-    except redis_lib.RedisError:
-        return False
-    return True
-
-
-pytestmark = pytest.mark.skipif(not _redis_available(), reason="Redis 8 not reachable")
+pytestmark = pytest.mark.skipif(not redis_available(), reason="Redis 8 not reachable")
 
 
 @pytest.fixture(scope="module")
@@ -62,6 +50,7 @@ def _clean_index(redis_client, vector_store):
 def test_full_ingest_idempotent_rerun_and_dimension_mismatch_rebuild(
     redis_client, redis_index, vector_store
 ):
+    # Arrange
     catalogue = load_rule_catalogue()
     ingestor = CorpusIngestor()
 
@@ -84,44 +73,55 @@ def test_full_ingest_idempotent_rerun_and_dimension_mismatch_rebuild(
 
 
 def test_similarity_search_returns_relevant_grounded_chunks(redis_index, vector_store):
+    # Arrange
     ingestor = CorpusIngestor()
     ingestor.run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
 
+    # Act
     results = vector_store.similarity_search(
         "how much can I claim for a business meal per person", k=3
     )
 
+    # Assert
     assert len(results) > 0
     assert any(result.metadata["doc_id"] == "01" for result in results)
 
 
 def test_similarity_search_respects_category_tag_filter(redis_index, vector_store):
+    # Arrange
     ingestor = CorpusIngestor()
     ingestor.run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
 
+    # Act
     results = vector_store.similarity_search(
         "how much can I claim for a business meal per person",
         k=5,
         filter="@categories:{meal}",
     )
 
+    # Assert
     assert len(results) > 0
     assert all("meal" in result.metadata["categories"] for result in results)
 
 
 def test_indexed_vector_dimension_matches_the_configured_dimension(redis_index, vector_store):
+    # Arrange
     ingestor = CorpusIngestor()
     ingestor.run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
 
+    # Assert
     assert redis_index.indexed_vector_dimension() == VECTOR_DIMENSION
 
 
 def test_get_index_stats_reports_total_chunks_and_category_counts(redis_index, vector_store):
+    # Arrange
     ingestor = CorpusIngestor()
     ingestor.run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
 
+    # Act
     stats = redis_index.get_index_stats()
 
+    # Assert
     assert stats["total_chunks"] > 0
     assert stats["category_counts"]["meal"] > 0
     assert sum(stats["category_counts"].values()) >= stats["total_chunks"]
@@ -131,11 +131,14 @@ def test_get_index_stats_reports_total_chunks_and_category_counts(redis_index, v
 async def test_rag_graph_returns_grounded_evidence_for_each_category(
     redis_index, vector_store, category, question
 ):
+    # Arrange
     CorpusIngestor().run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
     graph = build_rag_graph(Retriever(vector_store))
 
+    # Act
     result = (await graph.ainvoke({"question": question, "category": category}))["result"]
 
+    # Assert
     assert len(result.results) > 0
     assert result.confidence >= MIN_CONFIDENCE_THRESHOLD
     assert result.citations
@@ -143,13 +146,16 @@ async def test_rag_graph_returns_grounded_evidence_for_each_category(
 
 
 async def test_rag_graph_flags_low_confidence_for_an_irrelevant_question(redis_index, vector_store):
+    # Arrange
     CorpusIngestor().run(redis_index, vector_store, rule_catalogue=load_rule_catalogue())
     graph = build_rag_graph(Retriever(vector_store))
 
+    # Act
     result = (
         await graph.ainvoke(
             {"question": "what is the weather like on mars today", "category": None}
         )
     )["result"]
 
+    # Assert
     assert result.confidence < MIN_CONFIDENCE_THRESHOLD

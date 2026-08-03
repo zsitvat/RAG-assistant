@@ -1,39 +1,9 @@
-import os
-
 import pytest
-import redis as redis_lib
-from httpx2 import ASGITransport, AsyncClient
 
 from app.api.schemas import ChatResponse, EvaluationResponse
-from app.main import app
-from app.settings import get_settings
+from app.tests.redis_availability import redis_available
 
-TEST_REDIS_URL = os.environ.get("TEST_REDIS_URL", "redis://127.0.0.1:6379/0")
-
-
-def _redis_available() -> bool:
-    try:
-        redis_lib.Redis.from_url(TEST_REDIS_URL).ping()
-    except redis_lib.RedisError:
-        return False
-    return True
-
-
-pytestmark = pytest.mark.skipif(not _redis_available(), reason="Redis 8 not reachable")
-
-
-@pytest.fixture
-async def client(monkeypatch):
-    monkeypatch.setenv("LLM_BACKEND", "dummy")
-    monkeypatch.setenv("REDIS_URL", TEST_REDIS_URL)
-    # Never let a full-app test boot against a developer's real .env Langfuse credentials.
-    monkeypatch.setenv("LANGFUSE_ENABLED", "false")
-    get_settings.cache_clear()
-    async with app.router.lifespan_context(app):
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://testserver") as test_client:
-            yield test_client
-    get_settings.cache_clear()
+pytestmark = pytest.mark.skipif(not redis_available(), reason="Redis 8 not reachable")
 
 
 CHAT_RESPONSE_FIELDS = {
@@ -44,6 +14,7 @@ CHAT_RESPONSE_FIELDS = {
     "decision",
     "sources",
     "steps",
+    "degraded",
 }
 EVALUATION_RESPONSE_FIELDS = {
     "thread_id",
@@ -71,14 +42,19 @@ def test_evaluation_response_contract_carries_typed_diagnostics_only():
 
 
 def test_evaluation_only_fields_never_leak_into_the_public_chat_contract():
+    # Arrange
     eval_only_fields = EVALUATION_RESPONSE_FIELDS - CHAT_RESPONSE_FIELDS
+
+    # Assert
     assert eval_only_fields & set(ChatResponse.model_fields) == set()
-    assert {"intent", "claim", "tool_calls", "findings", "degraded"} <= eval_only_fields
+    assert {"intent", "claim", "tool_calls", "findings"} <= eval_only_fields
 
 
 async def test_openapi_exposes_chat_and_eval_as_distinct_response_schemas(client):
+    # Act
     schema = (await client.get("/openapi.json")).json()
 
+    # Assert
     assert "/chat" in schema["paths"]
     assert "/admin/eval" in schema["paths"]
 

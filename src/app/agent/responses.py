@@ -90,6 +90,7 @@ class ResponseBuilder:
             decision=decision,
             sources=collect_cited_sources(request_messages),
             steps=self._collect_step_labels(request_messages, decision),
+            degraded=state.get("degraded", False),
         )
 
     def build_evaluation(self, thread_id: str, state: dict) -> EvaluationResponse:

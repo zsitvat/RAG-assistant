@@ -1,7 +1,12 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class SettingsError(RuntimeError):
+    """Raised when the application settings in .env/environment fail validation."""
 
 
 class Settings(BaseSettings):
@@ -18,7 +23,6 @@ class Settings(BaseSettings):
     eval_judge_model: str = "qwen2.5:7b-instruct-q4_K_M"
 
     api_base_url: str = "http://api:8000"
-    ui_origin: str = "http://localhost:8501"
     redis_url: str = "redis://redis:6379/0"
 
     langfuse_enabled: bool = True
@@ -32,4 +36,7 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     """Returns the cached application settings instance."""
-    return Settings()
+    try:
+        return Settings()
+    except ValidationError as e:
+        raise SettingsError(f"Invalid application settings in .env/environment: {e}") from e

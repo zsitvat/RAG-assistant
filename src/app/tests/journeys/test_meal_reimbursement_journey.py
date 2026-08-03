@@ -12,6 +12,7 @@ CALCULATOR = ReimbursementCalculator(CATALOGUE)
 
 
 async def test_reference_dinner_example_produces_the_expected_reimbursement_and_citations():
+    # Arrange
     document = policy_document(
         "01",
         "4. Business meals",
@@ -64,6 +65,7 @@ async def test_reference_dinner_example_produces_the_expected_reimbursement_and_
     nodes = AgentNodes(model, model, tools, CALCULATOR)
     graph = build_agent_graph(nodes)
 
+    # Act
     result = await graph.ainvoke(
         {
             "messages": [
@@ -77,6 +79,7 @@ async def test_reference_dinner_example_produces_the_expected_reimbursement_and_
         config={"configurable": {"thread_id": "meal-1"}, "recursion_limit": 20},
     )
 
+    # Assert
     calculate_message = tool_message(result, "calculate")
     assert calculate_message.artifact.amount_huf == 45000
     assert calculate_message.artifact.cap_huf == 45000

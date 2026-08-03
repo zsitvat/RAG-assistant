@@ -64,5 +64,5 @@ class Observability:
             return
         try:
             self._client.update_current_trace(metadata=attributes)
-        except Exception:
-            logger.warning("langfuse trace update failed")
+        except Exception as e:
+            logger.warning(f"langfuse trace update failed: {type(e).__name__}: {e}")

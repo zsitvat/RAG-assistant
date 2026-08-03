@@ -4,6 +4,7 @@ from app.agent.message_history import MessageHistory
 
 
 def test_messages_starts_at_latest_human_message():
+    # Arrange
     messages = [
         HumanMessage(content="first"),
         AIMessage(content="answer 1"),
@@ -11,12 +12,15 @@ def test_messages_starts_at_latest_human_message():
         AIMessage(content="answer 2"),
     ]
 
+    # Act
     latest = MessageHistory(messages).messages()
 
+    # Assert
     assert latest == messages[2:]
 
 
 def test_agent_step_count_counts_only_tool_calling_ai_messages_in_the_current_request():
+    # Arrange
     messages = [
         HumanMessage(content="q"),
         AIMessage(content="", tool_calls=[{"name": "search_policies", "args": {}, "id": "1"}]),
@@ -28,6 +32,7 @@ def test_agent_step_count_counts_only_tool_calling_ai_messages_in_the_current_re
 
 
 def test_tool_error_count_counts_error_status_tool_messages():
+    # Arrange
     messages = [
         HumanMessage(content="q"),
         ToolMessage(content="bad args", tool_call_id="1", name="calculate", status="error"),
@@ -38,6 +43,7 @@ def test_tool_error_count_counts_error_status_tool_messages():
 
 
 def test_find_duplicate_call_reuses_the_matching_successful_tool_message():
+    # Arrange
     messages = [
         HumanMessage(content="q"),
         AIMessage(
@@ -51,13 +57,16 @@ def test_find_duplicate_call_reuses_the_matching_successful_tool_message():
         ),
     ]
 
+    # Act
     duplicate = MessageHistory(messages).find_duplicate_call("search_policies", {"question": "x"})
 
+    # Assert
     assert duplicate is not None
     assert duplicate.tool_call_id == "1"
 
 
 def test_find_duplicate_call_returns_none_when_no_match():
+    # Arrange
     messages = [HumanMessage(content="q")]
 
     assert (
@@ -66,6 +75,7 @@ def test_find_duplicate_call_returns_none_when_no_match():
 
 
 def test_model_context_condenses_a_single_previous_request_to_human_and_final_answer():
+    # Arrange
     old_human = HumanMessage(content="old question")
     old_tool_call = AIMessage(
         content="", tool_calls=[{"name": "search_policies", "args": {}, "id": "1"}]
@@ -89,8 +99,10 @@ def test_model_context_condenses_a_single_previous_request_to_human_and_final_an
         current_tool_message,
     ]
 
+    # Act
     context = MessageHistory(messages).model_context()
 
+    # Assert
     assert context == [
         old_human,
         old_final_answer,
@@ -101,6 +113,7 @@ def test_model_context_condenses_a_single_previous_request_to_human_and_final_an
 
 
 def test_model_context_condenses_multiple_previous_requests():
+    # Arrange
     first_human = HumanMessage(content="first question")
     first_tool_call = AIMessage(
         content="", tool_calls=[{"name": "search_policies", "args": {}, "id": "1"}]
@@ -120,8 +133,10 @@ def test_model_context_condenses_multiple_previous_requests():
         current_human,
     ]
 
+    # Act
     context = MessageHistory(messages).model_context()
 
+    # Assert
     assert context == [
         first_human,
         first_final_answer,
@@ -132,6 +147,7 @@ def test_model_context_condenses_multiple_previous_requests():
 
 
 def test_model_context_keeps_every_message_of_the_current_request():
+    # Arrange
     old_human = HumanMessage(content="old question")
     old_final_answer = AIMessage(content="old final answer")
     current_human = HumanMessage(content="new question")
@@ -153,8 +169,10 @@ def test_model_context_keeps_every_message_of_the_current_request():
         current_second_tool_message,
     ]
 
+    # Act
     context = MessageHistory(messages).model_context()
 
+    # Assert
     assert context[-5:] == [
         current_human,
         current_tool_call,
@@ -165,11 +183,14 @@ def test_model_context_keeps_every_message_of_the_current_request():
 
 
 def test_model_context_returns_the_full_history_when_there_is_no_human_message():
+    # Arrange
     messages = [
         AIMessage(content="", tool_calls=[{"name": "calculate", "args": {}, "id": "1"}]),
         ToolMessage(content="42", tool_call_id="1", name="calculate"),
     ]
 
+    # Act
     context = MessageHistory(messages).model_context()
 
+    # Assert
     assert context == messages

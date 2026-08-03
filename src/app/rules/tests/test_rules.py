@@ -7,7 +7,10 @@ EXPECTED_DOCUMENT_IDS = {"00", "01", "02", "03", "04", "05", "06", "07"}
 
 
 def test_load_rule_catalogue_parses_the_repository_rules_yaml():
+    # Act
     catalogue = load_rule_catalogue()
+
+    # Assert
     assert set(catalogue.documents) == EXPECTED_DOCUMENT_IDS
     assert catalogue.categories["meal"].rules[0].limit_per_person_huf == 15000
 
@@ -18,8 +21,11 @@ def test_missing_file_raises_actionable_error(tmp_path):
 
 
 def test_malformed_yaml_raises_actionable_error(tmp_path):
+    # Arrange
     path = tmp_path / "rules.yaml"
     path.write_text("version: not-a-number\n")
+
+    # Act
     with pytest.raises(RuleCatalogueError, match="invalid"):
         load_rule_catalogue(path)
 
@@ -38,12 +44,16 @@ def _minimal_catalogue(**overrides) -> dict:
 
 
 def test_document_categories_must_not_be_empty():
+    # Arrange
     data = _minimal_catalogue(documents={"01": {"categories": [], "sections": {}}})
+
+    # Act
     with pytest.raises(ValueError, match="must not be empty"):
         RuleCatalogue.model_validate(data)
 
 
 def test_rule_doc_ref_must_resolve_to_a_declared_section():
+    # Arrange
     data = _minimal_catalogue(
         categories={
             "meal": {
@@ -52,11 +62,14 @@ def test_rule_doc_ref_must_resolve_to_a_declared_section():
             }
         }
     )
+
+    # Act
     with pytest.raises(ValueError, match="unresolved section"):
         RuleCatalogue.model_validate(data)
 
 
 def test_rule_doc_ref_must_point_to_a_known_document():
+    # Arrange
     data = _minimal_catalogue(
         categories={
             "meal": {
@@ -65,11 +78,14 @@ def test_rule_doc_ref_must_point_to_a_known_document():
             }
         }
     )
+
+    # Act
     with pytest.raises(ValueError, match="unknown document"):
         RuleCatalogue.model_validate(data)
 
 
 def test_duplicate_rule_ids_are_rejected():
+    # Arrange
     data = _minimal_catalogue(
         categories={
             "meal": {
@@ -78,6 +94,8 @@ def test_duplicate_rule_ids_are_rejected():
             }
         }
     )
+
+    # Act
     with pytest.raises(ValueError, match="duplicate rule id"):
         RuleCatalogue.model_validate(data)
 

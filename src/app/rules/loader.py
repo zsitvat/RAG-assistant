@@ -23,8 +23,8 @@ def load_rule_catalogue(path: Path = DEFAULT_RULES_PATH) -> RuleCatalogue:
 
     try:
         return RuleCatalogue.model_validate(raw)
-    except ValidationError as exc:
-        raise RuleCatalogueError(f"Rule catalogue at '{path.resolve()}' is invalid: {exc}") from exc
+    except ValidationError as e:
+        raise RuleCatalogueError(f"Rule catalogue at '{path.resolve()}' is invalid: {e}") from e
 
 
 @lru_cache

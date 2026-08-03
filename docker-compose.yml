@@ -52,7 +52,7 @@ services:
 
   ollama-pull:
     image: ollama/ollama:0.13.1
-    restart: "no"
+    restart: on-failure:3
     depends_on:
       ollama:
         condition: service_healthy

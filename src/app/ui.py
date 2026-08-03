@@ -1,4 +1,4 @@
-import json
+import logging
 import uuid
 from collections.abc import Iterator
 from datetime import datetime
@@ -6,11 +6,14 @@ from datetime import datetime
 import httpx2
 import streamlit as st
 
+from app.api.schemas import MESSAGE_MAX_CHARS, parse_sse_lines
 from app.settings import get_settings
 
 STREAM_TIMEOUT_SECONDS = 180.0
 REQUEST_TIMEOUT_SECONDS = 5.0
 CLARIFICATION_DECISION = "needs_info"
+
+logger = logging.getLogger(__name__)
 
 
 class ChatApiClient:
@@ -41,12 +44,7 @@ class ChatApiClient:
             timeout=STREAM_TIMEOUT_SECONDS,
         ) as response:
             response.raise_for_status()
-            event_name = None
-            for line in response.iter_lines():
-                if line.startswith("event: "):
-                    event_name = line.removeprefix("event: ").strip()
-                elif line.startswith("data: ") and event_name:
-                    yield event_name, json.loads(line.removeprefix("data: "))["data"]
+            yield from parse_sse_lines(response.iter_lines())
 
     def _get(self, path: str) -> dict:
         """Returns decoded JSON from a read-only API endpoint."""
@@ -67,6 +65,8 @@ def _render_details(entry: dict) -> None:
     if generated_at:
         local_time = datetime.fromisoformat(generated_at).astimezone().strftime("%H:%M:%S")
         st.caption(f"{local_time} · {entry.get('response_time_ms', 0)} ms")
+    if entry.get("degraded"):
+        st.caption("⚠️ This answer may be incomplete or less reliable.")
     steps, sources = entry.get("steps") or [], entry.get("sources") or []
     if not steps and not sources:
         return
@@ -95,16 +95,20 @@ def _consume_stream(client: ChatApiClient, thread_id: str, prompt: str) -> dict:
         status = st.status("Working on it…", expanded=True)
         answer_area = st.empty()
         streamed, result = "", None
-        for event, data in client.stream_turn(thread_id, prompt):
-            if event == "step":
-                status.write(f"- {data}")
-            elif event == "source":
-                status.write(_render_source(data))
-            elif event == "token":
-                streamed += data
-                answer_area.markdown(streamed)
-            elif event == "result":
-                result = data
+        try:
+            for event, data in client.stream_turn(thread_id, prompt):
+                if event == "step":
+                    status.write(f"- {data}")
+                elif event == "source":
+                    status.write(_render_source(data))
+                elif event == "token":
+                    streamed += data
+                    answer_area.markdown(streamed)
+                elif event == "result":
+                    result = data
+        except httpx2.HTTPError:
+            status.update(label="Failed", state="error", expanded=True)
+            raise
         status.update(label="Done", state="complete", expanded=False)
     return result or {}
 
@@ -113,8 +117,9 @@ def _call_or_warn(action, error_message: str, *, level=st.warning):
     """Runs action(), reporting an HTTP failure with the given message and returning None."""
     try:
         return action()
-    except httpx2.HTTPError as exc:
-        level(f"{error_message}: {exc}")
+    except httpx2.HTTPError as e:
+        logger.warning(f"{error_message}: {type(e).__name__}: {e}")
+        level(error_message)
         return None
 
 
@@ -155,7 +160,10 @@ def main() -> None:
     _render_sidebar(client)
     _render_history(st.session_state.history)
 
-    if prompt := st.chat_input("Ask about expenses, benefits, deadlines or documents"):
+    if prompt := st.chat_input(
+        "Ask about expenses, benefits, deadlines or documents",
+        max_chars=MESSAGE_MAX_CHARS,
+    ):
         st.session_state.history.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -174,6 +182,7 @@ def main() -> None:
                     "sources": reply.get("sources", []),
                     "generated_at": reply.get("generated_at"),
                     "response_time_ms": reply.get("response_time_ms", 0),
+                    "degraded": reply.get("degraded", False),
                 }
             )
             st.rerun()

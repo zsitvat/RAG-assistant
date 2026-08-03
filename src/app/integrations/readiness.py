@@ -10,18 +10,14 @@ from app.settings import Settings
 class ReadinessChecker:
     """Aggregates the LLM and Redis readiness checks behind the /ready endpoint."""
 
-    def check(self, settings: Settings, redis_index: RedisIndex | None) -> ReadyResponse:
+    def check(self, settings: Settings, redis_index: RedisIndex) -> ReadyResponse:
         """Returns the combined readiness result for the LLM and Redis dependencies."""
         checks = [self._check_llm(settings), self._check_redis(redis_index)]
         return ReadyResponse(ready=all(check.status == "ok" for check in checks), checks=checks)
 
     @staticmethod
-    def _check_redis(redis_index: RedisIndex | None) -> ReadinessCheck:
+    def _check_redis(redis_index: RedisIndex) -> ReadinessCheck:
         """Returns the current Redis readiness check, including an index-dimension mismatch."""
-        if redis_index is None:
-            return ReadinessCheck(
-                name="redis", status="unavailable", detail="Redis dependency is unavailable."
-            )
         try:
             redis_index.ping()
             indexed_dimension = redis_index.indexed_vector_dimension()

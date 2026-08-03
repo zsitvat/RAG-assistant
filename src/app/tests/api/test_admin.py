@@ -1,50 +1,41 @@
-import os
-
 import pytest
-import redis as redis_lib
-from httpx2 import ASGITransport, AsyncClient
 
-from app.main import app
-from app.settings import get_settings
+from app.rag.ingest.pipeline import _INGEST_LOCK
+from app.tests.redis_availability import redis_available
 
-TEST_REDIS_URL = os.environ.get("TEST_REDIS_URL", "redis://127.0.0.1:6379/0")
-
-
-def _redis_available() -> bool:
-    try:
-        redis_lib.Redis.from_url(TEST_REDIS_URL).ping()
-    except redis_lib.RedisError:
-        return False
-    return True
-
-
-pytestmark = pytest.mark.skipif(not _redis_available(), reason="Redis 8 not reachable")
-
-
-@pytest.fixture
-async def client(monkeypatch):
-    monkeypatch.setenv("LLM_BACKEND", "dummy")
-    monkeypatch.setenv("REDIS_URL", TEST_REDIS_URL)
-    # Never let a full-app test boot against a developer's real .env Langfuse credentials.
-    monkeypatch.setenv("LANGFUSE_ENABLED", "false")
-    get_settings.cache_clear()
-    async with app.router.lifespan_context(app):
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://testserver") as test_client:
-            yield test_client
-    get_settings.cache_clear()
+pytestmark = pytest.mark.skipif(not redis_available(), reason="Redis 8 not reachable")
 
 
 async def test_admin_ingest_returns_the_ingest_result(client):
+    # Act
     response = await client.post("/admin/ingest")
+
+    # Assert
     assert response.status_code == 200
     body = response.json()
     assert body["action"] in ("built", "rebuilt", "reused")
     assert isinstance(body["chunk_count"], int)
 
 
+async def test_admin_ingest_returns_409_while_another_run_holds_the_lock(client):
+    # Arrange
+    _INGEST_LOCK.acquire()
+
+    try:
+        # Act
+        response = await client.post("/admin/ingest")
+    finally:
+        _INGEST_LOCK.release()
+
+    # Assert
+    assert response.status_code == 409
+
+
 async def test_admin_stats_returns_the_index_stats(client):
+    # Act
     response = await client.get("/admin/stats")
+
+    # Assert
     assert response.status_code == 200
     body = response.json()
     assert isinstance(body["total_chunks"], int)

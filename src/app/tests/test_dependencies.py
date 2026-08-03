@@ -25,6 +25,7 @@ from app.settings import Settings
 
 
 def test_providers_read_the_typed_application_container():
+    # Arrange
     dependencies = ApplicationDependencies(
         settings=MagicMock(spec=Settings),
         rule_catalogue=MagicMock(spec=RuleCatalogue),
@@ -39,6 +40,7 @@ def test_providers_read_the_typed_application_container():
         SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(dependencies=dependencies))),
     )
 
+    # Assert
     assert get_settings(request) is dependencies.settings
     assert get_rule_catalogue(request) is dependencies.rule_catalogue
     assert get_redis_index(request) is dependencies.redis_index
@@ -49,11 +51,13 @@ def test_providers_read_the_typed_application_container():
 
 
 async def test_build_fails_when_redis_is_unreachable():
+    # Arrange
     # langfuse explicitly disabled: this test only exercises the Redis-unreachable path
     # and must not depend on (or contact) a developer's real .env Langfuse credentials.
     settings = Settings(
         llm_backend="dummy", redis_url="redis://127.0.0.1:1/0", langfuse_enabled=False
     )
 
+    # Act & Assert
     with pytest.raises(RuntimeError, match="Redis is required but unavailable at startup"):
         await ApplicationDependencies.build(settings)

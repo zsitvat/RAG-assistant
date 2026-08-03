@@ -1,6 +1,7 @@
 import math
 
 from app.agent.model import CalculationResult, ExpenseClaim
+from app.rules.lookup import first_matching
 from app.rules.model import Category, RuleCatalogue, RuleDefinition
 
 COMMUTING_TRANSIT_CARD = "pass"
@@ -60,16 +61,15 @@ class ReimbursementCalculator:
     def _meal_limit_rule(self) -> RuleDefinition | None:
         """Returns the configured meal limit rule when present."""
 
-        return next(
-            (rule for rule in self._rules_for("meal") if rule.limit_per_person_huf is not None),
-            None,
+        return first_matching(
+            self._rules_for("meal"), lambda rule: rule.limit_per_person_huf is not None
         )
 
     def _first_rule_with(self, category: Category, field_name: str) -> RuleDefinition:
         """Returns the first rule in the category with a value for field_name, or raises."""
 
-        rule = next(
-            (r for r in self._rules_for(category) if getattr(r, field_name) is not None), None
+        rule = first_matching(
+            self._rules_for(category), lambda r: getattr(r, field_name) is not None
         )
         if rule is None:
             raise CalculationInputError(

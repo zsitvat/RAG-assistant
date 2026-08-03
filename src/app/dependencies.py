@@ -6,10 +6,10 @@ from langchain_redis import RedisVectorStore
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from app.agent.calculator import ReimbursementCalculator
-from app.agent.deadline import DeadlineChecker
+from app.agent.deadline_check import DeadlineChecker
 from app.agent.graph import build_agent_graph
 from app.agent.nodes import AgentNodes
-from app.agent.prompt_library import PromptLibrary
+from app.agent.langfuse_prompt_library import PromptLibrary
 from app.agent.rule_checker import RuleChecker
 from app.agent.service import AgentService
 from app.agent.tools import build_tools
@@ -31,8 +31,8 @@ class ApplicationDependencies:
 
     settings: Settings
     rule_catalogue: RuleCatalogue
-    redis_index: RedisIndex | None
-    vector_store: RedisVectorStore | None
+    redis_index: RedisIndex
+    vector_store: RedisVectorStore
     checkpointer: BaseCheckpointSaver
     agent_service: AgentService
     observability: Observability
@@ -53,8 +53,6 @@ class ApplicationDependencies:
 
         # Redis
         redis_index, vector_store = connect_and_ingest(settings, rule_catalogue)
-        if redis_index is None or vector_store is None:
-            raise RuntimeError("Redis is required but unavailable at startup")
 
         # Retriever and RAG graph
         retriever = Retriever(vector_store)
@@ -99,14 +97,14 @@ def get_rule_catalogue(request: Request) -> RuleCatalogue:
     return ApplicationDependencies.from_request(request).rule_catalogue
 
 
-def get_redis_index(request: Request) -> RedisIndex | None:
-    """Provides the Redis index when available."""
+def get_redis_index(request: Request) -> RedisIndex:
+    """Provides the Redis index."""
 
     return ApplicationDependencies.from_request(request).redis_index
 
 
-def get_vector_store(request: Request) -> RedisVectorStore | None:
-    """Provides the vector store when available."""
+def get_vector_store(request: Request) -> RedisVectorStore:
+    """Provides the vector store."""
 
     return ApplicationDependencies.from_request(request).vector_store
 

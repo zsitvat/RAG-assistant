@@ -17,6 +17,7 @@ def _rag_result(*citations: Citation) -> RagResult:
 
 
 async def test_respond_projects_answer_sources_and_steps():
+    # Arrange
     tool_message = ToolMessage(
         content="[S1] Doc",
         artifact=_rag_result(
@@ -28,8 +29,10 @@ async def test_respond_projects_answer_sources_and_steps():
     graph = _FakeGraph([tool_message, AIMessage(content="The limit is 15,000 HUF [S1].")])
     service = AgentService(graph)
 
+    # Act
     response = await service.ainvoke_graph("t1", "What is the meal limit?")
 
+    # Assert
     assert response.thread_id == "t1"
     assert response.answer == "The limit is 15,000 HUF [S1]."
     assert len(response.sources) == 1
@@ -47,6 +50,7 @@ async def test_respond_projects_answer_sources_and_steps():
 
 
 async def test_respond_deduplicates_sources_across_multiple_search_calls():
+    # Arrange
     citation = Citation(marker="S1", doc_id="01", doc_title="Doc 01", section="4. Meals")
     graph = _FakeGraph(
         [
@@ -67,12 +71,15 @@ async def test_respond_deduplicates_sources_across_multiple_search_calls():
     )
     service = AgentService(graph)
 
+    # Act
     response = await service.ainvoke_graph("t1", "question")
 
+    # Assert
     assert len(response.sources) == 1
 
 
 async def test_respond_only_considers_messages_from_the_current_request():
+    # Arrange
     old_human = HumanMessage(content="previous request question")
     old_tool = ToolMessage(
         content="old",
@@ -86,8 +93,10 @@ async def test_respond_only_considers_messages_from_the_current_request():
     )
     service = AgentService(graph)
 
+    # Act
     response = await service.ainvoke_graph("t1", "new question")
 
+    # Assert
     assert response.sources == []
     assert response.steps == ["Intent classified", "Details extracted", "Answer generated"]
 

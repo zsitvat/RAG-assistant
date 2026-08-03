@@ -1,4 +1,5 @@
 import logging
+import threading
 from pathlib import Path
 
 import redis
@@ -10,7 +11,7 @@ from app.rag.index_schema import VECTOR_DIMENSION
 from app.rag.ingest.build_info import IndexBuildInfoBuilder
 from app.rag.ingest.chunker import MarkdownChunker
 from app.rag.ingest.docx_loader import CORPUS_DIR, DocxMarkdownLoader
-from app.rag.ingest.errors import IngestionError
+from app.rag.ingest.errors import IngestionError, IngestionInProgressError
 from app.rag.ingest.rule_metadata import RuleMetadataResolver
 from app.rag.model import IngestResult
 from app.rag.store import (
@@ -28,7 +29,9 @@ INGEST_BATCH_SIZE = 128
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["IngestionError", "CorpusIngestor", "connect_and_ingest"]
+_INGEST_LOCK = threading.Lock()
+
+__all__ = ["IngestionError", "IngestionInProgressError", "CorpusIngestor", "connect_and_ingest"]
 
 
 class CorpusIngestor:
@@ -73,28 +76,40 @@ class CorpusIngestor:
         vector_store: RedisVectorStore,
         rule_catalogue: RuleCatalogue | None = None,
     ) -> IngestResult:
-        """Ingests the corpus into Redis, skipping embed/upsert when the build info matches."""
-        rule_catalogue = rule_catalogue or get_rule_catalogue()
-        _, chunks = self.load_and_chunk(rule_catalogue)
+        """Ingests the corpus into Redis, skipping embed/upsert when the build info matches.
 
-        build_info = self._build_info_builder.build(
-            EMBEDDING_MODEL_NAME, EMBEDDING_MODEL_REVISION, VECTOR_DIMENSION
-        )
-        existing_build_info = redis_index.read_build_info()
+        Raises IngestionInProgressError instead of racing when another run in this process
+        already holds the lock, since two overlapping runs could interleave an index drop with
+        an upsert.
+        """
+        if not _INGEST_LOCK.acquire(blocking=False):
+            raise IngestionInProgressError("An ingestion run is already in progress.")
+        try:
+            rule_catalogue = rule_catalogue or get_rule_catalogue()
+            _, chunks = self.load_and_chunk(rule_catalogue)
 
-        if existing_build_info == build_info:
-            action = "reused"
-        else:
-            action = "rebuilt" if existing_build_info is not None else "built"
-            if existing_build_info is not None:
-                # Recreate through SearchIndex so later writes remain indexed.
-                vector_store.index.create(overwrite=True, drop=True)
-            self._upsert_chunks(vector_store, chunks)
-            redis_index.write_build_info(build_info)
+            build_info = self._build_info_builder.build(
+                EMBEDDING_MODEL_NAME, EMBEDDING_MODEL_REVISION, VECTOR_DIMENSION
+            )
+            existing_build_info = redis_index.read_build_info()
 
-        return IngestResult(
-            action=action, chunk_count=len(chunks), category_counts=self._count_categories(chunks)
-        )
+            if existing_build_info == build_info:
+                action = "reused"
+            else:
+                action = "rebuilt" if existing_build_info is not None else "built"
+                if existing_build_info is not None:
+                    # Recreate through SearchIndex so later writes remain indexed.
+                    vector_store.index.create(overwrite=True, drop=True)
+                self._upsert_chunks(vector_store, chunks)
+                redis_index.write_build_info(build_info)
+
+            return IngestResult(
+                action=action,
+                chunk_count=len(chunks),
+                category_counts=self._count_categories(chunks),
+            )
+        finally:
+            _INGEST_LOCK.release()
 
     @staticmethod
     def _upsert_chunks(vector_store: RedisVectorStore, chunks: list[Document]) -> None:
@@ -121,14 +136,18 @@ class CorpusIngestor:
 
 def connect_and_ingest(
     settings: Settings, rule_catalogue: RuleCatalogue
-) -> tuple[RedisIndex | None, RedisVectorStore | None]:
-    """Connects to Redis and ensures the index is ready. Returns (None, None) if unreachable."""
+) -> tuple[RedisIndex, RedisVectorStore]:
+    """Connects to Redis and ensures the index is ready.
+
+    Raises RuntimeError if Redis is unreachable: the app requires Redis at startup and fails
+    fast rather than serving chat without policy retrieval or durable conversation state.
+    """
     try:
         redis_index = RedisIndex(settings.redis_url)
         redis_index.ping()
-    except redis.RedisError:
+    except redis.RedisError as e:
         logger.warning("Redis unavailable at startup")
-        return None, None
+        raise RuntimeError("Redis is required but unavailable at startup") from e
 
     vector_store = build_vector_store(settings.redis_url, build_embeddings())
     CorpusIngestor().run(redis_index, vector_store, rule_catalogue=rule_catalogue)

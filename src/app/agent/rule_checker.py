@@ -1,7 +1,8 @@
 from datetime import date
 
-from app.agent.deadline import DeadlineChecker
+from app.agent.deadline_check import DeadlineChecker
 from app.agent.model import ExpenseClaim, Finding, Intent
+from app.rules.lookup import first_matching
 from app.rules.model import ApprovalTier, Category, RuleCatalogue, RuleDefinition
 
 PUBLIC_TRANSPORT_COMMUTING_MODES = ("pass", "ticket")
@@ -102,7 +103,7 @@ class ApprovalChecker:
     def _approval_tiers(self, category: Category) -> tuple[list[ApprovalTier], str, str | None]:
         """Returns category-specific tiers or the default submission tiers."""
         category_rules = self._rules.categories[category]
-        configured = next((rule for rule in category_rules.rules if rule.approval_tiers), None)
+        configured = first_matching(category_rules.rules, lambda rule: rule.approval_tiers)
         if configured is not None:
             return configured.approval_tiers, configured.id, configured.doc_ref
         submission = self._rules.submission
@@ -121,13 +122,9 @@ class ApprovalChecker:
 
     def _check_travel(self, claim: ExpenseClaim) -> list[Finding]:
         """Checks travel approval according to trip scope and amount."""
-        rule = next(
-            (
-                rule
-                for rule in self._rules.categories["travel"].rules
-                if rule.department_head_approval_above_huf is not None
-            ),
-            None,
+        rule = first_matching(
+            self._rules.categories["travel"].rules,
+            lambda rule: rule.department_head_approval_above_huf is not None,
         )
         if rule is None:
             return []
@@ -152,13 +149,9 @@ class ApprovalChecker:
 
     def _check_benefit(self, claim: ExpenseClaim) -> list[Finding]:
         """Checks whether the selected benefit requires prior approval."""
-        rule = next(
-            (
-                rule
-                for rule in self._rules.categories["benefits"].rules
-                if rule.benefit_type == claim.expense_type
-            ),
-            None,
+        rule = first_matching(
+            self._rules.categories["benefits"].rules,
+            lambda rule: rule.benefit_type == claim.expense_type,
         )
         if rule is None:
             return []
@@ -212,8 +205,8 @@ class EligibilityChecker:
 
     def _check_meal(self, claim: ExpenseClaim) -> list[Finding]:
         """Checks excluded meal items and documented business use."""
-        rule = next(
-            (rule for rule in self._rules.categories["meal"].rules if rule.excluded_items), None
+        rule = first_matching(
+            self._rules.categories["meal"].rules, lambda rule: rule.excluded_items
         )
         if rule is None:
             return []
@@ -234,15 +227,13 @@ class EligibilityChecker:
     def _check_business_expense(self, claim: ExpenseClaim) -> list[Finding]:
         """Rejects prohibited expenses and checks their business use."""
         rules = self._rules.categories[claim.category].rules
-        prohibited_rule = next(
-            (
-                rule
-                for rule in rules
-                if rule.excluded_items
+        prohibited_rule = first_matching(
+            rules,
+            lambda rule: (
+                rule.excluded_items
                 and claim.expense_type is not None
                 and claim.expense_type in rule.excluded_items
             ),
-            None,
         )
         if prohibited_rule is not None:
             return [
@@ -260,13 +251,9 @@ class EligibilityChecker:
 
     def _check_business_use(self, claim: ExpenseClaim) -> list[Finding]:
         """Checks whether a claim satisfies its business-use requirement."""
-        business_rule = next(
-            (
-                rule
-                for rule in self._rules.categories[claim.category].rules
-                if rule.business_use_required is True
-            ),
-            None,
+        business_rule = first_matching(
+            self._rules.categories[claim.category].rules,
+            lambda rule: rule.business_use_required is True,
         )
         if business_rule is None:
             return []
@@ -287,13 +274,9 @@ class EligibilityChecker:
 
     def _check_commuting(self, claim: ExpenseClaim) -> list[Finding]:
         """Checks minimum-distance eligibility for commuting claims."""
-        rule = next(
-            (
-                rule
-                for rule in self._rules.categories["commuting"].rules
-                if rule.min_one_way_km is not None
-            ),
-            None,
+        rule = first_matching(
+            self._rules.categories["commuting"].rules,
+            lambda rule: rule.min_one_way_km is not None,
         )
         if rule is None:
             return []
@@ -346,13 +329,9 @@ class EligibilityChecker:
 
     def _check_benefit_tenure(self, claim: ExpenseClaim) -> list[Finding]:
         """Checks employee tenure against the configured benefit threshold."""
-        rule = next(
-            (
-                rule
-                for rule in self._rules.categories["benefits"].rules
-                if rule.eligible_after_months is not None
-            ),
-            None,
+        rule = first_matching(
+            self._rules.categories["benefits"].rules,
+            lambda rule: rule.eligible_after_months is not None,
         )
         if rule is None:
             return []
@@ -370,13 +349,9 @@ class EligibilityChecker:
 
     def _check_benefit_carry_over(self) -> list[Finding]:
         """Reports whether unused benefit budget carries into the next year."""
-        rule = next(
-            (
-                rule
-                for rule in self._rules.categories["benefits"].rules
-                if rule.carry_over is not None
-            ),
-            None,
+        rule = first_matching(
+            self._rules.categories["benefits"].rules,
+            lambda rule: rule.carry_over is not None,
         )
         if rule is None:
             return []
@@ -389,13 +364,9 @@ class EligibilityChecker:
 
     def _benefit_allowance_rule(self, expense_type: str | None) -> RuleDefinition | None:
         """Returns the allowance rule matching a benefit type."""
-        return next(
-            (
-                rule
-                for rule in self._rules.categories["benefits"].rules
-                if rule.benefit_type == expense_type
-            ),
-            None,
+        return first_matching(
+            self._rules.categories["benefits"].rules,
+            lambda rule: rule.benefit_type == expense_type,
         )
 
 

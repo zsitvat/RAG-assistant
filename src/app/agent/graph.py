@@ -5,7 +5,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode
 
 from app.agent.nodes import AgentNodes
-from app.agent.state import AgentState
+from app.agent.graph_state import AgentState
 
 
 def build_agent_graph(

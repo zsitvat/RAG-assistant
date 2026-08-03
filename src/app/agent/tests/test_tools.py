@@ -7,7 +7,7 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from app.agent.calculator import ReimbursementCalculator
-from app.agent.deadline import DeadlineChecker
+from app.agent.deadline_check import DeadlineChecker
 from app.agent.rule_checker import RuleChecker
 from app.agent.tools import build_calculate_tool, build_check_rules_tool
 from app.rules.loader import load_rule_catalogue
@@ -40,33 +40,42 @@ def _run_tool_via_node(tool_, claim: dict, tool_name: str, args: dict | None = N
 
 
 def test_calculate_tool_reads_the_claim_from_state_and_returns_an_artifact():
+    # Arrange
     calculator = ReimbursementCalculator(CATALOGUE)
     tool_ = build_calculate_tool(calculator)
 
+    # Act
     message = _run_tool_via_node(tool_, {"category": "equipment", "amount_huf": 50000}, "calculate")
 
+    # Assert
     assert message.status == "success"
     assert message.artifact.amount_huf == 50000
     assert "reimbursable" in message.content
 
 
 def test_calculate_tool_returns_an_error_tool_message_for_an_incomplete_claim():
+    # Arrange
     calculator = ReimbursementCalculator(CATALOGUE)
     tool_ = build_calculate_tool(calculator)
 
+    # Act
     message = _run_tool_via_node(tool_, {"category": "meal"}, "calculate")
 
+    # Assert
     assert message.status == "error"
 
 
 def test_check_rules_tool_reads_the_claim_from_state_and_returns_findings():
+    # Arrange
     rule_checker = RuleChecker(CATALOGUE, DeadlineChecker(CATALOGUE.submission.deadline_days))
     tool_ = build_check_rules_tool(rule_checker, lambda: date(2026, 8, 1))
 
+    # Act
     message = _run_tool_via_node(
         tool_, {"category": "equipment", "amount_huf": 20000}, "check_rules"
     )
 
+    # Assert
     assert message.status == "success"
     assert isinstance(message.artifact, list)
     rule_ids = [finding.rule_id for finding in message.artifact]

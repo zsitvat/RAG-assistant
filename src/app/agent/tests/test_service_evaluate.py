@@ -66,14 +66,17 @@ def _meal_turn_model() -> ScriptedChatModel:
 
 
 async def test_evaluate_projects_tool_calls_calculation_findings_and_citations():
+    # Arrange
     service = _service(_meal_turn_model())
 
+    # Act
     result = await service.evaluate(
         "eval-meal-1",
         "We had a business dinner for 3 people, total bill was 50000 HUF, I have the receipt.",
         reference_date=date(2026, 8, 1),
     )
 
+    # Assert
     assert result.thread_id == "eval-meal-1"
     assert result.intent == "expense_check"
     assert result.category == "meal"
@@ -89,6 +92,7 @@ async def test_evaluate_projects_tool_calls_calculation_findings_and_citations()
 
 
 async def test_evaluate_reports_degraded_when_classification_falls_back_to_a_default():
+    # Arrange
     model = ScriptedChatModel(
         chat_responses=iter([AIMessage(content="")]), structured_responses=iter([])
     )
@@ -96,13 +100,16 @@ async def test_evaluate_reports_degraded_when_classification_falls_back_to_a_def
     nodes = AgentNodes(model, model, tools, CALCULATOR)
     service = AgentService(build_agent_graph(nodes))
 
+    # Act
     result = await service.evaluate("eval-degraded-1", "hello", reference_date=date(2026, 8, 1))
 
+    # Assert
     assert result.degraded is True
     assert result.intent == "policy_question"
 
 
 async def test_evaluate_pins_the_reference_date_used_by_the_deadline_check():
+    # Arrange
     model = ScriptedChatModel(
         chat_responses=iter(
             [
@@ -122,12 +129,14 @@ async def test_evaluate_pins_the_reference_date_used_by_the_deadline_check():
     nodes = AgentNodes(model, model, tools, CALCULATOR)
     service = AgentService(build_agent_graph(nodes))
 
+    # Act
     result = await service.evaluate(
         "eval-deadline-1",
         "Is my expense still within the deadline?",
         reference_date=date(2026, 8, 2),
     )
 
+    # Assert
     deadline_finding = next(f for f in result.findings if f.rule_id == "SUBMISSION-DEADLINE")
     assert deadline_finding.status == "pass"
     assert "7 days remain" in deadline_finding.message

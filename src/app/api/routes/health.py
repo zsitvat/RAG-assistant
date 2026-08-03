@@ -20,7 +20,7 @@ async def health() -> HealthResponse:
 @router.get("/ready")
 async def ready(
     settings: Annotated[Settings, Depends(get_settings)],
-    redis_index: Annotated[RedisIndex | None, Depends(get_redis_index)],
+    redis_index: Annotated[RedisIndex, Depends(get_redis_index)],
 ) -> ReadyResponse:
     """Reports whether the LLM backend and Redis dependencies are ready to serve requests."""
     return ReadinessChecker().check(settings, redis_index)

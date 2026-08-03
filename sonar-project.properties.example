@@ -3,7 +3,7 @@ sonar.projectKey=<your-sonarcloud-project-key>
 sonar.projectName=RAG-assistant
 
 sonar.sources=src/app,load_test
-sonar.tests=src/app/tests,src/app/agent/tests,src/app/rag/tests,src/app/rag/ingest/tests,src/app/rules/tests,src/app/integrations/tests,src/app/logging/tests
+sonar.tests=src/app/tests,src/app/api/tests,src/app/agent/tests,src/app/rag/tests,src/app/rag/ingest/tests,src/app/rules/tests,src/app/integrations/tests,src/app/logging/tests
 sonar.sourceEncoding=UTF-8
 sonar.python.version=3.12
 sonar.python.coverage.reportPaths=coverage.xml

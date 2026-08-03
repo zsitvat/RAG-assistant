@@ -57,16 +57,20 @@ async def _collect(service: AgentService, thread_id: str, message: str) -> list:
 
 
 async def test_stream_emits_only_the_documented_event_types_and_ends_with_one_result():
+    # Act
     events = await _collect(_service(_grounded_model()), "stream-1", "What is the meal limit?")
 
+    # Assert
     assert {event.event for event in events} <= {"step", "source", "token", "result"}
     assert events[-1].event == "result"
     assert [event.event for event in events].count("result") == 1
 
 
 async def test_step_events_are_allow_listed_and_deduplicated():
+    # Act
     events = await _collect(_service(_grounded_model()), "stream-2", "What is the meal limit?")
 
+    # Assert
     steps = [event.data for event in events if event.event == "step"]
 
     assert steps == list(dict.fromkeys(steps))
@@ -79,8 +83,10 @@ async def test_step_events_are_allow_listed_and_deduplicated():
 
 
 async def test_source_events_carry_citation_metadata_and_are_deduplicated():
+    # Act
     events = await _collect(_service(_grounded_model()), "stream-3", "What is the meal limit?")
 
+    # Assert
     sources = [event.data for event in events if event.event == "source"]
 
     assert len(sources) == 1
@@ -90,8 +96,10 @@ async def test_source_events_carry_citation_metadata_and_are_deduplicated():
 
 
 async def test_token_events_contain_only_final_answer_text():
+    # Act
     events = await _collect(_service(_grounded_model()), "stream-4", "What is the meal limit?")
 
+    # Assert
     streamed = "".join(event.data for event in events if event.event == "token")
 
     assert streamed == ANSWER
@@ -100,8 +108,10 @@ async def test_token_events_contain_only_final_answer_text():
 
 
 async def test_step_and_source_events_arrive_before_the_final_result():
+    # Act
     events = await _collect(_service(_grounded_model()), "stream-5", "What is the meal limit?")
 
+    # Assert
     kinds = [event.event for event in events]
 
     assert kinds.index("step") < kinds.index("result")
@@ -109,10 +119,12 @@ async def test_step_and_source_events_arrive_before_the_final_result():
 
 
 async def test_streamed_result_matches_the_blocking_endpoint():
+    # Act
     streamed_events = await _collect(_service(_grounded_model()), "parity-a", "meal limit?")
     streamed = streamed_events[-1].data
     blocking = await _service(_grounded_model()).ainvoke_graph("parity-b", "meal limit?")
 
+    # Assert
     assert streamed.answer == blocking.answer
     assert streamed.steps == blocking.steps
     assert [s.model_dump() for s in streamed.sources] == [s.model_dump() for s in blocking.sources]
@@ -120,6 +132,7 @@ async def test_streamed_result_matches_the_blocking_endpoint():
 
 
 async def test_clarification_completes_without_any_token_event():
+    # Arrange
     model = ScriptedChatModel(
         chat_responses=iter([]),
         structured_responses=iter(
@@ -130,8 +143,10 @@ async def test_clarification_completes_without_any_token_event():
         ),
     )
 
+    # Act
     events = await _collect(_service(model), "stream-clarify", "I spent 1000 HUF on a meal.")
 
+    # Assert
     assert not [event for event in events if event.event == "token"]
     result = events[-1].data
     assert events[-1].event == "result"
@@ -140,19 +155,23 @@ async def test_clarification_completes_without_any_token_event():
 
 
 async def test_out_of_scope_completes_without_any_token_event():
+    # Arrange
     model = ScriptedChatModel(
         chat_responses=iter([]),
         structured_responses=iter([IntentClassification(intent="unsupported"), ExpenseClaim()]),
     )
 
+    # Act
     events = await _collect(_service(model), "stream-refuse", "What tax rate applies to me?")
 
+    # Assert
     assert not [event for event in events if event.event == "token"]
     assert events[-1].data.decision == "out_of_scope"
 
 
 @pytest.mark.parametrize("event_type", ["step", "source", "token", "result"])
 def test_sse_rendering_uses_the_event_and_data_wire_format(event_type):
+    # Arrange
     from app.api.schemas import StreamEvent
 
     event = StreamEvent(event=event_type, data="x") if event_type != "source" else None
@@ -164,14 +183,17 @@ def test_sse_rendering_uses_the_event_and_data_wire_format(event_type):
             data=ChatSource(source_id="S1", doc_id="01", title="Doc", section="4"),
         )
 
+    # Act
     rendered = event.to_sse()
 
+    # Assert
     assert rendered.startswith(f"event: {event_type}\ndata: ")
     assert rendered.endswith("\n\n")
     assert "data" in json.loads(rendered.split("data: ", 1)[1].strip())
 
 
 async def test_streaming_endpoint_serves_sse_over_http():
+    # Arrange
     from types import SimpleNamespace
 
     from fastapi import FastAPI
@@ -185,12 +207,14 @@ async def test_streaming_endpoint_serves_sse_over_http():
         agent_service=_service(_grounded_model()), checkpointer=None
     )
 
+    # Act
     async with (
         AsyncClient(transport=ASGITransport(app=api), base_url="http://t") as http,
         http.stream(
             "POST", "/chat/stream", json={"thread_id": "http-1", "message": "meal limit?"}
         ) as response,
     ):
+        # Assert
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("text/event-stream")
         names = [

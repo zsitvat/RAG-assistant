@@ -1,10 +1,16 @@
+import json
+from collections.abc import Iterable, Iterator
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.agent.model import CalculationResult, Decision, ExpenseClaim, Finding, Intent
 from app.rules.model import Category
+
+THREAD_ID_PATTERN = r"^[A-Za-z0-9_.:-]+$"
+THREAD_ID_MAX_LENGTH = 128
+MESSAGE_MAX_CHARS = 500
 
 
 class HealthResponse(BaseModel):
@@ -31,8 +37,8 @@ class ReadyResponse(BaseModel):
 class ChatRequest(BaseModel):
     """Carries an incoming chat message for a conversation thread."""
 
-    thread_id: str
-    message: str
+    thread_id: str = Field(min_length=1, max_length=THREAD_ID_MAX_LENGTH, pattern=THREAD_ID_PATTERN)
+    message: str = Field(min_length=1, max_length=MESSAGE_MAX_CHARS)
 
 
 class ChatSource(BaseModel):
@@ -54,6 +60,7 @@ class ChatResponse(BaseModel):
     decision: Decision | None
     sources: list[ChatSource]
     steps: list[str]
+    degraded: bool
 
 
 class ThreadResetResponse(BaseModel):
@@ -73,6 +80,16 @@ class StreamEvent(BaseModel):
         """Renders the event in the server-sent events wire format."""
         payload = self.model_dump_json(include={"data"})
         return f"event: {self.event}\ndata: {payload}\n\n"
+
+
+def parse_sse_lines(lines: Iterable[str]) -> Iterator[tuple[str, object]]:
+    """Parses 'event:'/'data:' lines into (event, data) pairs, the inverse of StreamEvent.to_sse."""
+    event_name = None
+    for line in lines:
+        if line.startswith("event: "):
+            event_name = line.removeprefix("event: ").strip()
+        elif line.startswith("data: ") and event_name:
+            yield event_name, json.loads(line.removeprefix("data: "))["data"]
 
 
 class EvaluationRequest(BaseModel):

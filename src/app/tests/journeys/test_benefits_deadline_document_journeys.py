@@ -20,6 +20,7 @@ CALCULATOR = ReimbursementCalculator(CATALOGUE)
 
 
 async def test_recreational_benefit_claim_produces_the_expected_reimbursement_and_decision():
+    # Arrange
     document = policy_document(
         "05",
         "3. Annual benefit allowances",
@@ -74,6 +75,7 @@ async def test_recreational_benefit_claim_produces_the_expected_reimbursement_an
     nodes = AgentNodes(model, model, tools, CALCULATOR)
     graph = build_agent_graph(nodes)
 
+    # Act
     result = await graph.ainvoke(
         {
             "messages": [
@@ -87,6 +89,7 @@ async def test_recreational_benefit_claim_produces_the_expected_reimbursement_an
         config={"configurable": {"thread_id": "benefits-1"}, "recursion_limit": 20},
     )
 
+    # Assert
     calculate_message = tool_message(result, "calculate")
     assert calculate_message.artifact.amount_huf == 90000
     assert calculate_message.artifact.cap_huf == 120000
@@ -102,6 +105,7 @@ async def test_recreational_benefit_claim_produces_the_expected_reimbursement_an
 
 
 async def test_deadline_question_uses_only_search_and_check_rules_no_calculation():
+    # Arrange
     document = policy_document(
         "01",
         "7. Submission deadline and late claims",
@@ -143,11 +147,13 @@ async def test_deadline_question_uses_only_search_and_check_rules_no_calculation
     nodes = AgentNodes(model, model, tools, CALCULATOR)
     graph = build_agent_graph(nodes)
 
+    # Act
     result = await graph.ainvoke(
         {"messages": [("human", "Can I still submit a meal receipt from 2026-06-01?")]},
         config={"configurable": {"thread_id": "deadline-1"}, "recursion_limit": 20},
     )
 
+    # Assert
     assert "calculate" not in tool_calls(result)
 
     check_rules_message = tool_message(result, "check_rules")
@@ -161,6 +167,7 @@ async def test_deadline_question_uses_only_search_and_check_rules_no_calculation
 
 
 async def test_document_question_uses_only_search_and_check_rules():
+    # Arrange
     document = policy_document(
         "02",
         "7. Required documents",
@@ -201,11 +208,13 @@ async def test_document_question_uses_only_search_and_check_rules():
     )
     graph = build_agent_graph(AgentNodes(model, model, tools, CALCULATOR))
 
+    # Act
     result = await graph.ainvoke(
         {"messages": [("human", "Which documents do I need for a travel claim?")]},
         config={"configurable": {"thread_id": "documents-1"}, "recursion_limit": 20},
     )
 
+    # Assert
     assert tool_calls(result) == ["search_policies", "check_rules"]
     requirement = tool_message(result, "check_rules").artifact[0]
     assert requirement.rule_id == "TRAVEL-REQUIRED-DOCUMENTS"

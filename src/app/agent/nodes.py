@@ -8,9 +8,9 @@ from langchain_core.tools import BaseTool
 from app.agent.calculator import CalculationInputError, ReimbursementCalculator
 from app.agent.message_history import MessageHistory
 from app.agent.model import CalculationResult, Decision, ExpenseClaim, IntentClassification
-from app.agent.prompt_library import PromptLibrary
+from app.agent.langfuse_prompt_library import PromptLibrary
 from app.agent.slots import RequiredSlotTable
-from app.agent.state import MAX_AGENT_STEPS, MAX_TOOL_ARG_ERRORS, AgentState
+from app.agent.graph_state import MAX_AGENT_STEPS, MAX_TOOL_ARG_ERRORS, AgentState
 from app.agent.static_texts import (
     CLARIFICATION_QUESTIONS,
     CONDITIONAL_DISTANCE_ANSWER,
@@ -173,9 +173,9 @@ class AgentNodes:
         """Invokes a model with retry handling and returns None after failure."""
         try:
             return await runnable.with_retry().ainvoke({"messages": messages})
-        except Exception as exc:
+        except Exception as e:
             logger.warning(
-                f"chat model call failed after retrying with backoff: {type(exc).__name__}: {exc}"
+                f"chat model call failed after retrying with backoff: {type(e).__name__}: {e}"
             )
             return None
 
