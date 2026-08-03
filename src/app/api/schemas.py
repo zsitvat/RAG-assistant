@@ -92,6 +92,23 @@ def parse_sse_lines(lines: Iterable[str]) -> Iterator[tuple[str, object]]:
             yield event_name, json.loads(line.removeprefix("data: "))["data"]
 
 
+class LogEntry(BaseModel):
+    """One structured JSON log line emitted by the service."""
+
+    timestamp: datetime
+    level: str
+    service: str
+    logger: str
+    event: str
+    exception: str | None = None
+
+
+class LogsResponse(BaseModel):
+    """Carries the service's most recent log lines, oldest first."""
+
+    entries: list[LogEntry]
+
+
 class EvaluationRequest(BaseModel):
     """Carries one evaluation turn's input, pinned for deterministic scoring."""
 

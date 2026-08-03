@@ -2,6 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.integrations.checkpointer import unwrap_lc_envelope
 from app.rules.model import Category
 
 IngestAction = Literal["built", "rebuilt", "reused"]
@@ -69,12 +70,13 @@ class RagResult(BaseModel):
 
     @classmethod
     def from_artifact(cls, value: "RagResult | dict | None") -> "RagResult":
-        """Rebuilds a result from a tool artifact, which a checkpoint restores as a plain dict."""
+        """Rebuilds a result from a tool artifact, which a checkpoint restores as a (possibly
+        nested-wrapped, see `unwrap_lc_envelope`) plain dict."""
         if isinstance(value, cls):
             return value
         if not value:
             return cls()
-        return cls.model_validate(value.get("kwargs", value) if value.get("lc") else value)
+        return cls.model_validate(unwrap_lc_envelope(value))
 
     @property
     def confidence(self) -> float:

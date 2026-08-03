@@ -3,6 +3,7 @@ import logging
 import logging.handlers
 import re
 import sys
+from collections import deque
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -56,6 +57,18 @@ def cleanup_expired_archives(
             path.unlink(missing_ok=True)
             removed.append(path)
     return removed
+
+
+def read_recent_lines(log_dir: Path, service: str, limit: int) -> list[str]:
+    """Returns up to the last `limit` lines of the service's live log file, oldest first.
+
+    Reads only the current file, not rotated archives; a missing file yields an empty list.
+    """
+    log_path = log_dir / f"{service}.jsonl"
+    if not log_path.exists():
+        return []
+    with log_path.open(encoding="utf-8") as f:
+        return list(deque((line.rstrip("\n") for line in f), maxlen=limit))
 
 
 def configure_logging(service: str, log_level: str, log_dir: Path = DEFAULT_LOG_DIR) -> None:

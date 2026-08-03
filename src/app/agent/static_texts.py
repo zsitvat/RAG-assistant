@@ -42,6 +42,9 @@ NO_TOOL_ARTIFACT_MESSAGE = (
 LLM_UNAVAILABLE_MESSAGE = (
     "The language model is currently unreachable, even after retrying. Please try again shortly."
 )
+STREAM_FAILED_MESSAGE = (
+    "Something went wrong while preparing this answer. Please try again shortly."
+)
 CONDITIONAL_DISTANCE_ANSWER = (
     "You have not told me whether that distance is one-way or a round trip, so here is both:\n"
     "- if it is one-way (the return journey is counted): {one_way}\n"
