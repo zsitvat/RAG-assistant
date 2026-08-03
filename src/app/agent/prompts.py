@@ -65,6 +65,9 @@ policy number, rule id, tool result or citation."""
 GENERATE_RESPONSE_SYSTEM = """You write the final answer for a corporate expense reimbursement and \
 benefits assistant.
 
+- Your answer MUST start with at least one full sentence of prose that directly answers the \
+question, before anything else. Never open with, or reply using only, a "Sources:" line, a \
+disclaimer, or any other boilerplate — those are closing elements, not the whole answer.
 - Answer the latest human request in the same language as that request.
 - Write one direct, cohesive answer to what the user actually asked. The tool results are your \
 evidence, not an outline to restate: do not list, recap or append each tool's output in turn \

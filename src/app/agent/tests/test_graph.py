@@ -13,13 +13,14 @@ from app.tests.fakes import ScriptedChatModel
 CALCULATOR = ReimbursementCalculator(load_rule_catalogue())
 
 
-def _infinite_tool_calls():
-    i = 0
-    while True:
-        i += 1
+def _tool_calls_past_the_step_limit():
+    """Yields MAX_AGENT_STEPS tool calls, then a real final answer for generate_response."""
+    for i in range(1, MAX_AGENT_STEPS + 1):
         yield AIMessage(
             content="", tool_calls=[{"name": "search_policies", "args": {"n": i}, "id": str(i)}]
         )
+    while True:
+        yield AIMessage(content="Here is what the policy says so far.")
 
 
 class _AlwaysFailingChatModel(ScriptedChatModel):
@@ -195,7 +196,7 @@ async def test_recursion_limit_is_generous_enough_for_the_worst_case_step_budget
 
     tool_, calls = _make_counting_tool("search_policies")
     model = ScriptedChatModel(
-        chat_responses=_infinite_tool_calls(),
+        chat_responses=_tool_calls_past_the_step_limit(),
         structured_responses=iter([IntentClassification(intent="policy_question"), ExpenseClaim()]),
     )
     config = {"configurable": {"thread_id": "t-recursion"}, "recursion_limit": RECURSION_LIMIT}

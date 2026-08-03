@@ -153,6 +153,11 @@ def main() -> None:
     st.set_page_config(page_title="RAG Assistant")
     st.title("Corporate Expense & Benefits Assistant")
     st.caption("Company policies. Not tax or legal advice.")
+    st.info(
+        "You are interacting with an AI system, not a human. Responses are generated "
+        "automatically and may contain mistakes.",
+        icon="🤖",
+    )
 
     st.session_state.setdefault("thread_id", str(uuid.uuid4()))
     st.session_state.setdefault("history", [])

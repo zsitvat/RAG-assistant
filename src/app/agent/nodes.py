@@ -179,6 +179,16 @@ class AgentNodes:
             )
             return None
 
+    @staticmethod
+    def _is_degenerate(content: str) -> bool:
+        """True when the answer has no body line, e.g. only a "Sources:" line or nothing at all."""
+        body_lines = [
+            line
+            for line in content.strip().splitlines()
+            if line.strip() and not line.strip().startswith("Sources:")
+        ]
+        return not body_lines
+
     def _bind_tools(self, available_tools: list[BaseTool]) -> BaseChatModel:
         """Binds the available tools when the chat model supports tool calling."""
         if not available_tools:
@@ -215,10 +225,12 @@ class AgentNodes:
             }
 
         decision = self._derive_decision(tool_messages)
-        answer = await self._invoke_with_retry(
-            self._prompt("generate_response") | self._response_model, history.model_context()
-        )
-        if answer is None:
+        runnable = self._prompt("generate_response") | self._response_model
+        answer = await self._invoke_with_retry(runnable, history.model_context())
+        if answer is not None and self._is_degenerate(answer.content):
+            logger.warning("chat model returned a body-less answer; retrying once")
+            answer = await self._invoke_with_retry(runnable, history.model_context())
+        if answer is None or self._is_degenerate(answer.content):
             return {
                 "messages": [AIMessage(content=LLM_UNAVAILABLE_MESSAGE)],
                 "decision": decision,
