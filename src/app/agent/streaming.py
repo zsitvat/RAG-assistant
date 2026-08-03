@@ -1,4 +1,4 @@
-from langchain_core.messages import BaseMessage, ToolMessage
+from langchain_core.messages import ToolMessage
 
 from app.agent.responses import (
     STEP_LABELS,
@@ -39,7 +39,8 @@ class StreamEventMapper:
 
     @staticmethod
     def _node_step_labels(node: str, update: dict) -> list[str]:
-        """Returns the allow-listed public labels, with result summaries, a finished node announces."""
+        """Returns the allow-listed public labels, with result summaries, a finished node
+        announces."""
         if node == "execute_tools":
             return [
                 labelled_step(step_label(message.name), tool_step_detail(message))
