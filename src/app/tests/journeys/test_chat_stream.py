@@ -75,9 +75,9 @@ async def test_step_events_are_allow_listed_and_deduplicated():
 
     assert steps == list(dict.fromkeys(steps))
     assert steps == [
-        "Intent classified",
-        "Details extracted",
-        "Policies searched",
+        "Intent classified — policy_question, meal",
+        "Details extracted — category=meal",
+        "Policies searched — 1 passage from Doc 01",
         "Answer generated",
     ]
 

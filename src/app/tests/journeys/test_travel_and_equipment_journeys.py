@@ -254,10 +254,13 @@ async def test_travel_journey_is_exposed_through_the_chat_endpoint():
     assert body["decision"] == "partially_eligible"
     assert body["sources"][0]["source_id"] == "S1"
     assert body["steps"] == [
-        "Intent classified",
-        "Details extracted",
-        "Policies searched",
-        "Amount calculated",
-        "Rules checked",
+        "Intent classified — expense_check, travel",
+        "Details extracted — category=travel, expense_type=accommodation_domestic, "
+        "amount_huf=60000, has_receipt=True, approval_obtained=True, is_business_related=True, "
+        "is_international_trip=False, provided_documents=travel_request / "
+        "ticket_or_booking_confirmation / hotel_invoice",
+        "Policies searched — 1 passage from Doc 02",
+        "Amount calculated — reimbursable 45000 HUF, cap 45000, excess 15000",
+        "Rules checked — 4 pass",
         "Answer generated",
     ]

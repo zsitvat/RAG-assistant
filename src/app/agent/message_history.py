@@ -64,11 +64,29 @@ class MessageHistory:
         requests = self._split_into_requests()
         if not requests:
             return list(self._messages)
+        return self._context(requests, requests[-1])
 
+    def response_context(self) -> list[BaseMessage]:
+        """Builds final-answer model input, dropping the agent's own draft replies from the current
+        request so the answer model writes the whole answer instead of only appending to a draft."""
+        requests = self._split_into_requests()
+        if not requests:
+            return list(self._messages)
+        current = [
+            message
+            for message in requests[-1]
+            if not (isinstance(message, AIMessage) and not message.tool_calls)
+        ]
+        return self._context(requests, current)
+
+    def _context(
+        self, requests: list[list[BaseMessage]], current: list[BaseMessage]
+    ) -> list[BaseMessage]:
+        """Prepends the condensed prior requests to the given current-request messages."""
         context: list[BaseMessage] = []
         for request_messages in requests[:-1]:
             context.extend(self._condense(request_messages))
-        context.extend(requests[-1])
+        context.extend(current)
         return context
 
     def _split_into_requests(self) -> list[list[BaseMessage]]:

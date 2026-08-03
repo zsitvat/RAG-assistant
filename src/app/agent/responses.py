@@ -1,4 +1,5 @@
 import time
+from collections import Counter
 from datetime import UTC, datetime
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
@@ -14,7 +15,7 @@ EXTRACT_INFORMATION_STEP = "Details extracted"
 GENERATE_RESPONSE_STEP = "Answer generated"
 ASK_CLARIFICATION_STEP = "Clarification asked"
 OUT_OF_SCOPE_STEP = "Marked out of scope"
-ALWAYS_FIRST_STEPS = [CLASSIFY_INTENT_STEP, EXTRACT_INFORMATION_STEP]
+STATE_DETAIL_NODES = ["classify_intent", "extract_information"]
 
 STEP_LABELS = {
     # tool names, keyed by the ToolMessage produced when execute_tools finishes
@@ -45,6 +46,74 @@ def step_label(tool_name: str) -> str:
 def _final_step_label(decision: str | None) -> str:
     """Returns the public label for the terminal node, inferred from the turn's decision."""
     return DECISION_FINAL_STEPS.get(decision, GENERATE_RESPONSE_STEP)
+
+
+def labelled_step(label: str, detail: str) -> str:
+    """Joins a public step label with its short result summary, when there is one."""
+    return f"{label} — {detail}" if detail else label
+
+
+def tool_step_detail(message: ToolMessage) -> str:
+    """Summarizes what one finished tool call produced, for the public step list."""
+    if message.status == "error":
+        return "failed"
+    if message.name == "search_policies":
+        return _search_detail(message.artifact)
+    if message.name == "check_rules":
+        return _findings_detail(message.artifact)
+    if message.name == "calculate":
+        return _calculation_detail(message.artifact)
+    return ""
+
+
+def node_step_detail(node: str, state: dict) -> str:
+    """Summarizes the state a non-tool node produced, for the public step list."""
+    if node == "classify_intent":
+        return ", ".join(str(v) for v in (state.get("intent"), state.get("category")) if v)
+    if node == "extract_information":
+        return _claim_detail(state.get("claim"))
+    return ""
+
+
+def _search_detail(artifact: object) -> str:
+    """Summarizes a policy search as the cited passage count and the documents they came from."""
+    citations = RagResult.from_artifact(artifact).citations
+    if not citations:
+        return "no matching passage"
+    titles = list(dict.fromkeys(citation.doc_title for citation in citations))
+    passages = f"{len(citations)} passage{'' if len(citations) == 1 else 's'}"
+    return f"{passages} from {', '.join(titles)}"
+
+
+def _findings_detail(artifact: object) -> str:
+    """Summarizes a rule check as its per-status finding counts."""
+    if not isinstance(artifact, list):
+        return "no applicable rule"
+    findings = [f for f in artifact if isinstance(f, Finding)]
+    if not findings:
+        return "no applicable rule"
+    counts = Counter(finding.status for finding in findings)
+    return ", ".join(f"{count} {status}" for status, count in counts.items())
+
+
+def _calculation_detail(artifact: object) -> str:
+    """Summarizes a calculation using its own compact summary."""
+    return artifact.compact_summary() if isinstance(artifact, CalculationResult) else ""
+
+
+def _claim_detail(claim: object) -> str:
+    """Summarizes the extracted claim as its populated fields."""
+    fields = ExpenseClaim.from_state(claim).model_dump(exclude_none=True)
+    return ", ".join(f"{name}={_field_value(value)}" for name, value in fields.items())
+
+
+def _field_value(value: object) -> str:
+    """Renders one claim field value without list punctuation or trailing float zeros."""
+    if isinstance(value, list):
+        return " / ".join(str(item) for item in value)
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
 
 
 def collect_cited_sources(request_messages: list[BaseMessage]) -> list[ChatSource]:
@@ -89,7 +158,7 @@ class ResponseBuilder:
             response_time_ms=round((time.monotonic() - start) * 1000),
             decision=decision,
             sources=collect_cited_sources(request_messages),
-            steps=self._collect_step_labels(request_messages, decision),
+            steps=self._collect_step_labels(request_messages, state, decision),
             degraded=state.get("degraded", False),
         )
 
@@ -117,14 +186,17 @@ class ResponseBuilder:
 
     @staticmethod
     def _collect_step_labels(
-        request_messages: list[BaseMessage], decision: str | None
+        request_messages: list[BaseMessage], state: dict, decision: str | None
     ) -> list[str]:
-        """Collects stable public step labels from the completed request."""
-        steps = list(ALWAYS_FIRST_STEPS)
+        """Collects stable public step labels, each with its result summary, from the request."""
+        steps = [
+            labelled_step(STEP_LABELS[node], node_step_detail(node, state))
+            for node in STATE_DETAIL_NODES
+        ]
         for message in request_messages:
             if not isinstance(message, ToolMessage):
                 continue
-            label = step_label(message.name)
+            label = labelled_step(step_label(message.name), tool_step_detail(message))
             if label not in steps:
                 steps.append(label)
         if isinstance(request_messages[-1], AIMessage):

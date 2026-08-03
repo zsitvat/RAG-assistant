@@ -43,7 +43,7 @@ async def test_respond_projects_answer_sources_and_steps():
     assert response.steps == [
         "Intent classified",
         "Details extracted",
-        "Policies searched",
+        "Policies searched — 1 passage from Doc 01",
         "Answer generated",
     ]
     assert response.response_time_ms >= 0

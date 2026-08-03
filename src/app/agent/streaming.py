@@ -1,6 +1,13 @@
 from langchain_core.messages import BaseMessage, ToolMessage
 
-from app.agent.responses import STEP_LABELS, collect_cited_sources, step_label
+from app.agent.responses import (
+    STEP_LABELS,
+    collect_cited_sources,
+    labelled_step,
+    node_step_detail,
+    step_label,
+    tool_step_detail,
+)
 from app.api.schemas import StreamEvent
 
 
@@ -24,21 +31,23 @@ class StreamEventMapper:
                 emitted_sources.add(key)
                 events.append(StreamEvent(event="source", data=source))
 
-        for label in self._node_step_labels(node, messages):
+        for label in self._node_step_labels(node, update or {}):
             if label not in emitted_steps:
                 emitted_steps.add(label)
                 events.append(StreamEvent(event="step", data=label))
         return events
 
     @staticmethod
-    def _node_step_labels(node: str, messages: list[BaseMessage]) -> list[str]:
-        """Returns the allow-listed public labels a finished node may announce."""
+    def _node_step_labels(node: str, update: dict) -> list[str]:
+        """Returns the allow-listed public labels, with result summaries, a finished node announces."""
         if node == "execute_tools":
             return [
-                step_label(message.name) for message in messages if isinstance(message, ToolMessage)
+                labelled_step(step_label(message.name), tool_step_detail(message))
+                for message in update.get("messages") or []
+                if isinstance(message, ToolMessage)
             ]
         label = STEP_LABELS.get(node)
-        return [label] if label else []
+        return [labelled_step(label, node_step_detail(node, update))] if label else []
 
     @staticmethod
     def answer_token(payload: tuple) -> StreamEvent | None:

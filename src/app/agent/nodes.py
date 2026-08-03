@@ -226,10 +226,10 @@ class AgentNodes:
 
         decision = self._derive_decision(tool_messages)
         runnable = self._prompt("generate_response") | self._response_model
-        answer = await self._invoke_with_retry(runnable, history.model_context())
+        answer = await self._invoke_with_retry(runnable, history.response_context())
         if answer is not None and self._is_degenerate(answer.content):
             logger.warning("chat model returned a body-less answer; retrying once")
-            answer = await self._invoke_with_retry(runnable, history.model_context())
+            answer = await self._invoke_with_retry(runnable, history.response_context())
         if answer is None or self._is_degenerate(answer.content):
             return {
                 "messages": [AIMessage(content=LLM_UNAVAILABLE_MESSAGE)],

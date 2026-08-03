@@ -86,6 +86,7 @@ async def test_generate_response_sends_the_model_only_the_filtered_context():
     current_tool_message = ToolMessage(
         content="found again", tool_call_id="2", name="search_policies"
     )
+    current_draft = AIMessage(content="A draft answer the agent step wrote itself.")
     model = ScriptedChatModel(chat_responses=iter([AIMessage(content="Final answer.")]))
     nodes = AgentNodes(model, model, [], CALCULATOR)
 
@@ -100,6 +101,7 @@ async def test_generate_response_sends_the_model_only_the_filtered_context():
                 current_human,
                 current_tool_call,
                 current_tool_message,
+                current_draft,
             ]
         }
     )
@@ -112,3 +114,4 @@ async def test_generate_response_sends_the_model_only_the_filtered_context():
     assert current_human in sent
     assert current_tool_call in sent
     assert current_tool_message in sent
+    assert current_draft not in sent
