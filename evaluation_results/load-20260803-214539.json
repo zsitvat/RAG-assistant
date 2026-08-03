@@ -1,0 +1,17 @@
+{
+  "load_run_id": "load-0db535215ad1",
+  "dataset_name": "test-dataset",
+  "query_count": 60,
+  "max_concurrency": 4,
+  "total_duration_ms": 410710,
+  "throughput_queries_per_minute": 8.77,
+  "latency_mean_ms": 28767.5,
+  "latency_median_ms": 30255.9,
+  "latency_p95_ms": 47438.7,
+  "error_count": 8,
+  "dataset_run_urls": [
+    "https://cloud.langfuse.com/project/cms7txjr50008ad0jxqp7myo0/datasets/cmsdpg79102ilad0dfo9be0dv/runs/5f1819b8-3c27-4ac8-9f2d-e6c1cfb7e3a1",
+    "https://cloud.langfuse.com/project/cms7txjr50008ad0jxqp7myo0/datasets/cmsdpg79102ilad0dfo9be0dv/runs/cbb5a3c4-f3be-4fea-aedd-f643721e59a9",
+    "https://cloud.langfuse.com/project/cms7txjr50008ad0jxqp7myo0/datasets/cmsdpg79102ilad0dfo9be0dv/runs/126f2613-6db7-4618-91bf-4ca5a23816c2"
+  ]
+}

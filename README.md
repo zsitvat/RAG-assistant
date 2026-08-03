@@ -330,21 +330,24 @@ per-metric score recording; the application supplies only the task function (one
 per case, pinning `reference_date` for deterministic deadline math) and the metric functions. One
 failing case never aborts the run. A local Markdown + JSON report lands under `evaluation_results/`.
 
-**Results** (`qwen2.5:7b-instruct-q4_K_M`, 20 cases):
+**Results** (`qwen2.5:7b-instruct-q4_K_M`, 20 cases, run 2026-08-03):
 
 | Metric | Result |
 | --- | ---: |
 | classification_accuracy | 90.0% |
-| slot_accuracy | 11.8% |
-| retrieval_hit_at_4 | 0.0% |
+| slot_accuracy | 76.1% |
+| retrieval_hit_at_4 | 22.2% |
 | tool_selection_accuracy | 15.0% |
 | outcome_accuracy | 25.0% |
-| citation_accuracy | 0.0% |
+| citation_accuracy | 22.2% |
+| answer_quality | 10.0% |
 
-Intent/category classification is strong; every metric downstream of `extract_information` is weak
-because the 7B model often misses the exact canonical value the extraction prompt requires, which
-deterministically routes the turn to `ask_clarification` before it ever reaches the tool-calling loop
-— a genuine small-model capability limit under this design, not a software defect. Full analysis and
+Intent/category classification and slot extraction are both strong (90.0% / 76.1%); the bottleneck is
+downstream. Most cases with a perfectly extracted claim still fail `tool_selection_accuracy` — the
+7B model frequently picks a different tool sequence than the exact ordered list the case expects —
+which cascades into a wrong `outcome_accuracy`/`citation_accuracy` and, almost always, a lower
+LLM-judged `answer_quality`. This is the ReAct tool-selection loop's autonomous decision-making being
+the harder half of the task for a small local model, not an extraction problem. Full analysis and
 per-case reports: see [`evaluation_results/README.md`](evaluation_results/README.md).
 
 ## 9. Load test method
@@ -361,10 +364,22 @@ aggregate result is written to `evaluation_results/load-<timestamp>.json` — th
 directory the functional evaluation writes its reports to — as well as printed to the terminal. The
 PoC stays uncached deliberately, so its behaviour and latency remain easy to explain.
 
-**Results:** not yet executed in this environment — it requires a live Ollama, Redis and Langfuse
-setup. Method, the reserved results table and the documented bottleneck/optimisation analysis are in
-[`evaluation_results/README.md`](evaluation_results/README.md); running
-`python -m load_test.load` (§7) fills in the results table there.
+**Results** (default 20-item dataset × 3 repetitions = 60 measured turns, `max_concurrency=4`):
+
+| Metric | Result |
+| --- | ---: |
+| Throughput | 8.77 queries/min |
+| Latency, mean / median / p95 | 28.8 s / 30.3 s / 47.4 s |
+| Errors | 8 / 60 (13.3%) |
+
+**Bottleneck**: LLM generation dominates — 4–7 Ollama calls per turn (classify, extract, 1–4 agent
+tool-selection steps, final response), serialised on one local model, against sub-millisecond Redis
+retrieval and deterministic tools. The 13.3% error rate has a diagnosed, non-model cause: a shared
+`ChatOllama` client built inside one `asyncio.run()` call gets reused once that event loop has already
+closed, once concurrent execution moves to a different loop/thread — a load-test-harness lifecycle bug,
+not an agent or Ollama fault. Full breakdown and optimisation proposals (client-lifecycle fix, a
+fast-path for simple policy questions, a production cache layer) are in
+[`evaluation_results/README.md`](evaluation_results/README.md).
 
 ## 10. PoC boundaries (deliberately out of scope)
 
