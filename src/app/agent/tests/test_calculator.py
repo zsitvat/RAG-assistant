@@ -29,8 +29,9 @@ def test_meal_caps_at_per_person_limit(calculator):
 
 
 def test_meal_requires_amount_and_headcount(calculator):
+    claim = ExpenseClaim(category="meal", amount_huf=1000)
     with pytest.raises(CalculationInputError):
-        calculator.calculate(ExpenseClaim(category="meal", amount_huf=1000))
+        calculator.calculate(claim)
 
 
 def test_meal_below_cap_reimburses_the_full_amount(calculator):
@@ -346,12 +347,11 @@ def test_benefits_caps_at_remaining_budget(calculator):
 
 
 def test_benefits_unknown_type_raises(calculator):
+    claim = ExpenseClaim(
+        category="benefits", expense_type="unknown", amount_huf=1, annual_budget_used_huf=0
+    )
     with pytest.raises(CalculationInputError):
-        calculator.calculate(
-            ExpenseClaim(
-                category="benefits", expense_type="unknown", amount_huf=1, annual_budget_used_huf=0
-            )
-        )
+        calculator.calculate(claim)
 
 
 def test_travel_accommodation_caps_by_domestic_tier(calculator):
@@ -436,10 +436,12 @@ def test_travel_parking_returns_submitted_amount(calculator):
 
 
 def test_missing_category_raises(calculator):
+    claim = ExpenseClaim()
     with pytest.raises(CalculationInputError):
-        calculator.calculate(ExpenseClaim())
+        calculator.calculate(claim)
 
 
 def test_general_category_has_no_calculation_defined(calculator):
+    claim = ExpenseClaim(category="general", amount_huf=1000)
     with pytest.raises(CalculationInputError):
-        calculator.calculate(ExpenseClaim(category="general", amount_huf=1000))
+        calculator.calculate(claim)

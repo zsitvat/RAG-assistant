@@ -100,10 +100,12 @@ def test_run_rejects_a_concurrent_call_while_another_run_holds_the_lock(monkeypa
     vector_store = MagicMock()
 
     # Act
+    ingestor = CorpusIngestor()
+    rule_catalogue = MagicMock()
     _INGEST_LOCK.acquire()
     try:
         with pytest.raises(IngestionInProgressError):
-            CorpusIngestor().run(redis_index, vector_store, rule_catalogue=MagicMock())
+            ingestor.run(redis_index, vector_store, rule_catalogue=rule_catalogue)
     finally:
         _INGEST_LOCK.release()
 

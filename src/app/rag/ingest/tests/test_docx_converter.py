@@ -56,5 +56,6 @@ def test_convert_raises_for_a_malformed_docx_file(tmp_path):
     path.write_text("this is not a real docx file")
 
     # Act / Assert
+    converter = DocxToMarkdownConverter()
     with pytest.raises(PackageNotFoundError):
-        DocxToMarkdownConverter().convert(path)
+        converter.convert(path)
