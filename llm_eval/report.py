@@ -55,16 +55,16 @@ class EvaluationReport:
 
     @staticmethod
     def _aggregate(cases: list[dict]) -> dict:
-        """Computes the pass percentage for each metric across cases that reported it."""
+        """Computes the mean score for each metric across cases that reported it."""
         aggregates: dict[str, dict] = {}
         for metric in METRIC_ORDER:
             values = [case["scores"][metric] for case in cases if metric in case["scores"]]
             if not values:
                 aggregates[metric] = {"percent": None, "scored_cases": 0}
                 continue
-            passed = sum(1 for value in values if value is True or value == 1)
+            mean_score = sum(float(value) for value in values) / len(values)
             aggregates[metric] = {
-                "percent": round(100 * passed / len(values), 1),
+                "percent": round(100 * mean_score, 1),
                 "scored_cases": len(values),
             }
         return aggregates

@@ -53,42 +53,55 @@ def test_enabled_when_credentials_and_client_are_valid():
     assert observability.client is not None
 
 
-def test_trace_config_is_empty_when_disabled():
+def test_traced_turn_yields_an_empty_config_and_a_no_op_updater_when_disabled():
     # Arrange
     observability = Observability(None)
 
+    # Act
+    with observability.traced_turn("thread-1") as (config, update_trace):
+        update_trace(decision="eligible")  # must not raise
+
     # Assert
-    assert observability.trace_config("thread-1") == {}
+    assert config == {}
 
 
-def test_trace_config_attaches_a_callback_and_session_id_when_enabled():
+def test_traced_turn_attaches_a_callback_and_session_id_when_enabled():
     # Arrange
     observability = Observability(MagicMock())
 
     # Act
-    config = observability.trace_config("thread-1")
+    with observability.traced_turn("thread-1") as (config, _update_trace):
+        pass
 
     # Assert
     assert "callbacks" in config
     assert config["metadata"]["langfuse_session_id"] == "thread-1"
 
 
-def test_update_trace_is_a_no_op_when_disabled():
-    # Arrange
-    observability = Observability(None)
-
-    # Act
-    observability.update_trace(decision="eligible")  # must not raise
-
-
-def test_update_trace_swallows_a_client_failure():
+def test_traced_turn_updates_the_turn_span_with_outcome_attributes():
     # Arrange
     client = MagicMock()
-    client.update_current_trace.side_effect = RuntimeError("boom")
+    span = client.start_as_current_observation.return_value.__enter__.return_value
     observability = Observability(client)
 
     # Act
-    observability.update_trace(decision="eligible")  # must not raise
+    with observability.traced_turn("thread-1") as (_config, update_trace):
+        update_trace(decision="eligible")
 
     # Assert
-    client.update_current_trace.assert_called_once()
+    span.update.assert_called_once_with(metadata={"decision": "eligible"})
+
+
+def test_traced_turn_swallows_a_span_update_failure():
+    # Arrange
+    client = MagicMock()
+    span = client.start_as_current_observation.return_value.__enter__.return_value
+    span.update.side_effect = RuntimeError("boom")
+    observability = Observability(client)
+
+    # Act
+    with observability.traced_turn("thread-1") as (_config, update_trace):
+        update_trace(decision="eligible")  # must not raise
+
+    # Assert
+    span.update.assert_called_once()
