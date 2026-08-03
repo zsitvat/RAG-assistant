@@ -72,9 +72,7 @@ class Observability:
         trace_metadata.update({key: value for key, value in metadata.items() if value is not None})
         config = {"callbacks": [CallbackHandler()], "metadata": trace_metadata}
 
-        with self._client.start_as_current_observation(
-            name=TURN_SPAN_NAME, input=message
-        ) as span:
+        with self._client.start_as_current_observation(name=TURN_SPAN_NAME, input=message) as span:
 
             def update(*, output: object = None, **attributes: object) -> None:
                 try:

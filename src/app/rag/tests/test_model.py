@@ -60,7 +60,12 @@ def test_from_artifact_unwraps_individually_wrapped_nested_results_and_citations
                 _lc_wrap(
                     "app.rag.model",
                     "Citation",
-                    {"marker": "[1]", "doc_id": "doc-1", "doc_title": "Meal Policy", "section": None},
+                    {
+                        "marker": "[1]",
+                        "doc_id": "doc-1",
+                        "doc_title": "Meal Policy",
+                        "section": None,
+                    },
                 )
             ],
         },
