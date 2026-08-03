@@ -5,7 +5,7 @@ from datetime import date
 
 import pytest
 
-from app.logging.config import cleanup_expired_archives, configure_logging
+from app.logging.config import cleanup_expired_archives, configure_logging, read_recent_lines
 
 
 def test_configure_logging_writes_json_lines(tmp_path, capsys):
@@ -140,6 +140,38 @@ def test_configure_logging_rotates_daily_at_utc_midnight_with_seven_day_backup(t
     assert file_handler.when == "MIDNIGHT"
     assert file_handler.utc is True
     assert file_handler.backupCount == 7
+
+
+def test_read_recent_lines_returns_the_tail_oldest_first(tmp_path):
+    # Arrange
+    log_path = tmp_path / "api.jsonl"
+    log_path.write_text("\n".join(f"line{i}" for i in range(5)) + "\n")
+
+    # Act
+    lines = read_recent_lines(tmp_path, service="api", limit=2)
+
+    # Assert
+    assert lines == ["line3", "line4"]
+
+
+def test_read_recent_lines_returns_all_lines_when_under_the_limit(tmp_path):
+    # Arrange
+    log_path = tmp_path / "api.jsonl"
+    log_path.write_text("line0\nline1\n")
+
+    # Act
+    lines = read_recent_lines(tmp_path, service="api", limit=10)
+
+    # Assert
+    assert lines == ["line0", "line1"]
+
+
+def test_read_recent_lines_returns_empty_list_when_file_is_missing(tmp_path):
+    # Act
+    lines = read_recent_lines(tmp_path, service="api", limit=10)
+
+    # Assert
+    assert lines == []
 
 
 def test_no_application_log_call_passes_claim_or_prompt_payload_content():

@@ -22,6 +22,7 @@ from app.agent.static_texts import (
 )
 from app.agent.structured import StructuredOutputRunner
 from app.integrations.langfuse import Observability
+from app.rules.model import Category
 
 logger = logging.getLogger(__name__)
 
@@ -41,13 +42,11 @@ class AgentNodes:
         self._tools = tools
         self._calculator = calculator
         self._agent_step_model = structured_chat_model
+        self._extract_model = structured_chat_model
         self._response_model = response_chat_model
         self._prompts = prompts or PromptLibrary(Observability(None))
         self._classify_runner = StructuredOutputRunner(
             structured_chat_model, self._prompt("classify_intent"), IntentClassification
-        )
-        self._extract_runner = StructuredOutputRunner(
-            structured_chat_model, self._prompt("extract_information"), ExpenseClaim
         )
         self._slot_table = RequiredSlotTable()
 
@@ -78,9 +77,14 @@ class AgentNodes:
         previous_decision = state.get("decision")
         category = state.get("category")
 
+        extract_runner = StructuredOutputRunner(
+            self._extract_model,
+            self._prompt("extract_information"),
+            ExpenseClaim.extraction_schema(category),
+        )
         context = MessageHistory(state["messages"]).model_context()
-        result = await self._extract_runner.run(context, fallback=ExpenseClaim())
-        extracted = result.value
+        result = await extract_runner.run(context, fallback=ExpenseClaim())
+        extracted = ExpenseClaim.model_validate(result.value.model_dump())
         if category is not None:
             extracted = extracted.model_copy(update={"category": category})
 
@@ -153,6 +157,8 @@ class AgentNodes:
         if not response.tool_calls:
             return {"messages": [response]}
 
+        response = self._apply_known_category(response, available_tools, state.get("category"))
+
         call = response.tool_calls[0]
         duplicate = history.find_duplicate_call(call["name"], call["args"])
         if duplicate is None:
@@ -167,6 +173,26 @@ class AgentNodes:
             status="success",
         )
         return {"messages": [response, reused]}
+
+    @staticmethod
+    def _apply_known_category(
+        response: AIMessage, available_tools: list[BaseTool], category: Category | None
+    ) -> AIMessage:
+        """Overrides each tool call's category arg with the already-classified category, so the
+        model never has to guess a value for a field the graph already knows."""
+        if category is None:
+            return response
+
+        updated_calls = []
+        changed = False
+        for call in response.tool_calls:
+            tool_ = next((t for t in available_tools if t.name == call["name"]), None)
+            if tool_ is not None and "category" in tool_.args_schema.model_fields:
+                call = {**call, "args": {**call["args"], "category": category}}
+                changed = True
+            updated_calls.append(call)
+
+        return response.model_copy(update={"tool_calls": updated_calls}) if changed else response
 
     @staticmethod
     async def _invoke_with_retry(runnable: Runnable, messages: list) -> AIMessage | None:
