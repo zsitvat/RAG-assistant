@@ -78,7 +78,9 @@ class EvaluationMetrics:
         cited = set(output.get("cited_doc_ids") or [])
         return Evaluation(name="citation_accuracy", value=bool(cited & set(expected_docs)))
 
-    def answer_quality(self, *, input: dict, output: dict, expected_output: dict, **_: object):
+    async def answer_quality(
+        self, *, input: dict, output: dict, expected_output: dict, **_: object
+    ):
         """LLM-as-judge: does the final answer convey the expected decision/amount/citations?"""
         expected_summary = expected_output.get("expected_answer_summary")
         if not expected_summary or self._answer_judge is None:
@@ -92,7 +94,7 @@ class EvaluationMetrics:
             f"Chatbot answer:\n{answer}\n\n"
             f"Reference (what a correct answer must convey): {expected_summary}"
         )
-        result = self._answer_judge.run(
+        result = await self._answer_judge.run(
             [HumanMessage(content=prompt)], fallback=UNAVAILABLE_VERDICT
         )
         return Evaluation(

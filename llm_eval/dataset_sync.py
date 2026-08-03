@@ -48,4 +48,5 @@ class LangfuseDatasetSync:
             "expected_doc_ids": case.expected_doc_ids,
             "expected_amount_huf": case.expected_amount_huf,
             "expected_decision": case.expected_decision,
+            "expected_answer_summary": case.expected_answer_summary,
         }

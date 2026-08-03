@@ -58,7 +58,7 @@ def test_traced_turn_yields_an_empty_config_and_a_no_op_updater_when_disabled():
     observability = Observability(None)
 
     # Act
-    with observability.traced_turn("thread-1") as (config, update_trace):
+    with observability.traced_turn("thread-1", "hi") as (config, update_trace):
         update_trace(decision="eligible")  # must not raise
 
     # Assert
@@ -70,7 +70,7 @@ def test_traced_turn_attaches_a_callback_and_session_id_when_enabled():
     observability = Observability(MagicMock())
 
     # Act
-    with observability.traced_turn("thread-1") as (config, _update_trace):
+    with observability.traced_turn("thread-1", "hi") as (config, _update_trace):
         pass
 
     # Assert
@@ -78,18 +78,31 @@ def test_traced_turn_attaches_a_callback_and_session_id_when_enabled():
     assert config["metadata"]["langfuse_session_id"] == "thread-1"
 
 
-def test_traced_turn_updates_the_turn_span_with_outcome_attributes():
+def test_traced_turn_sets_the_message_as_the_span_input():
+    # Arrange
+    client = MagicMock()
+    observability = Observability(client)
+
+    # Act
+    with observability.traced_turn("thread-1", "hi") as (_config, _update_trace):
+        pass
+
+    # Assert
+    client.start_as_current_observation.assert_called_once_with(name="chat_turn", input="hi")
+
+
+def test_traced_turn_updates_the_turn_span_with_the_answer_and_outcome_attributes():
     # Arrange
     client = MagicMock()
     span = client.start_as_current_observation.return_value.__enter__.return_value
     observability = Observability(client)
 
     # Act
-    with observability.traced_turn("thread-1") as (_config, update_trace):
-        update_trace(decision="eligible")
+    with observability.traced_turn("thread-1", "hi") as (_config, update_trace):
+        update_trace(decision="eligible", output="the answer")
 
     # Assert
-    span.update.assert_called_once_with(metadata={"decision": "eligible"})
+    span.update.assert_called_once_with(metadata={"decision": "eligible"}, output="the answer")
 
 
 def test_traced_turn_swallows_a_span_update_failure():
@@ -100,7 +113,7 @@ def test_traced_turn_swallows_a_span_update_failure():
     observability = Observability(client)
 
     # Act
-    with observability.traced_turn("thread-1") as (_config, update_trace):
+    with observability.traced_turn("thread-1", "hi") as (_config, update_trace):
         update_trace(decision="eligible")  # must not raise
 
     # Assert
