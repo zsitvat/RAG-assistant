@@ -5,8 +5,8 @@ from pathlib import Path
 import httpx2
 from langchain_core.messages import HumanMessage
 
+from app.agent.langfuse_prompt_library import PromptLibrary
 from app.agent.model import IntentClassification
-from app.agent.prompt_library import PromptLibrary
 from app.agent.structured import StructuredOutputRunner
 from app.integrations.langfuse import Observability
 from app.integrations.llm import build_chat_model

@@ -2,10 +2,10 @@ from langchain_core.documents import Document
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from app.rag.graph_state import RagState
 from app.rag.index_schema import CONTEXT_TOKEN_BUDGET
 from app.rag.model import Citation, RagResult, RetrievedResult
 from app.rag.retriever import Retriever
-from app.rag.graph_state import RagState
 
 CHARS_PER_TOKEN = 4
 
