@@ -1,5 +1,5 @@
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import date
 
 from langchain_core.messages import HumanMessage
@@ -27,33 +27,38 @@ class AgentService:
     async def ainvoke_graph(self, thread_id: str, message: str) -> ChatResponse:
         """Runs the user's message through the agent graph and builds the resulting reply."""
         start = time.monotonic()
-        result = await self._graph.ainvoke(self._input(message), config=self._config(thread_id))
-        return self._build_response(thread_id, result, start)
+        with self._observability.traced_turn(thread_id) as (trace_config, update_trace):
+            config = self._config(thread_id) | trace_config
+            result = await self._graph.ainvoke(self._input(message), config=config)
+            return self._build_response(thread_id, result, start, update_trace)
 
     async def astream(self, thread_id: str, message: str) -> AsyncIterator[StreamEvent]:
         """Streams public step, source and answer-token events, then the complete reply."""
         start = time.monotonic()
-        config = self._config(thread_id)
         emitted_steps: set[str] = set()
         emitted_sources: set[tuple[str, str]] = set()
 
-        async for mode, payload in self._graph.astream(
-            self._input(message), config=config, stream_mode=["updates", "messages"]
-        ):
-            if mode == "updates":
-                for node, update in payload.items():
-                    events = self._streaming.node_events(
-                        node, update, emitted_steps, emitted_sources
-                    )
-                    for event in events:
-                        yield event
-            elif mode == "messages":
-                token = self._streaming.answer_token(payload)
-                if token is not None:
-                    yield token
+        with self._observability.traced_turn(thread_id) as (trace_config, update_trace):
+            config = self._config(thread_id) | trace_config
 
-        final_state = (await self._graph.aget_state(config)).values
-        yield StreamEvent(event="result", data=self._build_response(thread_id, final_state, start))
+            async for mode, payload in self._graph.astream(
+                self._input(message), config=config, stream_mode=["updates", "messages"]
+            ):
+                if mode == "updates":
+                    for node, update in payload.items():
+                        events = self._streaming.node_events(
+                            node, update, emitted_steps, emitted_sources
+                        )
+                        for event in events:
+                            yield event
+                elif mode == "messages":
+                    token = self._streaming.answer_token(payload)
+                    if token is not None:
+                        yield token
+
+            final_state = (await self._graph.aget_state(config)).values
+            response = self._build_response(thread_id, final_state, start, update_trace)
+            yield StreamEvent(event="result", data=response)
 
     async def evaluate(
         self,
@@ -64,14 +69,15 @@ class AgentService:
         experiment_name: str | None = None,
     ) -> EvaluationResponse:
         """Runs one evaluation turn and builds the internal eval contract from the graph state."""
-        config = self._config(
+        with self._observability.traced_turn(
             thread_id,
             tags=("eval",),
             dataset_item_id=dataset_item_id,
             experiment_name=experiment_name,
-        )
-        result = await self._graph.ainvoke(self._input(message, reference_date), config=config)
-        return self._responses.build_evaluation(thread_id, result)
+        ) as (trace_config, _update_trace):
+            config = self._config(thread_id) | trace_config
+            result = await self._graph.ainvoke(self._input(message, reference_date), config=config)
+            return self._responses.build_evaluation(thread_id, result)
 
     @staticmethod
     def _input(message: str, reference_date: date | None = None) -> dict:
@@ -81,14 +87,16 @@ class AgentService:
             payload["reference_date"] = reference_date
         return payload
 
-    def _config(self, thread_id: str, **trace_kwargs: object) -> dict:
-        """Builds the graph config, attaching one Langfuse trace per turn when enabled."""
-        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": RECURSION_LIMIT}
-        return config | self._observability.trace_config(thread_id, **trace_kwargs)
+    @staticmethod
+    def _config(thread_id: str) -> dict:
+        """Builds the base graph config shared by every turn."""
+        return {"configurable": {"thread_id": thread_id}, "recursion_limit": RECURSION_LIMIT}
 
-    def _build_response(self, thread_id: str, state: dict, start: float) -> ChatResponse:
+    def _build_response(
+        self, thread_id: str, state: dict, start: float, update_trace: Callable[..., None]
+    ) -> ChatResponse:
         """Updates the trace with this turn's outcome and builds the final reply."""
-        self._observability.update_trace(
+        update_trace(
             thread_id=thread_id,
             intent=state.get("intent"),
             category=state.get("category"),

@@ -50,6 +50,23 @@ guesses.**
 
 ## 2. User journeys
 
+### 2.1 Topics and example questions
+
+| Topic | Example question |
+| --- | --- |
+| General policy / required documents | "What documents do I need to submit with an expense claim?" |
+| Business meals | "What is the reimbursement limit for a business meal for 4 people?" |
+| Work equipment / minor purchases | "Can I get reimbursed for a 40,000 HUF keyboard I bought for work?" |
+| Business travel (accommodation, per diem) | "What's the accommodation limit per night for an international business trip?" |
+| Commuting (personal vehicle, pass, ticket) | "I live 32 km from the office and commute by car 3 days a week — how much can I claim?" |
+| Mileage | "How much do I get reimbursed per km for a business trip in my own car?" |
+| Benefits (recreational, training, sport) | "How much of my annual recreational benefit budget is left if I've already used 90,000 HUF?" |
+| Submission deadlines | "I made this purchase 40 days ago — can I still submit it for reimbursement?" |
+| Approval requirements | "Do I need manager approval for a 120,000 HUF equipment purchase?" |
+| Out-of-scope (explicitly declined) | "Can you calculate my income tax for this year?" |
+
+### 2.2 Journeys
+
 - **Grounded policy question** — "What is the reimbursement limit for a business meal?" → retrieval,
   a cited answer, no calculation.
 - **Complete reimbursement request** — category, amount and supporting facts all present in one

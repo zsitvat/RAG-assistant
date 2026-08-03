@@ -3,7 +3,7 @@ import redis as redis_lib
 
 from app.integrations.redis import RedisIndex
 from app.rag.graph import build_rag_graph
-from app.rag.index_schema import MIN_CONFIDENCE_THRESHOLD, VECTOR_DIMENSION
+from app.rag.index_schema import VECTOR_DIMENSION
 from app.rag.ingest.pipeline import CorpusIngestor
 from app.rag.retriever import Retriever
 from app.rag.store import build_embeddings, build_vector_store
@@ -140,7 +140,7 @@ async def test_rag_graph_returns_grounded_evidence_for_each_category(
 
     # Assert
     assert len(result.results) > 0
-    assert result.confidence >= MIN_CONFIDENCE_THRESHOLD
+    assert result.confidence >= 0.8
     assert result.citations
     assert result.context.startswith("[S1]")
 
@@ -158,4 +158,4 @@ async def test_rag_graph_flags_low_confidence_for_an_irrelevant_question(redis_i
     )["result"]
 
     # Assert
-    assert result.confidence < MIN_CONFIDENCE_THRESHOLD
+    assert result.confidence < 0.8
