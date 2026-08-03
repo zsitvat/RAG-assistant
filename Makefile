@@ -13,7 +13,7 @@ format-check:
 	uv run ruff format --check .
 
 security:
-	uv run bandit -c pyproject.toml -r app
+	uv run bandit -c pyproject.toml -r src/app load_test
 
 test:
 	uv run pytest --cov=app --cov-report=term-missing --cov-report=xml
@@ -26,11 +26,11 @@ sonar:
 	uv run pysonar
 
 run-api:
-	LLM_BACKEND=dummy uv run uvicorn app.main:app --port 8000
+	LLM_BACKEND=dummy PYTHONPATH=src uv run uvicorn app.main:app --port 8000
 
 run-ui:
-	API_BASE_URL=http://127.0.0.1:8000 uv run streamlit run app/ui.py
+	API_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src uv run streamlit run src/app/ui.py
 
 clean:
-	rm -rf .ruff_cache .pytest_cache .mypy_cache htmlcov .coverage coverage.xml logs
+	rm -rf .ruff_cache .pytest_cache .mypy_cache .sonar htmlcov .coverage coverage.xml logs
 	find . -type d -name '__pycache__' -not -path './.venv/*' -exec rm -rf {} +

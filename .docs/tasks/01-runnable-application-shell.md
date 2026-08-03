@@ -24,7 +24,7 @@
 - [x] The application is assembled through a lifespan and dependency providers; importing application modules does not open network connections or create runtime resources.
 - [x] A LangChain-compatible deterministic test chat model can emit scripted assistant messages and tool calls without Ollama.
 - [x] The liveness endpoint reports that the process is running, while readiness can clearly report that later dependencies are not configured or unavailable.
-- [x] Errors use FastAPI's default response shapes and never expose a stack trace to the client (custom problem-details normalisation was tried and dropped as unneeded — see the feature doc's deviation note).
+- [x] Errors use FastAPI's default response shapes and never expose a stack trace to the client.
 - [x] The Streamlit shell calls the backend over HTTP, displays a useful connection/readiness error, and imports no graph or business logic.
 - [x] The generated OpenAPI document includes the shell endpoints and their typed response contracts.
 - [x] The process binds through the Uvicorn command rather than introducing redundant host/port environment settings.

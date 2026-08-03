@@ -13,7 +13,7 @@ both against the real policy corpus and a full scripted conversation.
 
 ## How it works
 
-### Meal calculation (`app/agent/calculator.py::ReimbursementCalculator._calculate_meal`)
+### Meal calculation (`src/app/agent/calculator.py::ReimbursementCalculator._calculate_meal`)
 
 Unchanged formula (`min(amount_huf - non_reimbursable_amount, limit_per_person_huf * headcount)`,
 half-up rounding), with two additions:
@@ -28,9 +28,9 @@ half-up rounding), with two additions:
   eligible submitted amount with `cap_huf=None` and a warning instead of inventing a number or
   raising an unhandled `StopIteration`.
 
-### Required documents (`app/agent/rule_checker.py::RuleChecker._check_required_documents`)
+### Required documents (`src/app/agent/rule_checker.py::RuleChecker._check_required_documents`)
 
-Every category in `config/rules.yaml` declares `required_documents` (e.g. meal:
+Every category in `src/rules_config/rules.yaml` declares `required_documents` (e.g. meal:
 `[invoice, business_purpose_note, participant_list]`), but nothing read that list before this task.
 `DocumentChecker.check_requirements` emits a category-specific, source-linked finding. For a
 document question it lists the requirements without lowering eligibility. For an expense check it
@@ -38,7 +38,7 @@ compares `provided_documents` with the catalogue: a complete set passes and only
 documents warn. This prevents an unconditional reminder from making every complete claim
 `partially_eligible`.
 
-### Data fix (`config/rules.yaml`)
+### Data fix (`src/rules_config/rules.yaml`)
 
 `R-MEAL-02`'s `excluded_items` was missing `"personal consumption"`, which the actual policy text
 (`.docs/sources/en/01_General_Expense_Reimbursement_Policy.docx`, §4) lists alongside alcohol,
@@ -55,10 +55,10 @@ inside the existing `POST /chat` journey from task 4. A meal expense_check reque
 
 | File | Responsibility |
 | --- | --- |
-| `app/agent/calculator.py` | `_calculate_meal`, `_meal_limit_rule` |
-| `app/agent/rule_checker.py` | focused document, approval, eligibility and deadline checkers |
-| `config/rules.yaml` | `R-MEAL-02` excluded-items fix |
-| `tests/test_calculator.py` | below-cap, exactly-at-cap, excluded-item warning, half-up rounding, missing-catalogue-limit |
-| `tests/test_rule_checker.py` | required-documents finding |
-| `tests/test_meal_reimbursement_journey.py` | compiled-graph integration journey for the scripted "reference dinner" request |
-| `tests/test_meal_rule_document_consistency.py` | proves every meal rule's `doc_ref` resolves to an indexed section, and that the per-person limit and excluded items appear verbatim in the referenced policy document |
+| `src/app/agent/calculator.py` | `_calculate_meal`, `_meal_limit_rule` |
+| `src/app/agent/rule_checker.py` | focused document, approval, eligibility and deadline checkers |
+| `src/rules_config/rules.yaml` | `R-MEAL-02` excluded-items fix |
+| `src/app/agent/tests/test_calculator.py` | below-cap, exactly-at-cap, excluded-item warning, half-up rounding, missing-catalogue-limit |
+| `src/app/agent/tests/test_rule_checker.py` | required-documents finding |
+| `tests/journeys/test_meal_reimbursement_journey.py` | compiled-graph integration journey for the scripted "reference dinner" request |
+| `tests/journeys/test_meal_rule_document_consistency.py` | proves every meal rule's `doc_ref` resolves to an indexed section, and that the per-person limit and excluded items appear verbatim in the referenced policy document |

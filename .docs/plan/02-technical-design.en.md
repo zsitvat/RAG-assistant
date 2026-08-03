@@ -23,7 +23,7 @@ contract is. It is the implementation reference.
 | No paid API, local open-source LLM + trade-off notes | §9 – Ollama + Qwen2.5-7B-Instruct, dummy LLM fallback |
 | Streamlit UI showing the main steps and RAG result | §10.2 – streamed, expandable source and step summary; §11 – detailed diagnostics in Langfuse |
 | Containerised, Dockerfile mandatory, compose preferred | §12 – root `Dockerfile` + compose with `api`, `ui`, `ollama`, `redis` |
-| 10–20 question functional eval | §13 – version-controlled `eval/dataset.<lang>.json`, executed as a Langfuse experiment |
+| 10–20 question functional eval | §13 – version-controlled `llm_eval/dataset.<lang>.json`, executed as a Langfuse experiment |
 | 50–200 query load test, latency, bottleneck, 1–2 optimisations | §14 |
 | README with problem, architecture, results, run instructions | §16 – milestone M7 |
 
@@ -117,70 +117,135 @@ see §4.5 for why, and for what a non-PoC version would do instead (derive it fr
 
 ## 3. Repository layout
 
-The implemented repository after the runnable-shell slice is:
+The current repository is:
 
 ```
-.env.example                 # committed application-setting template; .env is local and ignored
-Makefile                     # install, quality, Sonar and local run commands
-app/
-  main.py                     # FastAPI app assembly and lifespan boundary
-  dependencies.py             # typed dependency container, runtime wiring and providers
-  api/
-    router.py                 # combines the route modules
-    schemas.py                # current health/readiness HTTP contracts
-    routes/
-      health.py               # liveness and readiness endpoints
-  core/
-    config.py                 # deployment-dependent settings
-    logging.py                # stdout and rotating-file application logging
-    observability.py          # X-Request-ID middleware and logging context
-  integrations/
-    llm.py                    # ChatOllama/FakeListChatModel factory
-  ui.py                       # readiness-only Streamlit HTTP client
-tests/
-  test_api.py
-  test_llm.py
-  test_logging.py
-pyproject.toml                # project metadata, dependencies, Ruff/Bandit/pytest/coverage configuration
-uv.lock                       # pinned, reproducible dependency lock file (committed)
-sonar-project.properties      # Sonar source, test and coverage paths
+.env.example              # committed application-setting template; .env is local and ignored
+Makefile                  # install, quality, Sonar and local run commands
+src/
+  app/                       # the deployed application package (src layout: keeps it out of the
+                              # repo root, alongside the standalone llm_eval/ and load_test/ tools)
+    main.py                    # FastAPI app assembly and lifespan boundary
+    dependencies.py            # typed dependency container, runtime wiring and providers
+    settings.py                # pydantic-settings runtime configuration
+    ui.py                      # Streamlit chat client
+    api/
+      router.py                  # combines the route modules
+      schemas.py                 # HTTP request/response contracts
+      routes/
+        health.py                  # liveness/readiness endpoints
+        chat.py                    # chat, streaming and thread-reset endpoints
+        ingest.py                  # corpus/rule-catalogue ingest endpoint
+        stats.py                   # policy index size and per-category chunk counts
+        evaluation.py              # internal single-turn evaluation endpoint used by llm_eval/run_eval.py
+    agent/
+      service.py                 # invoke, stream and reset use cases exposed to the API
+      responses.py                # graph state -> ChatResponse/EvaluationResponse
+      streaming.py                # graph node updates -> public SSE step/source/token events
+      graph.py                   # node/routing assembly and compilation
+      nodes.py                   # node callbacks, including classify_intent
+      state.py                   # LangGraph AgentState contract
+      model.py                   # expense-claim Pydantic domain contracts
+      static_texts.py             # fixed non-LLM-generated user-facing strings
+      message_history.py         # messages/tool-call facts scoped to the latest request
+      calculator.py              # deterministic reimbursement-calculation module
+      deadline.py                # submission-deadline check
+      rule_checker.py            # receipt/supporting-document rule checks
+      slots.py                   # required-slot lookup per (intent, category)
+      structured.py               # structured-output value + fallback-used flag
+      tools.py                    # LangChain tool adapters over calculator/deadline/rule_checker
+      prompts.py                  # embedded PoC prompt templates
+      prompt_library.py           # Langfuse-resolved-vs-embedded prompt resolution
+      tests/                      # co-located unit tests for this package
+    integrations/
+      llm.py                     # ChatOllama/FakeListChatModel factory
+      redis.py                   # Redis connection, build-info and index-stat operations
+      checkpointer.py            # Redis-backed LangGraph checkpointer (sync + async)
+      ollama.py                  # Ollama reachability/model-pulled readiness check
+      readiness.py               # aggregates LLM + Redis readiness behind /ready
+      langfuse.py                # Langfuse client, trace metadata and prompt-resolution access
+      tests/                     # co-located unit tests for this package
+    logging/
+      config.py                  # stdout + UTC-midnight rotating-file JSON logging, retention cleanup
+      tests/                     # co-located unit tests for this package
+    rag/
+      graph.py                    # retrieve -> context subgraph
+      state.py                    # LangGraph RagState contract
+      model.py                    # retrieval/ingestion Pydantic contracts
+      retriever.py                # vector-store retriever with per-call category filter
+      store.py                    # query:/passage: prefixing for the embedding model
+      tool.py                     # search_policies tool wrapping the RAG subgraph
+      index_schema.py             # Redis index field/vector-dimension schema
+      tests/                      # co-located unit tests for this package
+      ingest/                     # corpus/rule-catalogue ingestion, not the retrieval path
+        pipeline.py                 # load, chunk, validate and upsert the corpus into Redis
+        chunker.py                  # header-aware, table-preserving Markdown chunker
+        docx_loader.py              # LangChain loader for the .docx corpus
+        docx_converter.py           # .docx -> Markdown conversion
+        rule_metadata.py            # attaches section_id/rule_ids/categories, validates rules.yaml anchors
+        build_info.py               # corpus build info used to decide whether ingestion can be skipped
+        errors.py                   # corpus conversion/chunking/cross-check exceptions
+        tests/                      # co-located unit tests for this package
+    rules/
+      loader.py                   # rules.yaml loading and validation
+      model.py                    # rule-catalogue Pydantic contracts
+      tests/                      # co-located unit tests for this package
+    tests/
+      fakes.py                    # shared test doubles (ScriptedChatModel, tool/document builders)
+      test_dependencies.py        # app/dependencies.py DI container
+      api/                        # full-HTTP-stack tests exercised through app.main
+      journeys/                   # cross-module compiled-graph and rule/document-consistency integration tests
+  rules_config/
+    rules.yaml                  # small language-independent deterministic rule catalogue
+llm_eval/                    # standalone functional-evaluation CLI script, not a formal package (no __init__.py, no tests)
+  dataset.json               # 20 functional test cases; source of truth
+  model.py                   # EvalCase/EvalDataset contracts and validation errors
+  metrics.py                 # per-case/aggregate evaluation metrics, including the answer_quality judge
+  report.py                  # Markdown/JSON local report generation
+  dataset_sync.py            # syncs dataset.json to the Langfuse dataset
+  judge.py                   # AnswerJudgeVerdict + judge prompt for the answer_quality metric
+  run_eval.py                # sync dataset + run Langfuse experiment + local reports
+load_test/                   # standalone load-test CLI script, not a formal package (no __init__.py, no tests)
+  load.py                    # LoadTestRunner + LoadTestResult + CLI entry point
+Dockerfile
+docker-compose.yml         # per-service commands live here;
+pyproject.toml             # project metadata, dependencies, Ruff/Bandit/pytest/coverage configuration
+uv.lock                    # pinned, reproducible dependency lock file (committed)
+sonar-project.properties   # Sonar source, test and coverage paths
+evaluation_results/        # eval/load-test results (README §8/§9 point here; not embedded inline)
 README.md
 ```
 
-Later slices add the following target modules without changing the shell boundaries above:
+Unit tests inside the `src/app/` package are co-located with the module they cover, under a `tests/`
+subfolder inside that sub-package (`src/app/agent/tests/test_calculator.py` covers
+`src/app/agent/calculator.py`). A test's location names the module it exercises without a separate
+mirrored tree to keep in sync. Two kinds of tests don't belong to a single sub-package and stay
+under `src/app/tests/` instead: `src/app/tests/journeys/` holds full compiled-graph journeys and
+rule/document-consistency checks that exercise `agent`, `rag` and `rules` together, and
+`src/app/tests/api/` holds tests that exercise the HTTP surface end-to-end through `app.main` rather
+than importing `app.api.routes.*` directly. `src/app/tests/fakes.py` holds test doubles shared across
+all of these locations, imported everywhere as `from app.tests.fakes import ...` — which is also why
+`src/app/tests/` and every sub-package `tests/` subfolder carry an `__init__.py`.
 
-```
-app/
-  api/routes/
-    chat.py                   # chat, streaming and thread reset endpoints
-    admin.py                  # evaluation, load-test, ingest and index-stat endpoints
-  agent/
-    service.py                # invoke, stream and reset use cases exposed to the API
-    graph.py                  # 7 nodes, routing and graph construction
-    nodes.py                  # node implementations, including classify_intent
-    state.py                  # LangGraph AgentState contract
-    model.py                  # Pydantic domain contracts
-    calculator.py             # deterministic reimbursement-calculation module
-    tools.py                  # LangChain tool adapters, registry and rule checks
-    prompts.py                # prompt names, embedded PoC fallbacks and resolver
-  evaluation/
-    load.py                   # endpoint-triggered Langfuse dataset load experiment
-  integrations/
-    redis.py                  # LangChain Redis vector store + LangGraph checkpointer
-  rag/
-    graph.py                  # LangGraph retrieve -> context subgraph
-    state.py                  # LangGraph RagState contract
-    ingest.py                 # LangChain Document loading, splitting and ingest CLI
-    store.py                  # LangChain RedisVectorStore/retriever factory
-    model.py                  # retrieval and ingestion Pydantic contracts
-eval/
-  dataset.json                # 20 functional test cases; source of truth
-  run_eval.py                 # sync dataset + run Langfuse experiment + local reports
-rules.yaml                    # small language-independent deterministic rule catalogue
-Dockerfile
-docker-compose.yml
-entrypoint.sh
-```
+`llm_eval/` and `load_test/` are the two exceptions to that package structure, and the only parts of
+the repository with no unit tests at all: each is a standalone CLI script users run directly
+(`python -m llm_eval.run_eval`, `python -m load_test.load`) against a live Redis/Ollama/Langfuse
+stack, not app logic exercised by the deployed request path, so neither carries an `__init__.py` nor
+a `tests/` subfolder — they are validated by running them, not by a mocked unit-test suite (§13.4).
+`load_test/` in particular used to be `app/loadtest/` (back when `app/` itself lived at the repo
+root, before the `src/` layout below), invoked as an `/admin/load-test` endpoint
+inside the live FastAPI process; it moved out to a standalone script (§14) specifically so a crash
+or resource exhaustion during a load run cannot take real `/chat` traffic down with it.
+
+`pytest` discovers tests via `testpaths = ["src/app"]`, resolving the `app` import through
+`pythonpath = [".", "src"]` (the `.` entry is what lets `llm_eval/`/`load_test/` import `app.*` while
+staying outside `src/` themselves). `llm_eval/` and `load_test/` are outside pytest's `testpaths`
+scope entirely, so coverage (`source = ["app"]` — the import name, unaffected by the `src/` move)
+never touches either. Sonar configuration explicitly
+excises the co-located `src/app/**/tests/` subfolders from source-code accounting so they are measured as
+tests, not counted as application code. `load_test/load.py` stays in the Sonar and Bandit source scan
+(it is still real code worth static analysis, even without tests); `llm_eval/` stays outside all of
+it, matching its existing scope as a dev tool rather than shipped production code.
 
 Dependency management uses `uv` directly: runtime dependencies live in `[project.dependencies]` and
 development/quality-tool dependencies in `[dependency-groups.dev]`, both inside `pyproject.toml`;
@@ -193,9 +258,9 @@ Application settings are documented in `.env.example` and loaded from the ignore
 `pydantic-settings`. The committed template contains no credentials. The local development file may
 select `LLM_BACKEND=dummy`, loopback URLs and disabled Langfuse without changing source code.
 
-All endpoint functions live under `app/api/routes/`. `app/api/router.py` only combines their
-`APIRouter` instances, and `app/main.py` only assembles the FastAPI application and owns its
-lifespan. `app/dependencies.py` owns runtime wiring through a typed `ApplicationDependencies`
+All endpoint functions live under `src/app/api/routes/`. `src/app/api/router.py` only combines their
+`APIRouter` instances, and `src/app/main.py` only assembles the FastAPI application and owns its
+lifespan. `src/app/dependencies.py` owns runtime wiring through a typed `ApplicationDependencies`
 container and exposes the small FastAPI providers used by routes. The lifespan builds this container
 once and stores it as `app.state.dependencies`; imports perform no resource creation. This keeps
 transport code out of both the application entry point and the agent workflow.
@@ -203,8 +268,8 @@ transport code out of both the application entry point and the agent workflow.
 New application behaviour is organised around small, cohesive classes. Ad hoc module-level helper
 functions and boilerplate getters/setters are avoided; framework-required entry points are the
 exception. Dependency-injection providers and runtime wiring remain centralised in
-`app/dependencies.py`. Each future domain module keeps its Pydantic contracts in that module's
-`model.py`; the shell's existing `app/api/schemas.py` remains the current transport-contract file
+`src/app/dependencies.py`. Each future domain module keeps its Pydantic contracts in that module's
+`model.py`; the shell's existing `src/app/api/schemas.py` remains the current transport-contract file
 until the API module is expanded. Source files do not use file-level or module-level docstrings.
 
 ---
@@ -237,7 +302,7 @@ The source pack contains eight **`.docx`** files:
 The `00`–`07` prefix is the stable `doc_id`.
 
 The source folder remains unchanged. Small retrieval metadata lives beside the deterministic rules in
-root `rules.yaml`, keyed by `doc_id`:
+`src/rules_config/rules.yaml`, keyed by `doc_id`:
 
 ```yaml
 documents:
@@ -263,11 +328,41 @@ paragraphs — after that a `MarkdownHeaderTextSplitter` has nothing to split on
 fixed-size chunks, which destroys the "one chunk = one rule section" property the citations and the
 `rule_ids` metadata depend on.
 
-So `app/rag/ingest.py` uses a small `python-docx` normaliser behind LangChain's `BaseLoader`
-interface.
+So `src/app/rag/ingest/docx_loader.py` uses a small `python-docx` normaliser behind LangChain's
+`BaseLoader` interface.
 It emits LangChain `Document` objects whose `page_content` is Markdown and whose `metadata` contains
 the source identity. This adapter exists only because the generic Word loaders discard the heading
 information required by this corpus; all subsequent document processing uses LangChain:
+
+**A heading-preserving library could have replaced this converter.** Candidates considered:
+
+- **`pandoc`** (via `pypandoc`) — excellent, battle-tested docx → Markdown conversion that keeps
+  headings, lists and tables. Rejected because it is an external, non-Python binary: another system
+  dependency to bake into the Docker image and pin/patch independently of `uv`'s Python lockfile, for
+  a corpus of 8 fixed, hand-authored files.
+- **`markitdown`** (Microsoft, wraps `mammoth`) or `mammoth` directly — pure Python, converts docx to
+  Markdown preserving heading structure. Rejected because it is a general-purpose, multi-format
+  converter (pptx, xlsx, images, audio transcription for `markitdown`) pulled in for a single narrow
+  need, and its Markdown table output is not obviously the exact GFM syntax `MarkdownHeaderTextSplitter`
+  and the "one chunk = one rule section" invariant depend on — that fidelity would need the same kind
+  of verification this PoC's own `_table_to_markdown` already guarantees by construction.
+- **`unstructured`** (`partition_docx`, used directly rather than through LangChain's text-mode
+  loader) — classifies elements (`Title`, `NarrativeText`, `Table`, `ListItem`, ...) instead of
+  flattening to plain text, so it does not have the `docx2txt`/text-mode problem above. Rejected here
+  because turning that element stream into a heading-hierarchy Markdown string is close to the same
+  amount of mapping code this PoC already wrote, while adding a much heavier dependency surface (OCR,
+  PDF and other format extras) that this corpus never needs.
+- **`docling`** (IBM) — converts docx to Markdown with headings preserved via its own document model;
+  a strong fit in principle. Rejected for the same reason as `unstructured`: a heavier, actively
+  evolving dependency (bundled layout/model tooling) for a conversion need fully satisfied by ~60 lines
+  of `python-docx` against a small, stable set of known Word styles (`Heading 1..3`, `Title`,
+  `List Bullet`/`List Number`).
+
+None of these would be the wrong choice for a corpus that grows past a handful of files or gains
+inconsistent authors; for 8 fixed, single-author documents, the bespoke converter is easier to test,
+has no external output-format drift to guard against, and adds zero new runtime dependencies beyond
+`python-docx`, which every alternative above still needs (or wraps) to read Word styles in the first
+place.
 
 | Word element | Markdown output |
 | --- | --- |
@@ -471,7 +566,7 @@ categories:
 ```
 
 The FastAPI lifespan loads it once into a pydantic `RuleCatalogue` and passes that dependency to the
-calculator and rule-checker modules through `app/dependencies.py`. Typed accessors expose values such
+calculator and rule-checker modules through `src/app/dependencies.py`. Typed accessors expose values such
 as `rules.meal.limit_per_person`. A missing or malformed rule raises at startup, not mid-request.
 
 ### 4.5 `rules.yaml` is hand-authored — and would not be in a real system
@@ -558,16 +653,16 @@ facts (`is_international_trip`, `is_business_related`) instead of being encoded 
 This keeps retrieval filtering aligned with category metadata without coupling deterministic rules
 to prompt-specific naming conventions.
 
-**A request starts at the latest `HumanMessage`.** `CurrentRequest.messages()` returns that suffix and is
+**A request starts at the latest `HumanMessage`.** `MessageHistory.messages()` returns that suffix and is
 the only input used for loop counts, duplicate-call detection, tool-artifact projection and final
 decision derivation. The classifier, extractor, agent-step and answer prompts do not see the raw
-transcript either: `CurrentRequest.model_context()` condenses every completed previous request down
+transcript either: `MessageHistory.model_context()` condenses every completed previous request down
 to its `HumanMessage` and final (non-tool-calling) `AIMessage`, dropping that request's own
 `ToolMessage`s and intermediate tool-calling `AIMessage`s, while keeping the current request's
 messages in full. This keeps enough conversational context for continuity (what was asked, what was
 answered) without letting a model reuse a previous request's tool evidence as if it were current, and
 without the context growing unbounded with old tool payloads. Operational decisions cannot
-accidentally inspect a previous request's tools either way, since they read `CurrentRequest.messages()`
+accidentally inspect a previous request's tools either way, since they read `MessageHistory.messages()`
 (current request only), not `model_context()`.
 
 **Slot merging across turns is only for clarification.** The classifier writes the new result to
@@ -582,7 +677,8 @@ persisted by the
 (`langgraph-checkpoint-redis`, `RedisSaver`) keyed by `thread_id = streamlit session id`, under the
 `checkpoint:*` namespace with a 24 h TTL. Redis rather than SQLite because it is already the
 project's datastore, it survives container restarts without a mounted file, and it lets several
-Streamlit workers share one conversation store.
+Streamlit workers share one conversation store. Redis is required at startup; the API fails fast
+rather than serving chat without policy retrieval or durable conversation state.
 
 ---
 
@@ -643,7 +739,7 @@ agent_step  ──tool call──▶  execute_tools  ──ToolMessage──▶ 
      └────────────────── up to MAX_AGENT_STEPS (4) ───────────┘
 ```
 
-The three LangChain tools it may call, as the LLM sees them (schemas in `app/agent/tools.py`, descriptions are part
+The three LangChain tools it may call, as the LLM sees them (schemas in `src/app/agent/tools.py`, descriptions are part
 of the contract because they are what the model actually reasons over):
 
 | Tool | Arguments the agent chooses | Description given to the model |
@@ -667,7 +763,7 @@ Guardrails, all deterministic and outside the LLM:
 | --- | --- |
 | Step budget | tool-calling AI messages ≥ `MAX_AGENT_STEPS` (4) → the loop exits to `generate_response` with whatever it has, and the answer states when evidence is incomplete |
 | Invalid arguments | pydantic validation error is returned to the agent as the `ToolMessage`, so it can correct itself; the same tool may fail this way at most twice, then it is disabled for the turn |
-| Repeated identical call | same tool with the same arguments → reuse the matching `ToolMessage` artifact in `CurrentRequest.messages()` and record a warning, instead of executing it again |
+| Repeated identical call | same tool with the same arguments → reuse the matching `ToolMessage` artifact in `MessageHistory.messages()` and record a warning, instead of executing it again |
 | `calculate` with an incomplete claim | normally prevented by required-slot routing after extraction; the calculator still validates its category-specific requirements and returns a typed tool error rather than guessing |
 | `unsupported` intent | never reaches the loop — the conditional edge after extraction routes it to `out_of_scope` |
 
@@ -681,7 +777,7 @@ and more run-to-run variance than a planner would have. The functional eval reco
 tool sequence in Langfuse, so a failed selection can be inspected without adding variance analysis
 to the PoC report.
 
-### 6.4 Conditional edges (`app/agent/graph.py`)
+### 6.4 Conditional edges (`src/app/agent/graph.py`)
 
 ```python
 def route_after_extraction(s):          # -> "ask_clarification" | "agent_step" | "out_of_scope"
@@ -692,7 +788,7 @@ def route_after_agent(s):               # -> "execute_tools" | "generate_respons
 executor; no tool call goes to response generation. There is no plan or cursor to keep, which is why
 the slimmed state (§5) needs no `route` key.
 
-Loop safety is counted off `CurrentRequest.messages()`, not the whole transcript or a counter key:
+Loop safety is counted off `MessageHistory.messages()`, not the whole transcript or a counter key:
 agent steps are current-turn AI messages with tool calls (max `MAX_AGENT_STEPS`), with graph
 `recursion_limit=20` as the hard backstop. When the budget is exhausted, control moves to
 `generate_response` rather than looping.
@@ -792,7 +888,7 @@ returns the submitted eligible amount with `cap_huf=None` and a lower-confidence
 inventing a limit. Applicable rules are selected deterministically from the claim and catalogue.
 Rule identifiers and eligibility explanations belong to the separate rule-checker result.
 
-`CalculationResult` is defined in `app/agent/model.py` with the other Pydantic schemas. Its deliberately
+`CalculationResult` is defined in `src/app/agent/model.py` with the other Pydantic schemas. Its deliberately
 small interface contains only values consumed by the agent and evaluation:
 
 - `amount_huf` is the amount the calculation says can be reimbursed;
@@ -868,7 +964,7 @@ flowchart LR
     B --> C([END])
 ```
 
-Own state in `app/rag/state.py`, kept to the same rule as §5 — two inputs and one output:
+Own state in `src/app/rag/state.py`, kept to the same rule as §5 — two inputs and one output:
 
 ```python
 class RagState(TypedDict, total=False):
@@ -930,7 +1026,7 @@ insufficient, they are the natural next steps, in that order.
 | `qwen2.5:3b-instruct` | 2–3× faster, fits small machines | more extraction errors |
 | LangChain test chat model | deterministic CI and UI smoke tests; emits scripted `AIMessage` tool calls so the LangGraph ReAct loop is testable without Ollama | canned answers only |
 
-`app/integrations/llm.py` returns a LangChain `BaseChatModel`: `ChatOllama` for
+`src/app/integrations/llm.py` returns a LangChain `BaseChatModel`: `ChatOllama` for
 `LLM_BACKEND=ollama`, or a deterministic LangChain-compatible test model for
 `LLM_BACKEND=dummy`, so tests and CI can run without Ollama. Temperature 0 for classification,
 extraction and tool selection; 0.2 for the final answer.
@@ -944,7 +1040,7 @@ requests and no `json.loads` scattered across nodes.
 The four prompt names are `classify-intent`, `extract-information`, `agent-step` and
 `generate-response`. Each is rendered as a LangChain `ChatPromptTemplate` and composed with its
 model/parser as a `Runnable`. Every one has a version-controlled template embedded in
-`app/agent/prompts.py`. These
+`src/app/agent/prompts.py`. These
 templates are the guaranteed fallback and make offline development, tests and a fresh clone
 self-contained.
 
@@ -987,25 +1083,24 @@ values.
 
 ### 10.1 HTTP API
 
-FastAPI owns the agent. `app/main.py` creates the application, registers `app/api/router.py` and
+FastAPI owns the agent. `src/app/main.py` creates the application, registers `src/app/api/router.py` and
 defines an `@asynccontextmanager` lifespan annotated as `AsyncGenerator[None, None]`. The lifespan
 loads `.env`-backed settings, configures JSON logging and delegates runtime wiring to
 `ApplicationDependencies.build()`. That builder opens Redis, verifies the corpus build information,
 warms the embedding model, builds the RAG subgraph and compiles the main graph once. The resulting
 typed container is stored as `app.state.dependencies`, so the first user request does not pay setup
 cost and routes do not access loosely named state attributes. The HTTP
-schemas live in `app/api/schemas.py`; route modules only handle transport and call
-`app/agent/service.py` through the provider defined in `app/dependencies.py`. Endpoints:
+schemas live in `src/app/api/schemas.py`; route modules only handle transport and call
+`src/app/agent/service.py` through the provider defined in `src/app/dependencies.py`. Endpoints:
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `POST` | `/chat` | one request: `{thread_id, message}` → minimal user-facing `ChatResponse` |
 | `POST` | `/chat/stream` | same, streamed as SSE: public `step`, `source` and `token` events, then one `result` event with the complete `ChatResponse` |
 | `POST` | `/admin/eval` | run one evaluation turn and return the internal structured outputs needed by the eval harness; not used by the UI |
-| `POST` | `/admin/load-test` | synchronously run a named Langfuse dataset as a bounded-concurrency load experiment and return aggregate timings plus Langfuse run links |
 | `GET` | `/health` | liveness — process is up |
 | `GET` | `/ready` | readiness — Redis reachable, index present with matching `DIM`, LLM responding |
-| `POST` | `/admin/ingest` | trigger ingest (no-op when `manifest:corpus` matches); used by the entrypoint and by tests |
+| `POST` | `/admin/ingest` | trigger ingest (no-op when `manifest:corpus` matches); the API lifespan runs the same ingest at boot, so this is for manual re-ingest and tests |
 | `GET` | `/admin/stats` | chunk count per category and index information |
 | `DELETE` | `/threads/{thread_id}` | drop a conversation's checkpoints ("reset chat") |
 
@@ -1036,17 +1131,19 @@ the remaining internal diagnostics stay out of the chat response without
 making the eval parse values back out of answer prose. Agent traces and per-node timings are not part
 of either response; Langfuse is their single source of truth (§11).
 
-Everything is async: `async def` endpoints, `redis.asyncio`, `graph.ainvoke` / `graph.astream`, so a
-slow LLM call parks on the event loop instead of blocking a worker. The tools stay synchronous (pure
-functions, microseconds). Deployment is a single `uvicorn` process — LangGraph state lives in Redis,
-so scaling to several workers needs no code change, but is not part of the prototype.
+Everything is async: `async def` endpoints, `graph.ainvoke` / `graph.astream`, so a slow LLM call
+parks on the event loop instead of blocking a worker. `calculate` and `check_rules` stay synchronous
+(pure functions, microseconds); `search_policies` is the exception — it awaits the async RAG subgraph
+since it performs a real Redis vector search, not a microsecond-scale computation. Deployment is a
+single `uvicorn` process — LangGraph state lives in Redis, so scaling to several workers needs no
+code change, but is not part of the prototype.
 
 **What exactly streams.** `/chat/stream` consumes graph message and update events and maps them to
 four SSE event types:
 
 | Graph event | SSE event | Content |
 | --- | --- | --- |
-| node update | `step` | one deduplicated public label after a meaningful stage completes, such as `Request understood`, `Information extracted`, `Policies searched`, `Rules checked`, `Answer prepared` |
+| node update | `step` | one deduplicated public label after a meaningful stage completes, such as `Intent classified`, `Details extracted`, `Policies searched`, `Rules checked`, `Answer generated` |
 | `search_policies` result | `source` | one deduplicated `ChatSource` for each retrieval hit placed in the answer context |
 | generated message chunk | `token` | answer tokens, filtered to `generate_response` by LangGraph metadata |
 | graph completion | `result` | one final event containing the complete `ChatResponse`, including decision, sources and steps |
@@ -1082,7 +1179,7 @@ The sidebar provides reset thread (`DELETE /threads/{id}`) plus read-only index 
 
 `st.session_state`: `thread_id`, `messages`, with each stored assistant message containing its
 answer metadata, sources and steps. Streaming uses `/chat/stream` via
-`app/ui.py`; the metadata line appears when the final `result` event arrives. On a connection
+`src/app/ui.py`; the metadata line appears when the final `result` event arrives. On a connection
 error the UI shows the API's `detail` and keeps the conversation, since the state lives server-side.
 Clarification questions render as normal assistant messages with a distinct badge.
 
@@ -1114,7 +1211,7 @@ behaviour and model generations are not duplicated in the API response or Stream
 focused on the employee-facing answer, while developers and reviewers inspect execution details in
 Langfuse.
 
-**Application logging is independent of Langfuse.** `app/core/logging.py` configures the standard
+**Application logging is independent of Langfuse.** `src/app/logging/config.py` configures the standard
 Python logging hierarchy once at process startup with two handlers receiving the same structured JSON
 record:
 
@@ -1125,13 +1222,10 @@ record:
   age-based retention helper — the stdlib's own count-based retention already gives ~7 days for a
   service that rotates daily, without extra code to maintain.
 
-Every record includes UTC timestamp, level, service, logger, event, `request_id` and, when available,
-`thread_id` and exception metadata. The request middleware binds correlation fields with
-`contextvars`, and the logging configuration also captures Uvicorn/FastAPI and Streamlit loggers so
-framework errors follow the same format. Prompts, answers, retrieved chunk text, tool artifacts and
-credentials are never logged; those payloads would turn an operational log into an ungoverned copy
-of conversation data. One Uvicorn worker and separate `api.jsonl` / `ui.jsonl` files avoid concurrent
-rotation of the same file.
+Every record includes UTC timestamp, level, service, logger and event. Prompts, answers, retrieved
+chunk text, tool artifacts and credentials are never logged; those payloads would turn an
+operational log into an ungoverned copy of conversation data. One Uvicorn worker and separate
+`api.jsonl` / `ui.jsonl` files avoid concurrent rotation of the same file.
 
 The seven-day policy applies to the application-owned files, kept by rotation count rather than a
 separate age-based sweep. Stdout is a delivery stream rather than the retention store; Compose uses Docker's
@@ -1151,6 +1245,7 @@ variables:
 | `LLM_BACKEND` | `ollama` | `ollama` or `dummy` |
 | `OLLAMA_BASE_URL` | `http://ollama:11434` | serving endpoint |
 | `LLM_MODEL` | `qwen2.5:7b-instruct-q4_K_M` | model tag |
+| `EVAL_JUDGE_MODEL` | `qwen2.5:7b-instruct-q4_K_M` | model tag for `llm_eval`'s `answer_quality` LLM-as-judge metric; defaults to the same tag as `LLM_MODEL` for a working out-of-the-box default, but pointing it at a second pulled model gives a materially more meaningful judgement by avoiding self-grading |
 | `API_BASE_URL` | `http://api:8000` | used by the Streamlit client |
 | `REDIS_URL` | `redis://redis:6379/0` | single datastore connection |
 | `LANGFUSE_ENABLED` | `true` | turn the callback handler on/off; required for official eval and load runs |
@@ -1168,8 +1263,10 @@ environment variable.
 
 ## 12. Containerisation
 
-`Dockerfile`, `docker-compose.yml` and `entrypoint.sh` live in the repository root — a reviewer clones
-and runs `docker compose up` without looking for them.
+`Dockerfile` and `docker-compose.yml` live in the repository root — a reviewer clones
+and runs `docker compose up` without looking for them. There is no entrypoint script: each service's
+actual command is written directly in its compose `command:` (exec form, so the process is PID 1 and
+receives signals unwrapped), with the image's `CMD` as the bare-`docker run` fallback.
 
 `Dockerfile` – Python 3.12 on `python:3.12-slim`, multi-stage; a builder stage installs requirements and
 **pre-downloads the embedding model weights into the image** (§4.3) so the first request is not
@@ -1197,15 +1294,15 @@ services:
     healthcheck: curl -f http://localhost:11434/api/tags
   api:
     build: .
-    command: ./entrypoint.sh api                # wait for deps -> pull model -> ingest -> uvicorn
-    depends_on:
-      redis:  { condition: service_healthy }
-      ollama: { condition: service_healthy }
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+    depends_on:                                  # ordering only; ingest runs in the FastAPI lifespan
+      redis:       { condition: service_healthy }
+      ollama-pull: { condition: service_completed_successfully }
     environment: [REDIS_URL=redis://redis:6379/0, OLLAMA_BASE_URL=http://ollama:11434, ...]
     volumes: ["./logs:/app/logs", "./.docs/sources:/app/.docs/sources:ro"]
     logging: { driver: local, options: { max-size: "10m", max-file: "3" } }
     healthcheck: curl -f http://localhost:8000/ready
-    ports: ["8000:8000"]
+    ports: ["127.0.0.1:8000:8000"]              # local Swagger; UI uses api:8000 internally
   ui:
     build: .
     command: streamlit run app/ui.py --server.port 8501 --server.address 0.0.0.0
@@ -1216,6 +1313,13 @@ services:
     ports: ["8501:8501"]
 volumes: { ollama_models: {}, redis8_data: {}, redisinsight_data: {} }
 ```
+
+The API's host binding is intentionally loopback-only: Streamlit calls `http://api:8000` over the
+Compose network, while a developer can use Swagger at `http://127.0.0.1:8000/docs`. This limits
+remote network exposure but does not authenticate callers on the host. Token-based authentication
+and authorisation are outside the PoC scope. A production deployment should require a Streamlit
+service token and a separate authorised-user token exposed through Swagger's `Authorize` flow;
+CORS or Docker network membership alone must not be treated as access control.
 
 Redis 8 replaces the former Redis Stack distribution: Search, JSON, time-series and probabilistic
 data structures are built into Redis Open Source. Redis Insight runs as a separate development UI.
@@ -1249,17 +1353,19 @@ Quality checks run locally and in CI; they are not application services and add 
 | --- | --- | --- |
 | Ruff lint | `ruff check .` | imports, correctness rules and consistent Python style |
 | Ruff format | `ruff format --check .` | formatting drift |
-| Bandit | `bandit -c pyproject.toml -r app` | common Python security issues in application code |
+| Bandit | `bandit -c pyproject.toml -r src/app load_test` | common Python security issues in application code |
 | Tests + coverage | `pytest --cov=app --cov-report=term-missing --cov-report=xml` | behaviour and `coverage.xml` for Sonar |
 | Sonar | `make sonar` (`uv run pysonar`) | maintainability, duplication, bugs, vulnerabilities and coverage quality gate |
 
 `pyproject.toml` targets Python 3.12 and holds the small Ruff, Bandit and pytest configuration.
-`sonar-project.properties` sets `app` as source, `tests` as tests, reads `coverage.xml`, and excludes
-`app/ui.py` from coverage. Limiting `sonar.sources` to `app` and `sonar.tests` to `tests` keeps the
-fictional corpus, generated reports and local logs outside analysis without additional exclusion
-patterns. The locked `pysonar` package supplies the Python scanner without a separately managed
-system Java installation. `make sonar` first requires `SONAR_TOKEN`, regenerates `coverage.xml`,
-submits the result and waits for the configured quality gate.
+`sonar-project.properties` sets `sonar.sources=src/app,load_test`, lists every co-located
+`src/app/**/tests/` subfolder under `sonar.tests` (§3), reads `coverage.xml`, and excludes
+`src/app/ui.py` from coverage and `src/app/settings.py` plus the test subfolders themselves from the
+source scan. Scoping sources this way keeps the fictional corpus, `llm_eval/` (a dev tool, not
+shipped production code), generated reports and local logs outside analysis without additional
+exclusion patterns. The locked `pysonar` package supplies the Python scanner without a separately
+managed system Java installation. `make sonar` first requires `SONAR_TOKEN`, regenerates
+`coverage.xml`, submits the result and waits for the configured quality gate.
 
 The Sonar service is **SonarCloud** — the free tier, external to the application runtime and to the
 Compose stack. It was chosen over a self-hosted SonarQube container for the same reason as Langfuse
@@ -1267,12 +1373,14 @@ Cloud (§11): it costs an account and a token, not another container competing w
 for RAM/CPU on the one developer machine (§1.2). `SONAR_TOKEN` and the SonarCloud organisation/project
 identifiers are CI secrets, not `pydantic-settings` application fields.
 
-`entrypoint.sh api`: wait for Redis and Ollama → pull the model if absent → run `app.rag.ingest`
-(no-op when `manifest:corpus` matches) → `uvicorn app.main:app`. The UI container skips all of
-that and waits on the API's `/ready`. Result: `docker compose up` gives a chat UI on `:8501` and a
-documented API on `:8000/docs`. The repository contains an empty `logs/.gitkeep`; startup verifies
-that `/app/logs` is writable and fails with a clear message if host bind-mount permissions are wrong,
-rather than silently losing the file copy.
+Startup ordering is Compose's job, not a shell script's: `ollama-pull` is a one-shot service that
+pulls the configured model and exits, and the API waits on `redis: service_healthy` plus
+`ollama-pull: service_completed_successfully`. The API container then runs `uvicorn app.main:app`
+directly, and its FastAPI lifespan performs the corpus ingest (a no-op when the stored
+`build_info:corpus` already matches). The UI container skips all of that and waits on the API's
+`/ready` healthcheck. Result: `docker compose up` gives a chat UI on `:8501` and a documented API on
+`:8000/docs`. Startup verifies that `/app/logs` is writable and fails with a clear message if the
+volume's permissions are wrong, rather than silently losing the file copy.
 
 ---
 
@@ -1280,7 +1388,7 @@ rather than silently losing the file copy.
 
 ### 13.1 Dataset
 
-`eval/dataset.json`, a JSON array of 20 cases covering: general policy question, meal expense, exceeding a cap,
+`llm_eval/dataset.json`, a JSON array of 20 cases covering: general policy question, meal expense, exceeding a cap,
 prohibited item (alcohol), travel, accommodation, taxi, commuting by pass, commuting by own car,
 one-way/round-trip ambiguity, mileage for a client visit, EV rate, work equipment under and over
 the approval threshold, holiday allowance with partial budget used, training allowance eligibility,
@@ -1297,7 +1405,8 @@ deadline still open, deadline expired, missing receipt, unsupported question.
     "expected_tools": ["search_policies", "calculate", "check_rules"],
     "expected_doc_ids": ["01", "06"],
     "expected_amount_huf": 75000,
-    "expected_decision": "partially_eligible"
+    "expected_decision": "partially_eligible",
+    "expected_answer_summary": "States the meal claim is only partially eligible, reimbursing 75,000 HUF instead of the 82,000 HUF claimed since 7,000 HUF was alcohol, citing doc 01."
   }
 ]
 ```
@@ -1318,26 +1427,58 @@ metadata.
 | Tool-selection accuracy | current-turn ordered tool-name list equals `expected_tools` |
 | Outcome accuracy | `decision` matches and, when present, calculation `amount_huf` equals `expected_amount_huf` |
 | Citation accuracy | the answer cites at least one expected document returned by retrieval |
+| Answer quality | LLM-as-judge: does the final answer text (`EvaluationResponse.answer`) correctly and clearly convey `expected_answer_summary`, without a fabricated decision, amount or citation |
 
-Each case therefore produces six simple Boolean/numeric Langfuse scores. The report aggregates each
-score as a percentage and lists failed case ids. A clarification case uses
-`expected_decision: needs_info`, so it needs no separate metric.
+The first six are simple deterministic Boolean/numeric checks over structured graph state — none of
+them ever look at the generated answer's prose. `answer_quality` is the one exception and the only
+non-deterministic metric: `EvaluationMetrics.answer_quality` sends the question, the final answer
+text and the case's `expected_answer_summary` (a short, hand-authored reference of what a correct
+answer must state) to a judge chat model via `StructuredOutputRunner`, which returns a typed
+`AnswerJudgeVerdict{correct, reasoning}`. The judge runs on `EVAL_JUDGE_MODEL` — independently
+configurable from `LLM_MODEL` — specifically so the model being evaluated is never the one grading
+its own answers. The report aggregates each score as a percentage and lists failed case ids. A
+clarification case uses `expected_decision: needs_info`, so it needs no separate outcome/citation
+metric, but still gets an `answer_quality` judgement against its own `expected_answer_summary`.
+
+`EVAL_JUDGE_MODEL` **defaults to the same tag as `LLM_MODEL`**, so out of the box the judge and the
+model it grades are the same model — a real self-grading-bias risk (a model's own systematic
+mistakes read as "correct" to itself). It would be materially more useful to point `EVAL_JUDGE_MODEL`
+at a genuinely different, ideally stronger, model — this only requires pulling a second Ollama model
+and setting the env var; no code change. The default is the same model purely so the metric runs
+out of the box on the single model this PoC's local-machine budget (§1.2) already pulls.
 
 ### 13.3 Runner
 
-`python -m eval.run_eval` validates `eval/dataset.json`, idempotently synchronises its cases to the
-versioned Langfuse dataset `rag-assistant-functional`, and starts a named Langfuse experiment. The
+`python -m llm_eval.run_eval` validates `llm_eval/dataset.json`, idempotently synchronises its cases to the
+versioned Langfuse dataset `test-dataset`, and starts a named Langfuse experiment. The
 runner posts each case to the running API (`POST /admin/eval`) with the dataset item id and
 experiment name in trace metadata plus a pinned `reference_date` request field, then reads metrics
 from the internal `EvaluationResponse`. It still measures the deployed graph over HTTP, but does
 not force evaluation-only fields into the user-facing contract. Langfuse stores the item-to-trace
 link, run metadata and six per-case scores. One pass over the 20 cases is the official PoC
 evaluation; a suspicious failure can be rerun manually and compared through its trace. The runner
-writes `.docs/eval/functional-<timestamp>.md` (summary table + per-case rows + failure notes) and a
+writes `evaluation_results/functional-<timestamp>.md` (summary table + per-case rows + failure notes) and a
 machine-readable `.json` next to it, and pushes each metric to Langfuse as a score on that turn's
 trace (§11), so a failure can be opened and inspected step by step. `--node intent` uses the same
 dataset and experiment flow while evaluating only one node in-process (the assignment explicitly
 allows node-level evaluation) — useful because intent errors cascade.
+
+**Known limitation — the agent being evaluated is always whatever `LLM_MODEL` the live endpoint is
+configured with, never an independent reference model.** This is deliberate for answering "is this
+deployed configuration good enough," but it means a low score on the six deterministic metrics
+cannot, by construction, distinguish a genuine capability limit of that one model from a harness or
+prompt defect that would depress scores for any model. `answer_quality` (§13.2) closes half of this
+gap: its judge model is `EVAL_JUDGE_MODEL`, independently configurable from `LLM_MODEL`, so the
+model generating an answer never grades its own answer. The remaining half is not closed — there is
+still no second *agent* backend to confirm a low deterministic-metric score is a model-capability
+limit rather than a harness/prompt defect. The README's current low-score analysis (§8) reaches its
+"capability limit, not a bug" conclusion through manual spot-checking of individual `/admin/eval`
+traces, not through a second agent-model run. A more convincing version of that argument would
+additionally run the same `llm_eval/dataset.json` with `LLM_MODEL` pointed at a second,
+larger/different model and compare scores — if the second model scores materially higher, that
+confirms a model-capability limit; if it also stays low, that points at the harness or prompts
+instead. Not implemented here: it would need a second pulled Ollama model and a per-run model
+parameter threaded through `EvaluationRunner`, which is future work rather than a PoC requirement.
 
 ### 13.4 Tests
 
@@ -1354,8 +1495,8 @@ allows node-level evaluation) — useful because intent errors cascade.
   chunk. This is what prevents a "cited but wrong number" answer and an unreachable document.
 - **Turn isolation**: a clarification answer merges into its pending claim, while a new expense in
   the same thread replaces the old claim; loop budgets, duplicate-call detection, projected
-  artifacts and decisions only inspect `CurrentRequest.messages()`.
-- **API contract**: schema snapshots of `ChatResponse`, `EvaluationResponse`, `LoadTestResult` and the OpenAPI
+  artifacts and decisions only inspect `MessageHistory.messages()`.
+- **API contract**: schema snapshots of `ChatResponse`, `EvaluationResponse` and the OpenAPI
   document, plus an SSE test asserting deduplicated `step`/`source` events, answer-only token
   streaming and a final `result` containing the same accumulated steps and sources.
 - **Logging**: both handlers receive the same correlation fields, sensitive payload fields are
@@ -1366,38 +1507,48 @@ allows node-level evaluation) — useful because intent errors cascade.
   both variants accept the same variables.
 - **Quality configuration**: Ruff and Bandit configuration parses successfully, their scans pass,
   coverage XML is produced, and the Sonar quality gate passes in CI.
+- **Deliberately untested**: `llm_eval/` and `load_test/` (§3) have no unit tests and are excluded
+  from `pytest`'s `testpaths` — both are standalone CLI scripts run manually against a live
+  Redis/Ollama/Langfuse stack, not app logic exercised by the deployed request path, so they are
+  validated by running them rather than by a mocked unit-test suite.
 - **Integration**: full graph with `LLM_BACKEND=dummy` against a real Redis 8 container
   (testcontainers, or a `REDIS_URL` pointing at the compose service) with a `test:` key prefix and a
   flush per test — RediSearch vector search cannot be faked with `fakeredis`. Covers routing,
   clarification-then-resume across two turns, tool-loop termination and the out-of-scope path. Checkpointing in
-  unit tests uses `MemorySaver` to keep them Redis-free.
+  unit tests uses `InMemorySaver` to keep them Redis-free.
 
 ---
 
 ## 14. Load test
 
-The load test is intentionally one simple synchronous admin endpoint:
+The load test is intentionally a standalone CLI script, not an API endpoint:
 
-```http
-POST /admin/load-test
-{
-  "dataset_name": "rag-assistant-functional",
-  "repetitions": 3,
-  "max_concurrency": 4
-}
+```bash
+python -m load_test.load --dataset-name test-dataset --repetitions 3 --max-concurrency 4
 ```
 
-The endpoint fetches the named dataset from Langfuse and calls its SDK experiment runner with a task
-that invokes the same `AgentService` used by `/chat`. Every item receives a fresh `thread_id`; the
-task measures elapsed time around the complete graph invocation and returns the latency alongside
-the agent result. The Langfuse runner supplies bounded concurrent execution, automatic tracing,
-per-item error isolation and dataset-run links, so the application does not implement a second load
-generator. The default 20-item dataset × 3 repetitions produces 60 measured turns; request
-validation requires a total between 50 and 200 and `max_concurrency` between 1 and 4.
+`load_test/load.py` was originally an `/admin/load-test` endpoint invoked inside the live FastAPI
+worker. It moved to a separate process because that design shared fate with real traffic: a crash or
+resource exhaustion triggered by the synthetic load could take down the same worker serving `/chat`,
+and the aggregated `LoadTestResult` existed only in that one request handler's memory until the final
+HTTP response — a mid-run crash lost the whole result, salvageable only from whatever per-item traces
+had already reached Langfuse. As a standalone script, `main()` builds its own
+`ApplicationDependencies` (the same container the FastAPI lifespan builds) and its own `AgentService`
+instance, so it stresses the same shared Ollama/Redis backends real traffic uses without running
+inside the same OS process — a crash here cannot take `/chat` down with it.
+
+The script fetches the named dataset from Langfuse and calls its SDK experiment runner with a task
+that invokes its own `AgentService`, the same graph `/chat` uses. Every item receives a fresh
+`thread_id`; the task measures elapsed time around the complete graph invocation and returns the
+latency alongside the agent result. The Langfuse runner supplies bounded concurrent execution,
+automatic tracing, per-item error isolation and dataset-run links, so the application does not
+implement a second load generator. The default 20-item dataset × 3 repetitions produces 60 measured
+turns; `LoadTestRunner.run()` validates the resolved total is between 50 and 200 and
+`max_concurrency` is between 1 and 4, raising `LoadTestValidationError` otherwise.
 
 Each repetition creates a named Langfuse experiment run with the same `load_run_id` in metadata, so
-all traces remain filterable as one load scenario. The endpoint waits for all repetitions and then
-returns:
+all traces remain filterable as one load scenario. The script waits for all repetitions and then
+prints:
 
 ```python
 class LoadTestResult(BaseModel):
@@ -1414,12 +1565,14 @@ class LoadTestResult(BaseModel):
     dataset_run_urls: list[str]
 ```
 
-This is deliberately not a job system: there is no queue, progress endpoint or cancellation flow,
-and the caller must allow a long HTTP timeout. It measures the deployed graph, model contention and
-Langfuse instrumentation, but not network or `/chat` transport overhead. Per-node and
-per-generation spans in the linked Langfuse runs identify the bottleneck; the returned aggregate is
-copied into the README's evaluation section rather than generating a separate local load-report
-format.
+This is deliberately not a job system: there is no queue, progress endpoint or cancellation flow, and
+the invocation blocks in the terminal until every repetition completes. It measures the deployed
+graph, model contention and Langfuse instrumentation, but not network or `/chat` transport overhead.
+Per-node and per-generation spans in the linked Langfuse runs identify the bottleneck. The aggregate
+is written as JSON to `evaluation_results/load-<timestamp>.json` — the same shared results
+directory `llm_eval/run_eval.py` writes its functional-evaluation reports to — and printed to the
+terminal; the printed aggregate is copied into the README's evaluation section rather than
+generating a separate local load-report format.
 
 Expected bottleneck: aggregate LLM generation. A complete turn makes two fixed calls (classify and
 extract), one final response call and 1–4 agent calls, so 4–7 in total depending on how many tools the
@@ -1452,13 +1605,13 @@ load result and proposes these production optimisations without adding them to t
 | Agent calls a tool with invalid arguments | the pydantic error goes back as the `ToolMessage` so it can retry; twice-failed tool is disabled for the turn (§6.3) |
 | Agent answers without calling any tool | `generate_response` refuses to present a policy-dependent conclusion without a tool artifact and states that evidence is missing |
 | Empty/irrelevant retrieval | one unfiltered retry; if still empty or top-1 similarity is below threshold, the answer states that it could not find enough policy evidence and suggests contacting finance without claiming the policy does not cover the topic |
-| Redis unreachable | compose healthcheck gates startup; at runtime `/ready` flips to failing and the API returns a 503 with a `detail` the UI displays (no index, no state), retry with backoff |
+| Redis unreachable | compose healthcheck gates dependent containers; API startup fails fast, while `/ready` and Redis-dependent admin endpoints report failure if Redis is lost after startup |
 | Log directory not writable | startup fails before serving traffic with the resolved `./logs` path in the error; stdout remains available to explain the configuration problem |
 | Index missing / dimension mismatch | the API lifespan verifies `idx:chunks` against the manifest `DIM` and re-ingests instead of serving empty results |
 | Missing slot the user refuses to give | answer presents the conditional result ("if one-way, then X; if round-trip, then Y") |
 | Cap/limit not found for a category | rule checker emits a `warning` finding, answer is marked lower-confidence |
-| Corpus not ingested at boot | entrypoint runs ingest; ingest failure exits non-zero with the reason |
-| Langfuse disabled or unreachable for `/admin/load-test` | reject the load-test request with a clear 503; normal chat remains available with its configured tracing fallback |
+| Corpus not ingested at boot | the FastAPI lifespan runs ingest; ingest failure fails startup with the reason |
+| Langfuse disabled or unreachable when running `load_test.load` | `main()` exits with a clear message before building any dependencies; normal chat is unaffected since the script never touches the live process |
 | Out-of-scope or advice-seeking question (tax/legal) | `out_of_scope` node with an explicit disclaimer |
 | API unreachable from the UI | the UI shows a connection error and keeps the thread — conversation state is server-side, so a retry continues where it stopped |
 
@@ -1478,7 +1631,7 @@ describe a fictional company, are not a real company's rules and are not tax or 
 | M4 | Main graph | compiled LangGraph `StateGraph`, `ToolNode`, ReAct loop guardrails and clarification-then-resume — verified with a scripted LangChain chat model that emits fixed tool calls |
 | M5 | API + UI | FastAPI endpoints with the public `ChatResponse` and internal `EvaluationResponse` contracts, LangChain `ChatOllama` wired, prompts tuned, focused Streamlit chat complete |
 | M6 | Docker | `docker compose up` works from a clean clone |
-| M7 | Evaluation | repository functional dataset, Langfuse functional experiment, endpoint-triggered traced load run, local functional report in `.docs/eval/`, README written |
+| M7 | Evaluation | repository functional dataset, Langfuse functional experiment, script-triggered traced load run, local functional report in `evaluation_results/`, README written |
 
 During planning, the implementation reference is updated directly. The final README and generated
 evaluation reports are produced at M7; no planning changelog or per-component feature-document tree
@@ -1540,8 +1693,8 @@ open, so this section is a rationale log, not a list of unresolved questions.
   though it encapsulates `FT.CREATE`, KNN query construction and vector serialisation. For a corpus
   of a few hundred chunks this is a good trade; for a much larger corpus a dedicated vector database
   would be worth evaluating behind the same LangChain vector-store/retriever interfaces.
-- `RedisSaver` from `langgraph-checkpoint-redis` vs a hand-rolled checkpointer: use the library, fall
-  back to `MemorySaver` in tests.
+- `RedisSaver` from `langgraph-checkpoint-redis` vs a hand-rolled checkpointer: use the library;
+  isolated graph tests use `InMemorySaver`, while the running application requires Redis.
 - `rules.yaml` is hand-authored in this PoC; §4.5 records what a production version would do instead
   (extract the catalogue from the documents, validate against the cited text, review the diff).
 
@@ -1563,6 +1716,7 @@ rather than oversights, and so a reviewer can see that the line was drawn on pur
 | **Audit trail** | Langfuse traces and the seven-day operational logs are for debugging, not audit: they have no tamper resistance or per-user attribution, and Langfuse lives in a third-party service. |
 | **Personal data handling and content safety** | Conversations sit in Redis with a 24 h TTL and no encryption, redaction or export/delete flow. Fine for fictional policies and made-up amounts; not fine for real employee data. A production system should add a PII detection and redaction layer before prompts, persistence and observability, with controlled re-identification only where the business flow requires it. A self-hosted deployment could use Microsoft Presidio; an Azure deployment could use Azure-native PII detection together with Azure AI Content Safety or the selected model endpoint's content filters. The same policy should inspect uploaded documents, user input and generated output, with blocked/redacted events recorded in an audit trail without storing the sensitive value itself. |
 | **Horizontal scale / rate limiting** | One `uvicorn` process, one Ollama, no queue, no per-client limits. State is already in Redis, so more API workers is a compose change; the LLM is the actual constraint (§14). |
+| **Ingestion runs inside the API process** | `CorpusIngestor`/`connect_and_ingest` (`src/app/rag/ingest/pipeline.py`) run inline: once at startup via the FastAPI lifespan, and again on demand through `POST /admin/ingest` on the same process serving `/chat`. A production system would more likely run ingestion as its own pipeline or service — triggered by a content change or a schedule, with its own retries and monitoring — so a slow embedding run or a bad corpus change cannot block or crash the request-serving API, for the same reason the load test (§14) was pulled out into a standalone script rather than an in-process endpoint. |
 | **Prompt-injection hardening** | The corpus is trusted because we wrote it. If policies came from users or the web, the retrieved context would need treating as untrusted input — the current design has no defence there. |
 | **Localised policy corpora** | The PoC indexes one English policy corpus. A production system that requires independently maintained Hungarian source policies would add language-scoped indices and manifests, a corpus selector, per-language evaluation datasets and parity/versioning checks. The current multilingual embedding and chat models already provide best-effort Hungarian interaction over the English corpus without that additional data layer. |
 

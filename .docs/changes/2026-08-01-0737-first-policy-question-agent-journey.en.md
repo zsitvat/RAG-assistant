@@ -41,7 +41,8 @@
   live in `app/main.py`'s lifespan; `app/main.py` now only calls `ApplicationDependencies.build()`.
 - Added `app/rag/retriever.py::NullPolicyRetriever` — used when Redis is unreachable at startup so
   the agent graph still constructs and `search_policies` degrades to "no results" instead of the
-  app failing to start.
+  app failing to start. This fallback was later removed when Redis became a required startup
+  dependency.
 - Tests: `tests/test_calculator.py`, `tests/test_rule_checker.py`, `tests/test_deadline.py`,
   `tests/test_slots.py`, `tests/test_current_request.py`, `tests/test_structured.py`, `tests/test_tools.py`,
   `tests/test_agent_graph.py`, `tests/test_agent_service.py`, `tests/test_dependencies.py`, plus a

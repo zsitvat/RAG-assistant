@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   redis:
     image: redis:8.8.1
@@ -29,6 +35,85 @@ services:
     volumes:
       - redisinsight_data:/data
 
+  ollama:
+    image: ollama/ollama:0.13.1
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5m
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging: *default-logging
+
+  ollama-pull:
+    image: ollama/ollama:0.13.1
+    restart: on-failure:3
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["sh", "-c", "ollama pull ${LLM_MODEL:-qwen2.5:7b-instruct-q4_K_M}"]
+    logging: *default-logging
+
+  api:
+    build:
+      context: .
+      target: runtime
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      OLLAMA_BASE_URL: http://ollama:11434
+      API_BASE_URL: http://api:8000
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - api_logs:/app/logs
+      - ./.docs/sources:/app/.docs/sources:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import json,sys,urllib.request as u; d=json.load(u.urlopen('http://localhost:8000/ready', timeout=3)); sys.exit(0 if d['ready'] else 1)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    logging: *default-logging
+
+  ui:
+    build:
+      context: .
+      target: runtime
+    command: ["streamlit", "run", "app/ui.py", "--server.address", "0.0.0.0", "--server.port", "8501"]
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      API_BASE_URL: http://api:8000
+    ports:
+      - "127.0.0.1:8501:8501"
+    logging: *default-logging
+
 volumes:
   redis8_data:
   redisinsight_data:
+  ollama_data:
+  api_logs:

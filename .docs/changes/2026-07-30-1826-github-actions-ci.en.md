@@ -4,14 +4,15 @@
 
 - Added `.github/workflows/ci.yml` for pull requests, `main` pushes and manual runs.
 - Added locked Python 3.12/uv setup with dependency caching.
-- Added ordered Ruff, formatting, Bandit, pytest/coverage and SonarQube Cloud steps.
+- Added separate Ruff lint, formatting, Bandit, pytest/coverage and SonarQube Cloud jobs.
 - Migrated the runtime HTTP client and ASGI API tests from deprecated `httpx`/`TestClient` usage to
   `httpx2`; async tests now exercise the FastAPI lifespan through `ASGITransport`.
 - Made the FastAPI dependency providers async so state-only dependency resolution stays on the
   request event loop instead of entering AnyIO's worker threadpool.
 - Restricted the workflow token to read-only repository contents and scoped `SONAR_TOKEN` to the
   Sonar step.
-- Skipped only the secret-dependent Sonar step for fork pull requests while retaining all local
+- Passed `coverage.xml` from pytest to Sonar as a short-lived workflow artifact.
+- Skipped only the secret-dependent Sonar job for fork pull requests while retaining all local
   quality checks.
 
 ## Why
