@@ -37,8 +37,8 @@ class ApplicationDependencies:
     agent_service: AgentService
     observability: Observability
 
-    @staticmethod
-    async def build(settings: Settings) -> "ApplicationDependencies":
+    @classmethod
+    async def build(cls, settings: Settings) -> "ApplicationDependencies":
         """Builds the application dependency container."""
 
         # Observability and prompts
@@ -68,7 +68,7 @@ class ApplicationDependencies:
         # Agent graph
         nodes = AgentNodes(chat_model, chat_model, tools, calculator, prompts)
         checkpointer = await build_checkpointer(settings.redis_url)
-        return ApplicationDependencies(
+        return cls(
             settings=settings,
             rule_catalogue=rule_catalogue,
             redis_index=redis_index,
